@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATT&CK Graph Analyzer — Defensive Investment Prioritizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1a2235;
+  --bg-panel: #0f1623;
+  --border: #1e2d44;
+  --border-active: #3b82f6;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-blue: #3b82f6;
+  --accent-cyan: #06b6d4;
+  --accent-green: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-purple: #8b5cf6;
+  --accent-pink: #ec4899;
+  --tactic-recon: #6366f1;
+  --tactic-resource: #8b5cf6;
+  --tactic-initial: #ec4899;
+  --tactic-execution: #ef4444;
+  --tactic-persistence: #f97316;
+  --tactic-privesc: #f59e0b;
+  --tactic-defense: #eab308;
+  --tactic-credential: #84cc16;
+  --tactic-discovery: #22c55e;
+  --tactic-lateral: #14b8a6;
+  --tactic-collection: #06b6d4;
+  --tactic-c2: #3b82f6;
+  --tactic-exfil: #6366f1;
+  --tactic-impact: #a855f7;
+  --glow-intensity: 0.6;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── Layout ── */
+.app-container {
+  display: grid;
+  grid-template-columns: 300px 1fr 340px;
+  grid-template-rows: 56px 1fr 44px;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── Top Bar ── */
+.top-bar {
+  grid-column: 1 / -1;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 20px;
+  z-index: 100;
+}
+
+.logo {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.5px;
+  color: var(--accent-cyan);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.logo svg { width: 22px; height: 22px; }
+
+.logo .subtitle {
+  font-weight: 300;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.top-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.btn.active {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.btn.primary {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: white;
+}
+
+.btn.primary:hover {
+  background: #2563eb;
+}
+
+.btn.danger {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.btn.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ── Left Panel ── */
+.left-panel {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-section-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-section-title svg { width: 14px; height: 14px; }
+
+/* Tactic filters */
+.tactic-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tactic-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 12px;
+}
+
+.tactic-filter:hover { background: rgba(255,255,255,0.04); }
+
+.tactic-filter .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tactic-filter .name { flex: 1; color: var(--text-secondary); }
+.tactic-filter .count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.tactic-filter.inactive .name { color: var(--text-muted); text-decoration: line-through; }
+.tactic-filter.inactive .dot { opacity: 0.3; }
+
+/* Threat actors */
+.actor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.actor-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.actor-item:hover { background: rgba(255,255,255,0.04); }
+.actor-item.selected {
+  background: rgba(236, 72, 153, 0.12);
+  color: var(--accent-pink);
+  border-left: 2px solid var(--accent-pink);
+}
+
+.actor-item .tech-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Search */
+.search-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  margin-bottom: 8px;
+}
+
+.search-input::placeholder { color: var(--text-muted); }
+.search-input:focus { border-color: var(--accent-blue); }
+
+/* ── Graph Canvas ── */
+.graph-container {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.graph-container svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Graph background grid */
+.graph-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
+  background-size: 40px 40px;
+}
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 12px;
+  max-width: 320px;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  display: none;
+}
+
+.tooltip .tt-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.tooltip .tt-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.tooltip .tt-tactic {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.tooltip .tt-desc {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tooltip .tt-coverage {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ── Right Panel ── */
+.right-panel {
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Stats cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.stat-card .stat-label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.stat-card .stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.stat-card .stat-value.green { color: var(--accent-green); }
+.stat-card .stat-value.red { color: var(--accent-red); }
+.stat-card .stat-value.amber { color: var(--accent-amber); }
+.stat-card .stat-value.blue { color: var(--accent-blue); }
+
+/* Coverage bar */
+.coverage-bar-container {
+  margin-top: 8px;
+}
+
+.coverage-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.coverage-bar-label .pct {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.coverage-bar {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.coverage-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+  transition: width 0.5s ease;
+}
+
+/* Priority recommendations */
+.priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.priority-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.priority-item:hover {
+  border-color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.priority-item .pi-rank {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-amber);
+  margin-bottom: 2px;
+}
+
+.priority-item .pi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.priority-item .pi-name {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.priority-item .pi-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.priority-item .pi-score-bar {
+  height: 3px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  margin: 6px 0;
+}
+
+.priority-item .pi-score-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent-amber), var(--accent-red));
+}
+
+.priority-item .pi-reason {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.priority-item .pi-metrics {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.priority-item .pi-metrics span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* ── Bottom Bar ── */
+.bottom-bar {
+  grid-column: 1 / -1;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 20px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.bottom-bar .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.legend-inline {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-item .lg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Node animations ── */
+@keyframes nodeAppear {
+  from { opacity: 0; transform: scale(0); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Coverage toggle buttons */
+.coverage-toggle-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cov-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cov-btn:hover { border-color: var(--accent-green); color: var(--accent-green); }
+.cov-btn.covered {
+  border-color: var(--accent-green);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
+}
+
+/* View mode buttons */
+.view-modes {
+  display: flex;
+  gap: 4px;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.visible { display: flex; }
+
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal h3 {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  margin-bottom: 16px;
+  color: var(--accent-cyan);
+}
+
+.modal p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.modal kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/>
+        <line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/>
+        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/>
+        <line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/>
+        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+      </svg>
+      ATT&CK GRAPH
+      <span class="subtitle">Defensive Investment Prioritizer</span>
+    </div>
+    <div class="top-controls">
+      <div class="view-modes">
+        <button class="btn active" id="btn-force" onclick="setLayout('force')">Force</button>
+        <button class="btn" id="btn-radial" onclick="setLayout('radial')">Radial</button>
+        <button class="btn" id="btn-hierarchical" onclick="setLayout('hierarchical')">Hierarchy</button>
+      </div>
+      <button class="btn" onclick="resetZoom()">Reset View</button>
+      <button class="btn" onclick="toggleAllCoverage()">Toggle All Coverage</button>
+      <button class="btn primary" onclick="computePriorities()">⟳ Recompute Priorities</button>
+      <button class="btn" onclick="showHelp()">?</button>
+    </div>
+  </div>
+
+  <!-- Left Panel -->
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="panel-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search Techniques
+      </div>
+      <input type="text" class="search-input" id="search-input" placeholder="Search T1059, Phishing, etc..." oninput="filterSearch(this.value)">
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Tactics
+      </div>
+      <div class="tactic-filters" id="tactic-filters"></div>
+    </div>
+
+    <div class="panel-section" style="flex: 1;">
+      <div class="panel-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Threat Actors
+      </div>
+      <input type="text" class="search-input" id="actor-search" placeholder="Filter actors..." oninput="filterActors(this.value)">
+      <div class="actor-list" id="actor-list"></div>
+    </div>
+  </div>
+
+  <!-- Graph -->
+  <div class="graph-container" id="graph-container">
+    <div class="graph-bg"></div>
+    <svg id="graph-svg"></svg>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <div class="panel-section">
+      <div class="panel-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Coverage Overview
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Covered</div>
+          <div class="stat-value green" id="stat-covered">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Uncovered</div>
+          <div class="stat-value red" id="stat-uncovered">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Techniques</div>
+          <div class="stat-value blue" id="stat-total">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Risk Score</div>
+          <div class="stat-value amber" id="stat-risk">0</div>
+        </div>
+      </div>
+      <div class="coverage-bar-container">
+        <div class="coverage-bar-label">
+          <span>Detection Coverage</span>
+          <span class="pct" id="coverage-pct">0%</span>
+        </div>
+        <div class="coverage-bar">
+          <div class="coverage-bar-fill" id="coverage-fill" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Quick Coverage by Tactic
+      </div>
+      <div class="coverage-toggle-group" id="quick-coverage"></div>
+    </div>
+
+    <div class="panel-section" style="flex: 1;">
+      <div class="panel-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Priority Investments (Top 10)
+      </div>
+      <div class="priority-list" id="priority-list">
+        <p style="font-size:11px;color:var(--text-muted);">Click "Recompute Priorities" to analyze attack paths and recommend optimal detection investments.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <div class="status-dot"></div>
+    <span id="status-text">Initializing graph...</span>
+    <div class="legend-inline">
+      <div class="legend-item"><div class="lg-dot" style="background:var(--accent-green)"></div>Covered</div>
+      <div class="legend-item"><div class="lg-dot" style="background:var(--accent-red)"></div>Uncovered</div>
+      <div class="legend-item"><div class="lg-dot" style="background:var(--accent-pink);box-shadow:0 0 6px var(--accent-pink)"></div>Actor TTP</div>
+      <div class="legend-item"><div class="lg-dot" style="background:var(--accent-amber)"></div>High Priority</div>
+    </div>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div class="modal-overlay" id="help-modal">
+  <div class="modal">
+    <h3>ATT&CK Graph Analyzer — Usage Guide</h3>
+    <p><strong>Purpose:</strong> This tool visualizes the MITRE ATT&CK framework as an interactive graph to help you determine where limited defensive budget is best spent. It answers: <em>"Which technique, if I invest in detecting it, breaks the most attack paths used by my threat actors?"</em></p>
+    <p><strong>Click nodes</strong> to toggle detection coverage on/off. Green = covered, red = uncovered.</p>
+    <p><strong>Select threat actors</strong> in the left panel to overlay their known TTPs on the graph. Selected actor techniques glow pink.</p>
+    <p><strong>Recompute Priorities</strong> runs centrality analysis across all attack paths formed by selected threat actors, weighted by your current coverage gaps. The top recommendations are techniques where detection investment would disrupt the most attack chains.</p>
+    <p><strong>Layouts:</strong> Force (organic clustering), Radial (tactic-centric), Hierarchy (kill chain flow).</p>
+    <p><strong>Zoom:</strong> Scroll to zoom, drag to pan. <kbd>Ctrl</kbd>+click to multi-select.</p>
+    <p><strong>Search:</strong> Filter by technique ID or name. Click tactic labels to show/hide entire tactic groups.</p>
+    <p style="color:var(--text-muted);font-size:10px;margin-top:16px;">Data: Representative ATT&CK subset (Enterprise). For production use, load full STIX bundle via ATT&CK's TAXII server.</p>
+    <button class="btn" onclick="hideHelp()" style="margin-top:12px;">Got it</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ATT&CK DATA — Representative enterprise techniques subset
+// In production, this would be loaded from STIX/TAXII
+// ═══════════════════════════════════════════════════════════════
+
+const TACTICS = [
+  { id: 'TA0043', name: 'Reconnaissance', color: 'var(--tactic-recon)', short: 'Recon' },
+  { id: 'TA0042', name: 'Resource Development', color: 'var(--tactic-resource)', short: 'Resource' },
+  { id: 'TA0001', name: 'Initial Access', color: 'var(--tactic-initial)', short: 'Initial' },
+  { id: 'TA0002', name: 'Execution', color: 'var(--tactic-execution)', short: 'Execution' },
+  { id: 'TA0003', name: 'Persistence', color: 'var(--tactic-persistence)', short: 'Persist' },
+  { id: 'TA0004', name: 'Privilege Escalation', color: 'var(--tactic-privesc)', short: 'PrivEsc' },
+  { id: 'TA0005', name: 'Defense Evasion', color: 'var(--tactic-defense)', short: 'DefEvas' },
+  { id: 'TA0006', name: 'Credential Access', color: 'var(--tactic-credential)', short: 'Cred' },
+  { id: 'TA0007', name: 'Discovery', color: 'var(--tactic-discovery)', short: 'Discovery' },
+  { id: 'TA0008', name: 'Lateral Movement', color: 'var(--tactic-lateral)', short: 'Lateral' },
+  { id: 'TA0009', name: 'Collection', color: 'var(--tactic-collection)', short: 'Collect' },
+  { id: 'TA0011', name: 'Command and Control', color: 'var(--tactic-c2)', short: 'C2' },
+  { id: 'TA0010', name: 'Exfiltration', color: 'var(--tactic-exfil)', short: 'Exfil' },
+  { id: 'TA0040', name: 'Impact', color: 'var(--tactic-impact)', short: 'Impact' },
+];
+
+const TECHNIQUES = [
+  // Reconnaissance
+  { id: 'T1595', name: 'Active Scanning', tactic: 'TA0043', desc: 'Adversaries scan victim IP ranges to gather information.' },
+  { id: 'T1592', name: 'Gather Victim Host Info', tactic: 'TA0043', desc: 'Gather information about victim hosts for targeting.' },
+  { id: 'T1589', name: 'Gather Victim Identity Info', tactic: 'TA0043', desc: 'Gather credentials, email addresses, employee names.' },
+  { id: 'T1590', name: 'Gather Victim Network Info', tactic: 'TA0043', desc: 'Gather network configuration, DNS, and topology data.' },
+  // Resource Development
+  { id: 'T1583', name: 'Acquire Infrastructure', tactic: 'TA0042', desc: 'Buy/lease infrastructure for operations.' },
+  { id: 'T1586', name: 'Compromise Accounts', tactic: 'TA0042', desc: 'Compromise existing accounts for use in operations.' },
+  { id: 'T1584', name: 'Compromise Infrastructure', tactic: 'TA0042', desc: 'Compromise third-party infrastructure.' },
+  { id: 'T1587', name: 'Develop Capabilities', tactic: 'TA0042', desc: 'Build malware, exploits, and other tools.' },
+  // Initial Access
+  { id: 'T1189', name: 'Drive-by Compromise', tactic: 'TA0001', desc: 'Gain access through user visiting a compromised website.' },
+  { id: 'T1190', name: 'Exploit Public-Facing App', tactic: 'TA0001', desc: 'Exploit vulnerabilities in internet-facing applications.' },
+  { id: 'T1133', name: 'External Remote Services', tactic: 'TA0001', desc: 'Leverage VPN, Citrix, or other remote services.' },
+  { id: 'T1200', name: 'Hardware Additions', tactic: 'TA0001', desc: 'Introduce rogue hardware to gain access.' },
+  { id: 'T1566', name: 'Phishing', tactic: 'TA0001', desc: 'Send targeted spearphishing messages with malicious content.' },
+  { id: 'T1078', name: 'Valid Accounts', tactic: 'TA0001', desc: 'Use stolen or compromised credentials for initial access.' },
+  { id: 'T1199', name: 'Trusted Relationship', tactic: 'TA0001', desc: 'Breach via trusted third-party relationships.' },
+  // Execution
+  { id: 'T1059', name: 'Command & Scripting Interpreter', tactic: 'TA0002', desc: 'Abuse command-line and scripting interpreters (PowerShell, cmd, bash).' },
+  { id: 'T1203', name: 'Exploitation for Client Execution', tactic: 'TA0002', desc: 'Exploit software vulnerabilities for code execution.' },
+  { id: 'T1047', name: 'WMI', tactic: 'TA0002', desc: 'Use Windows Management Instrumentation for execution.' },
+  { id: 'T1053', name: 'Scheduled Task/Job', tactic: 'TA0002', desc: 'Abuse task scheduling for execution and persistence.' },
+  { id: 'T1204', name: 'User Execution', tactic: 'TA0002', desc: 'Rely on user interaction to execute malicious content.' },
+  { id: 'T1569', name: 'System Services', tactic: 'TA0002', desc: 'Abuse system services for code execution.' },
+  // Persistence
+  { id: 'T1547', name: 'Boot/Logon Autostart', tactic: 'TA0003', desc: 'Configure programs to run on system boot or logon.' },
+  { id: 'T1136', name: 'Create Account', tactic: 'TA0003', desc: 'Create new accounts for persistent access.' },
+  { id: 'T1543', name: 'Create/Modify System Process', tactic: 'TA0003', desc: 'Create or modify system-level processes for persistence.' },
+  { id: 'T1546', name: 'Event Triggered Execution', tactic: 'TA0003', desc: 'Establish persistence via event-triggered execution.' },
+  { id: 'T1574', name: 'Hijack Execution Flow', tactic: 'TA0003', desc: 'Hijack the way OS runs programs to persist.' },
+  { id: 'T1098', name: 'Account Manipulation', tactic: 'TA0003', desc: 'Manipulate accounts to maintain persistence.' },
+  // Privilege Escalation
+  { id: 'T1548', name: 'Abuse Elevation Control', tactic: 'TA0004', desc: 'Bypass UAC or sudo to escalate privileges.' },
+  { id: 'T1134', name: 'Access Token Manipulation', tactic: 'TA0004', desc: 'Manipulate access tokens to escalate privileges.' },
+  { id: 'T1068', name: 'Exploitation for Privilege Escalation', tactic: 'TA0004', desc: 'Exploit vulnerabilities to gain higher privileges.' },
+  { id: 'T1055', name: 'Process Injection', tactic: 'TA0004', desc: 'Inject code into running processes for escalation/evasion.' },
+  // Defense Evasion
+  { id: 'T1140', name: 'Deobfuscate/Decode', tactic: 'TA0005', desc: 'Deobfuscate or decode files and information.' },
+  { id: 'T1070', name: 'Indicator Removal', tactic: 'TA0005', desc: 'Delete or modify artifacts to hide activity.' },
+  { id: 'T1036', name: 'Masquerading', tactic: 'TA0005', desc: 'Manipulate features to make things appear legitimate.' },
+  { id: 'T1027', name: 'Obfuscated Files', tactic: 'TA0005', desc: 'Encrypt, encode, or obfuscate to evade detection.' },
+  { id: 'T1218', name: 'System Binary Proxy Execution', tactic: 'TA0005', desc: 'Use signed binaries to proxy execution of malicious content.' },
+  { id: 'T1562', name: 'Impair Defenses', tactic: 'TA0005', desc: 'Disable or modify security tools and logging.' },
+  { id: 'T1112', name: 'Modify Registry', tactic: 'TA0005', desc: 'Modify registry to hide configuration or evade detection.' },
+  // Credential Access
+  { id: 'T1110', name: 'Brute Force', tactic: 'TA0006', desc: 'Attempt to gain access through systematic password guessing.' },
+  { id: 'T1003', name: 'OS Credential Dumping', tactic: 'TA0006', desc: 'Dump credentials from OS (LSASS, SAM, /etc/shadow).' },
+  { id: 'T1558', name: 'Steal/Forge Kerberos Tickets', tactic: 'TA0006', desc: 'Steal or forge Kerberos tickets (Golden/Silver Ticket).' },
+  { id: 'T1552', name: 'Unsecured Credentials', tactic: 'TA0006', desc: 'Search for credentials in files, registries, or cloud.' },
+  { id: 'T1556', name: 'Modify Auth Process', tactic: 'TA0006', desc: 'Modify authentication mechanisms to capture credentials.' },
+  // Discovery
+  { id: 'T1087', name: 'Account Discovery', tactic: 'TA0007', desc: 'Enumerate accounts on a system or domain.' },
+  { id: 'T1482', name: 'Domain Trust Discovery', tactic: 'TA0007', desc: 'Enumerate domain trusts for lateral movement planning.' },
+  { id: 'T1083', name: 'File & Directory Discovery', tactic: 'TA0007', desc: 'Enumerate files and directories for interesting data.' },
+  { id: 'T1046', name: 'Network Service Discovery', tactic: 'TA0007', desc: 'Scan for services running on remote hosts.' },
+  { id: 'T1057', name: 'Process Discovery', tactic: 'TA0007', desc: 'Enumerate running processes for security software.' },
+  { id: 'T1018', name: 'Remote System Discovery', tactic: 'TA0007', desc: 'Discover remote systems on the network.' },
+  // Lateral Movement
+  { id: 'T1021', name: 'Remote Services', tactic: 'TA0008', desc: 'Use remote services (RDP, SSH, SMB) for lateral movement.' },
+  { id: 'T1080', name: 'Taint Shared Content', tactic: 'TA0008', desc: 'Deliver payloads via shared storage resources.' },
+  { id: 'T1550', name: 'Use Alternate Auth Material', tactic: 'TA0008', desc: 'Use pass-the-hash, pass-the-ticket for lateral movement.' },
+  { id: 'T1570', name: 'Lateral Tool Transfer', tactic: 'TA0008', desc: 'Transfer tools between systems in compromised environment.' },
+  // Collection
+  { id: 'T1560', name: 'Archive Collected Data', tactic: 'TA0009', desc: 'Compress and/or encrypt collected data before exfiltration.' },
+  { id: 'T1005', name: 'Data from Local System', tactic: 'TA0009', desc: 'Search local file systems for files of interest.' },
+  { id: 'T1039', name: 'Data from Network Shared Drive', tactic: 'TA0009', desc: 'Search network shares for files of interest.' },
+  { id: 'T1114', name: 'Email Collection', tactic: 'TA0009', desc: 'Collect email from mail servers or clients.' },
+  { id: 'T1113', name: 'Screen Capture', tactic: 'TA0009', desc: 'Take screenshots of the desktop to collect information.' },
+  // Command and Control
+  { id: 'T1071', name: 'Application Layer Protocol', tactic: 'TA0011', desc: 'Communicate using application layer protocols (HTTP, DNS).' },
+  { id: 'T1132', name: 'Data Encoding', tactic: 'TA0011', desc: 'Encode data to make C2 traffic blend in.' },
+  { id: 'T1573', name: 'Encrypted Channel', tactic: 'TA0011', desc: 'Encrypt C2 communications to avoid detection.' },
+  { id: 'T1105', name: 'Ingress Tool Transfer', tactic: 'TA0011', desc: 'Transfer tools from external systems into compromised environment.' },
+  { id: 'T1572', name: 'Protocol Tunneling', tactic: 'TA0011', desc: 'Tunnel network communications through another protocol.' },
+  { id: 'T1090', name: 'Proxy', tactic: 'TA0011', desc: 'Use connection proxies to direct C2 traffic.' },
+  // Exfiltration
+  { id: 'T1041', name: 'Exfil Over C2 Channel', tactic: 'TA0010', desc: 'Exfiltrate data over the existing C2 channel.' },
+  { id: 'T1048', name: 'Exfil Over Alternative Protocol', tactic: 'TA0010', desc: 'Exfiltrate data using a different protocol than C2.' },
+  { id: 'T1567', name: 'Exfil Over Web Service', tactic: 'TA0010', desc: 'Exfiltrate data to cloud storage (Google Drive, Dropbox).' },
+  { id: 'T1537', name: 'Transfer Data to Cloud', tactic: 'TA0010', desc: 'Transfer data to adversary-controlled cloud accounts.' },
+  // Impact
+  { id: 'T1486', name: 'Data Encrypted for Impact', tactic: 'TA0040', desc: 'Encrypt data on target systems to disrupt operations (ransomware).' },
+  { id: 'T1485', name: 'Data Destruction', tactic: 'TA0040', desc: 'Destroy data on specific systems or in large numbers.' },
+  { id: 'T1489', name: 'Service Stop', tactic: 'TA0040', desc: 'Stop or disable services to render resources unavailable.' },
+  { id: 'T1490', name: 'Inhibit System Recovery', tactic: 'TA0040', desc: 'Delete or disable recovery features (Volume Shadow Copies).' },
+  { id: 'T1498', name: 'Network Denial of Service', tactic: 'TA0040', desc: 'Perform denial of service attacks against networks.' },
+];
+
+// Attack flow edges: directed edges representing common technique chains
+const ATTACK_FLOWS = [
+  // Recon → Initial Access
+  ['T1595', 'T1190'], ['T1589', 'T1566'], ['T1590', 'T1133'], ['T1592', 'T1189'],
+  ['T1589', 'T1078'], ['T1590', 'T1190'],
+  // Resource Dev → Initial Access
+  ['T1583', 'T1566'], ['T1587', 'T1189'], ['T1586', 'T1078'], ['T1584', 'T1190'],
+  // Initial Access → Execution
+  ['T1566', 'T1059'], ['T1566', 'T1204'], ['T1190', 'T1059'], ['T1189', 'T1203'],
+  ['T1078', 'T1059'], ['T1133', 'T1059'], ['T1199', 'T1078'],
+  // Execution → Persistence
+  ['T1059', 'T1547'], ['T1059', 'T1053'], ['T1053', 'T1543'], ['T1204', 'T1547'],
+  ['T1059', 'T1136'], ['T1059', 'T1546'], ['T1569', 'T1543'],
+  // Execution → Privilege Escalation
+  ['T1059', 'T1055'], ['T1059', 'T1068'], ['T1203', 'T1068'], ['T1059', 'T1548'],
+  ['T1053', 'T1134'],
+  // Persistence → Privilege Escalation
+  ['T1547', 'T1548'], ['T1574', 'T1055'], ['T1543', 'T1134'],
+  // PrivEsc → Defense Evasion
+  ['T1055', 'T1036'], ['T1055', 'T1027'], ['T1548', 'T1562'], ['T1134', 'T1070'],
+  ['T1055', 'T1140'], ['T1068', 'T1562'],
+  // Defense Evasion → Credential Access
+  ['T1036', 'T1003'], ['T1562', 'T1003'], ['T1218', 'T1003'], ['T1027', 'T1110'],
+  ['T1070', 'T1552'], ['T1112', 'T1556'],
+  // Credential Access → Discovery
+  ['T1003', 'T1087'], ['T1003', 'T1482'], ['T1558', 'T1018'], ['T1552', 'T1083'],
+  ['T1110', 'T1087'], ['T1556', 'T1087'],
+  // Discovery → Lateral Movement
+  ['T1087', 'T1021'], ['T1482', 'T1021'], ['T1018', 'T1021'], ['T1046', 'T1021'],
+  ['T1087', 'T1550'], ['T1018', 'T1570'], ['T1083', 'T1080'],
+  // Lateral Movement → Collection
+  ['T1021', 'T1005'], ['T1021', 'T1039'], ['T1021', 'T1114'], ['T1550', 'T1005'],
+  ['T1080', 'T1005'], ['T1570', 'T1113'],
+  // Collection → C2
+  ['T1005', 'T1071'], ['T1039', 'T1071'], ['T1560', 'T1071'], ['T1114', 'T1573'],
+  ['T1113', 'T1132'], ['T1005', 'T1105'],
+  // C2 ↔ Exfiltration
+  ['T1071', 'T1041'], ['T1573', 'T1048'], ['T1071', 'T1567'], ['T1090', 'T1048'],
+  ['T1572', 'T1041'], ['T1105', 'T1537'],
+  // Various → Impact
+  ['T1059', 'T1486'], ['T1059', 'T1485'], ['T1059', 'T1489'], ['T1059', 'T1490'],
+  ['T1021', 'T1486'], ['T1569', 'T1489'], ['T1053', 'T1486'],
+  ['T1486', 'T1490'], ['T1485', 'T1489'],
+  // Cross-tactic defensive evasion links
+  ['T1036', 'T1218'], ['T1027', 'T1140'], ['T1562', 'T1112'], ['T1070', 'T1036'],
+  // Additional persistence links
+  ['T1098', 'T1078'], ['T1546', 'T1059'], ['T1574', 'T1036'],
+  // C2 internal
+  ['T1071', 'T1573'], ['T1071', 'T1090'], ['T1573', 'T1572'],
+  ['T1132', 'T1071'],
+  // Network DoS
+  ['T1498', 'T1489'],
+  // Exfil links
+  ['T1041', 'T1537'], ['T1567', 'T1537'],
+];
+
+// Threat actor data — representative APT profiles with their known TTPs
+const THREAT_ACTORS = [
+  {
+    name: 'APT29 (Cozy Bear)',
+    origin: 'Russia',
+    techniques: ['T1566','T1078','T1059','T1053','T1547','T1055','T1036','T1027','T1003','T1087','T1482','T1021','T1005','T1560','T1071','T1573','T1041','T1070','T1105','T1204']
+  },
+  {
+    name: 'APT28 (Fancy Bear)',
+    origin: 'Russia',
+    techniques: ['T1566','T1190','T1059','T1203','T1053','T1547','T1068','T1055','T1036','T1003','T1110','T1087','T1018','T1021','T1005','T1071','T1573','T1041','T1562','T1140']
+  },
+  {
+    name: 'Lazarus Group',
+    origin: 'North Korea',
+    techniques: ['T1566','T1189','T1059','T1204','T1547','T1543','T1055','T1027','T1140','T1562','T1003','T1083','T1057','T1021','T1005','T1071','T1573','T1105','T1486','T1485','T1489']
+  },
+  {
+    name: 'APT41 (Winnti)',
+    origin: 'China',
+    techniques: ['T1190','T1133','T1059','T1053','T1547','T1574','T1068','T1055','T1036','T1027','T1003','T1552','T1087','T1046','T1021','T1570','T1005','T1071','T1090','T1048','T1486']
+  },
+  {
+    name: 'FIN7',
+    origin: 'Russia',
+    techniques: ['T1566','T1059','T1204','T1053','T1547','T1055','T1036','T1027','T1218','T1003','T1083','T1057','T1005','T1113','T1071','T1105','T1041','T1070']
+  },
+  {
+    name: 'Sandworm',
+    origin: 'Russia',
+    techniques: ['T1190','T1133','T1059','T1053','T1569','T1543','T1068','T1562','T1070','T1003','T1087','T1018','T1021','T1570','T1071','T1573','T1486','T1485','T1489','T1490']
+  },
+  {
+    name: 'APT1 (Comment Crew)',
+    origin: 'China',
+    techniques: ['T1566','T1059','T1204','T1547','T1136','T1003','T1087','T1083','T1018','T1021','T1005','T1039','T1114','T1071','T1041','T1560']
+  },
+  {
+    name: 'Kimsuky',
+    origin: 'North Korea',
+    techniques: ['T1566','T1189','T1059','T1204','T1547','T1546','T1027','T1140','T1552','T1083','T1057','T1005','T1113','T1071','T1105','T1567']
+  },
+  {
+    name: 'Volt Typhoon',
+    origin: 'China',
+    techniques: ['T1190','T1133','T1078','T1059','T1053','T1547','T1548','T1036','T1218','T1003','T1087','T1482','T1046','T1018','T1021','T1071','T1090','T1572']
+  },
+  {
+    name: 'LockBit',
+    origin: 'Ransomware',
+    techniques: ['T1190','T1078','T1133','T1059','T1053','T1547','T1068','T1055','T1562','T1070','T1003','T1087','T1018','T1021','T1570','T1486','T1490','T1489']
+  },
+  {
+    name: 'BlackCat (ALPHV)',
+    origin: 'Ransomware',
+    techniques: ['T1190','T1078','T1059','T1569','T1543','T1548','T1562','T1070','T1003','T1087','T1021','T1486','T1490','T1489','T1071','T1105']
+  },
+  {
+    name: 'Turla',
+    origin: 'Russia',
+    techniques: ['T1566','T1189','T1059','T1053','T1547','T1055','T1027','T1036','T1070','T1003','T1087','T1083','T1021','T1005','T1560','T1071','T1573','T1090','T1041','T1112']
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// APP STATE
+// ═══════════════════════════════════════════════════════════════
+const state = {
+  coverage: new Set(),
+  selectedActors: new Set(),
+  activeTactics: new Set(TACTICS.map(t => t.id)),
+  layout: 'force',
+  hoveredNode: null,
+  searchFilter: '',
+  priorities: [],
+};
+
+const tacticMap = Object.fromEntries(TACTICS.map(t => [t.id, t]));
+const techMap = Object.fromEntries(TECHNIQUES.map(t => [t.id, t]));
+
+// Build adjacency for path analysis
+const adjacency = {};
+const reverseAdj = {};
+TECHNIQUES.forEach(t => { adjacency[t.id] = []; reverseAdj[t.id] = []; });
+ATTACK_FLOWS.forEach(([src, tgt]) => {
+  if (adjacency[src] && adjacency[tgt]) {
+    adjacency[src].push(tgt);
+    reverseAdj[tgt].push(src);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// D3 GRAPH SETUP
+// ═══════════════════════════════════════════════════════════════
+const width = window.innerWidth - 640;
+const height = window.innerHeight - 100;
+const svg = d3.select('#graph-svg');
+const container = svg.append('g').attr('class', 'graph-root');
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.2, 5])
+  .on('zoom', (e) => container.attr('transform', e.transform));
+svg.call(zoom);
+
+// Arrow markers
+const defs = svg.append('defs');
+defs.append('marker')
+  .attr('id', 'arrowhead')
+  .attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20)
+  .attr('refY', 0)
+  .attr('markerWidth', 6)
+  .attr('markerHeight', 6)
+  .attr('orient', 'auto')
+  .append('path')
+  .attr('d', 'M0,-4L8,0L0,4')
+  .attr('fill', 'rgba(255,255,255,0.15)');
+
+defs.append('marker')
+  .attr('id', 'arrowhead-active')
+  .attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20)
+  .attr('refY', 0)
+  .attr('markerWidth', 6)
+  .attr('markerHeight', 6)
+  .attr('orient', 'auto')
+  .append('path')
+  .attr('d', 'M0,-4L8,0L0,4')
+  .attr('fill', 'rgba(236, 72, 153, 0.5)');
+
+// Glow filter
+const glowFilter = defs.append('filter').attr('id', 'glow');
+glowFilter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+glowFilter.append('feMerge').selectAll('feMergeNode')
+  .data(['blur', 'SourceGraphic']).enter()
+  .append('feMergeNode').attr('in', d => d);
+
+// Build graph data
+let nodes, links, simulation;
+let linkElements, nodeElements, labelElements;
+
+function buildGraph() {
+  nodes = TECHNIQUES.filter(t => state.activeTactics.has(t.tactic)).map(t => ({
+    ...t,
+    radius: 8 + (adjacency[t.id].length + reverseAdj[t.id].length) * 0.8,
+  }));
+
+  const nodeIds = new Set(nodes.map(n => n.id));
+  links = ATTACK_FLOWS
+    .filter(([s, t]) => nodeIds.has(s) && nodeIds.has(t))
+    .map(([source, target]) => ({ source, target }));
+
+  // Simulation
+  if (simulation) simulation.stop();
+
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(80).strength(0.3))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => d.radius + 5))
+    .force('x', d3.forceX(width / 2).strength(0.03))
+    .force('y', d3.forceY(height / 2).strength(0.03))
+    .alphaDecay(0.02);
+
+  if (state.layout === 'radial') applyRadialForces();
+  if (state.layout === 'hierarchical') applyHierarchicalForces();
+
+  render();
+  simulation.on('tick', ticked);
+}
+
+function applyRadialForces() {
+  const tacticIndex = Object.fromEntries(TACTICS.map((t, i) => [t.id, i]));
+  const angleScale = d3.scaleLinear().domain([0, TACTICS.length]).range([0, 2 * Math.PI]);
+
+  simulation
+    .force('x', d3.forceX(d => width/2 + Math.cos(angleScale(tacticIndex[d.tactic])) * 250).strength(0.4))
+    .force('y', d3.forceY(d => height/2 + Math.sin(angleScale(tacticIndex[d.tactic])) * 250).strength(0.4))
+    .force('charge', d3.forceManyBody().strength(-120));
+}
+
+function applyHierarchicalForces() {
+  const tacticIndex = Object.fromEntries(TACTICS.map((t, i) => [t.id, i]));
+  const xScale = d3.scaleLinear().domain([0, TACTICS.length - 1]).range([80, width - 80]);
+
+  simulation
+    .force('x', d3.forceX(d => xScale(tacticIndex[d.tactic])).strength(0.7))
+    .force('y', d3.forceY(height / 2).strength(0.05))
+    .force('charge', d3.forceManyBody().strength(-80))
+    .force('collision', d3.forceCollide().radius(d => d.radius + 8));
+}
+
+function render() {
+  container.selectAll('*').remove();
+
+  linkElements = container.append('g')
+    .selectAll('line')
+    .data(links)
+    .enter().append('line')
+    .attr('stroke', 'rgba(255,255,255,0.06)')
+    .attr('stroke-width', 1)
+    .attr('marker-end', 'url(#arrowhead)');
+
+  const nodeGroup = container.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .enter().append('g')
+    .attr('class', 'node-group')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag', dragged)
+      .on('end', dragEnd))
+    .on('click', (e, d) => toggleCoverage(d.id))
+    .on('mouseenter', (e, d) => showTooltip(e, d))
+    .on('mouseleave', hideTooltip);
+
+  // Outer glow ring (for actor techniques)
+  nodeGroup.append('circle')
+    .attr('class', 'glow-ring')
+    .attr('r', d => d.radius + 4)
+    .attr('fill', 'none')
+    .attr('stroke', 'transparent')
+    .attr('stroke-width', 2);
+
+  // Main circle
+  nodeGroup.append('circle')
+    .attr('class', 'main-circle')
+    .attr('r', d => d.radius)
+    .attr('stroke-width', 1.5);
+
+  // Label
+  nodeGroup.append('text')
+    .attr('class', 'node-label')
+    .attr('dy', d => d.radius + 12)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--font-mono)')
+    .attr('font-size', '8px')
+    .attr('fill', 'var(--text-muted)')
+    .text(d => d.id);
+
+  nodeElements = nodeGroup;
+  updateVisuals();
+}
+
+function ticked() {
+  linkElements
+    .attr('x1', d => d.source.x)
+    .attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x)
+    .attr('y2', d => d.target.y);
+
+  nodeElements.attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+function dragStart(e, d) {
+  if (!e.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(e, d) { d.fx = e.x; d.fy = e.y; }
+function dragEnd(e, d) {
+  if (!e.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VISUAL UPDATES
+// ═══════════════════════════════════════════════════════════════
+function updateVisuals() {
+  if (!nodeElements) return;
+
+  const actorTechs = new Set();
+  state.selectedActors.forEach(actorName => {
+    const actor = THREAT_ACTORS.find(a => a.name === actorName);
+    if (actor) actor.techniques.forEach(t => actorTechs.add(t));
+  });
+
+  // Update nodes
+  nodeElements.select('.main-circle')
+    .attr('fill', d => {
+      if (state.searchFilter && !matchesSearch(d)) return 'rgba(255,255,255,0.03)';
+      if (state.coverage.has(d.id)) return tacticMap[d.tactic]?.color || '#fff';
+      return 'var(--bg-tertiary)';
+    })
+    .attr('stroke', d => {
+      if (state.searchFilter && !matchesSearch(d)) return 'rgba(255,255,255,0.05)';
+      if (state.coverage.has(d.id)) return tacticMap[d.tactic]?.color || '#fff';
+      return 'rgba(255,255,255,0.15)';
+    })
+    .attr('opacity', d => {
+      if (state.searchFilter && !matchesSearch(d)) return 0.15;
+      return state.coverage.has(d.id) ? 0.9 : 0.6;
+    });
+
+  // Glow ring for actor techniques
+  nodeElements.select('.glow-ring')
+    .attr('stroke', d => actorTechs.has(d.id) ? 'var(--accent-pink)' : 'transparent')
+    .attr('stroke-width', d => actorTechs.has(d.id) ? 2.5 : 0)
+    .attr('opacity', d => actorTechs.has(d.id) ? 0.8 : 0)
+    .attr('filter', d => actorTechs.has(d.id) ? 'url(#glow)' : 'none');
+
+  // Labels
+  nodeElements.select('.node-label')
+    .attr('fill', d => {
+      if (state.searchFilter && !matchesSearch(d)) return 'rgba(255,255,255,0.05)';
+      if (actorTechs.has(d.id)) return 'var(--accent-pink)';
+      return 'var(--text-muted)';
+    });
+
+  // Update links
+  linkElements
+    .attr('stroke', d => {
+      const sId = typeof d.source === 'object' ? d.source.id : d.source;
+      const tId = typeof d.target === 'object' ? d.target.id : d.target;
+      if (actorTechs.has(sId) && actorTechs.has(tId)) return 'rgba(236, 72, 153, 0.25)';
+      return 'rgba(255,255,255,0.06)';
+    })
+    .attr('stroke-width', d => {
+      const sId = typeof d.source === 'object' ? d.source.id : d.source;
+      const tId = typeof d.target === 'object' ? d.target.id : d.target;
+      return (actorTechs.has(sId) && actorTechs.has(tId)) ? 1.5 : 0.8;
+    })
+    .attr('marker-end', d => {
+      const sId = typeof d.source === 'object' ? d.source.id : d.source;
+      const tId = typeof d.target === 'object' ? d.target.id : d.target;
+      return (actorTechs.has(sId) && actorTechs.has(tId)) ? 'url(#arrowhead-active)' : 'url(#arrowhead)';
+    });
+
+  updateStats();
+}
+
+function matchesSearch(d) {
+  const q = state.searchFilter.toLowerCase();
+  return d.id.toLowerCase().includes(q) || d.name.toLowerCase().includes(q);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COVERAGE & INTERACTION
+// ═══════════════════════════════════════════════════════════════
+function toggleCoverage(techId) {
+  if (state.coverage.has(techId)) {
+    state.coverage.delete(techId);
+  } else {
+    state.coverage.add(techId);
+  }
+  updateVisuals();
+  updateQuickCoverage();
+}
+
+function toggleAllCoverage() {
+  if (state.coverage.size > TECHNIQUES.length / 2) {
+    state.coverage.clear();
+  } else {
+    TECHNIQUES.forEach(t => state.coverage.add(t.id));
+  }
+  updateVisuals();
+  updateQuickCoverage();
+}
+
+function updateStats() {
+  const total = TECHNIQUES.filter(t => state.activeTactics.has(t.tactic)).length;
+  const covered = [...state.coverage].filter(id => {
+    const t = techMap[id];
+    return t && state.activeTactics.has(t.tactic);
+  }).length;
+  const uncovered = total - covered;
+  const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
+
+  document.getElementById('stat-covered').textContent = covered;
+  document.getElementById('stat-uncovered').textContent = uncovered;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('coverage-pct').textContent = pct + '%';
+  document.getElementById('coverage-fill').style.width = pct + '%';
+
+  // Risk score: weighted by actor exposure
+  const actorTechs = new Set();
+  state.selectedActors.forEach(name => {
+    const a = THREAT_ACTORS.find(x => x.name === name);
+    if (a) a.techniques.forEach(t => actorTechs.add(t));
+  });
+  const exposedUncovered = [...actorTechs].filter(t => !state.coverage.has(t)).length;
+  const riskScore = actorTechs.size > 0 ?
+    Math.round((exposedUncovered / actorTechs.size) * 100) : 
+    Math.round((uncovered / Math.max(total, 1)) * 100);
+  document.getElementById('stat-risk').textContent = riskScore;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRIORITY COMPUTATION — Centrality-based attack path analysis
+// ═══════════════════════════════════════════════════════════════
+function computePriorities() {
+  const statusEl = document.getElementById('status-text');
+  statusEl.textContent = 'Computing attack path centrality...';
+
+  // Collect all actor techniques
+  const actorTechs = new Set();
+  state.selectedActors.forEach(name => {
+    const a = THREAT_ACTORS.find(x => x.name === name);
+    if (a) a.techniques.forEach(t => actorTechs.add(t));
+  });
+
+  // If no actors selected, use all techniques
+  const relevantTechs = actorTechs.size > 0 ? actorTechs : new Set(TECHNIQUES.map(t => t.id));
+
+  // Compute betweenness centrality on uncovered nodes
+  // For each pair of techniques in the actor's arsenal, find shortest paths
+  // Count how many shortest paths pass through each uncovered technique
+  const pathCounts = {};
+  const actorUsage = {};
+  const chainBreaks = {};
+
+  TECHNIQUES.forEach(t => {
+    pathCounts[t.id] = 0;
+    actorUsage[t.id] = 0;
+    chainBreaks[t.id] = 0;
+  });
+
+  // Count actor usage
+  state.selectedActors.forEach(name => {
+    const a = THREAT_ACTORS.find(x => x.name === name);
+    if (a) a.techniques.forEach(t => { actorUsage[t] = (actorUsage[t] || 0) + 1; });
+  });
+
+  // BFS shortest paths between all pairs of relevant techniques
+  const techArray = [...relevantTechs].filter(t => techMap[t]);
+  
+  techArray.forEach(source => {
+    // BFS from source
+    const dist = {};
+    const paths = {};
+    const queue = [source];
+    dist[source] = 0;
+    paths[source] = [[source]];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const neighbors = adjacency[current] || [];
+      
+      for (const next of neighbors) {
+        if (dist[next] === undefined) {
+          dist[next] = dist[current] + 1;
+          paths[next] = paths[current].map(p => [...p, next]);
+          queue.push(next);
+        } else if (dist[next] === dist[current] + 1) {
+          paths[next] = [...paths[next], ...paths[current].map(p => [...p, next])];
+        }
+      }
+    }
+
+    // For each reachable target, count intermediaries
+    Object.keys(paths).forEach(target => {
+      if (target === source) return;
+      if (!relevantTechs.has(target)) return;
+
+      paths[target].forEach(path => {
+        // Skip source and target, count intermediaries
+        for (let i = 1; i < path.length - 1; i++) {
+          pathCounts[path[i]]++;
+        }
+      });
+    });
+  });
+
+  // Compute composite priority score for UNCOVERED techniques
+  const uncoveredTechs = TECHNIQUES.filter(t =>
+    !state.coverage.has(t.id) &&
+    state.activeTactics.has(t.tactic)
+  );
+
+  const maxPathCount = Math.max(...Object.values(pathCounts), 1);
+  const maxActorUsage = Math.max(...Object.values(actorUsage), 1);
+
+  const scored = uncoveredTechs.map(t => {
+    const pathScore = pathCounts[t.id] / maxPathCount;
+    const actorScore = actorUsage[t.id] / maxActorUsage;
+    const degreeScore = ((adjacency[t.id]?.length || 0) + (reverseAdj[t.id]?.length || 0)) /
+      Math.max(...TECHNIQUES.map(x => (adjacency[x.id]?.length || 0) + (reverseAdj[x.id]?.length || 0)), 1);
+
+    // Weighted composite: path centrality matters most, then actor usage, then connectivity
+    const composite = (pathScore * 0.45) + (actorScore * 0.35) + (degreeScore * 0.20);
+
+    // Count how many attack chains this would break
+    let chainsDisrupted = 0;
+    state.selectedActors.forEach(name => {
+      const actor = THREAT_ACTORS.find(a => a.name === name);
+      if (!actor) return;
+      // Check if this technique is on a path between any two of the actor's techniques
+      const aTechs = actor.techniques;
+      for (let i = 0; i < aTechs.length; i++) {
+        const neighbors = adjacency[aTechs[i]] || [];
+        if (neighbors.includes(t.id)) {
+          const outNeighbors = adjacency[t.id] || [];
+          for (const out of outNeighbors) {
+            if (aTechs.includes(out)) chainsDisrupted++;
+          }
+        }
+      }
+    });
+
+    return {
+      ...t,
+      pathScore,
+      actorScore,
+      degreeScore,
+      composite,
+      chainsDisrupted,
+      actorsUsing: actorUsage[t.id] || 0,
+      connections: (adjacency[t.id]?.length || 0) + (reverseAdj[t.id]?.length || 0),
+    };
+  });
+
+  scored.sort((a, b) => b.composite - a.composite);
+  state.priorities = scored.slice(0, 10);
+  renderPriorities();
+
+  statusEl.textContent = `Analysis complete — ${uncoveredTechs.length} uncovered techniques scored across ${techArray.length} attack nodes`;
+}
+
+function renderPriorities() {
+  const list = document.getElementById('priority-list');
+  if (state.priorities.length === 0) {
+    list.innerHTML = '<p style="font-size:11px;color:var(--text-muted);">All techniques covered, or no actors selected. Select threat actors and ensure some techniques are uncovered.</p>';
+    return;
+  }
+
+  const maxComposite = state.priorities[0].composite || 1;
+
+  list.innerHTML = state.priorities.map((p, i) => {
+    const pctWidth = Math.round((p.composite / maxComposite) * 100);
+    const tacticInfo = tacticMap[p.tactic];
+    const reasons = [];
+    if (p.actorsUsing > 0) reasons.push(`Used by ${p.actorsUsing} actor${p.actorsUsing > 1 ? 's' : ''}`);
+    if (p.chainsDisrupted > 0) reasons.push(`Disrupts ${p.chainsDisrupted} chain link${p.chainsDisrupted > 1 ? 's' : ''}`);
+    reasons.push(`${p.connections} graph connections`);
+
+    return `
+      <div class="priority-item" onclick="highlightNode('${p.id}')" title="Click to locate in graph">
+        <div class="pi-rank">#${i + 1} PRIORITY</div>
+        <div class="pi-header">
+          <div class="pi-name">${p.name}</div>
+          <div class="pi-id">${p.id}</div>
+        </div>
+        <div class="pi-score-bar"><div class="pi-score-fill" style="width:${pctWidth}%"></div></div>
+        <div class="pi-metrics">
+          <span style="color:${tacticInfo?.color || '#fff'}">${tacticInfo?.short || 'Unknown'}</span>
+          <span>Path: ${(p.pathScore * 100).toFixed(0)}%</span>
+          <span>Actor: ${(p.actorScore * 100).toFixed(0)}%</span>
+        </div>
+        <div class="pi-reason">${reasons.join(' · ')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function highlightNode(techId) {
+  const node = nodes.find(n => n.id === techId);
+  if (!node || !node.x) return;
+
+  // Zoom to node
+  const transform = d3.zoomIdentity
+    .translate(width / 2, height / 2)
+    .scale(2)
+    .translate(-node.x, -node.y);
+
+  svg.transition().duration(750).call(zoom.transform, transform);
+
+  // Flash the node
+  nodeElements.filter(d => d.id === techId)
+    .select('.glow-ring')
+    .attr('stroke', 'var(--accent-amber)')
+    .attr('stroke-width', 4)
+    .attr('opacity', 1)
+    .attr('filter', 'url(#glow)')
+    .transition().duration(2000)
+    .attr('opacity', 0)
+    .on('end', () => updateVisuals());
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════════════════
+function showTooltip(event, d) {
+  const tooltip = document.getElementById('tooltip');
+  const tactic = tacticMap[d.tactic];
+  const covered = state.coverage.has(d.id);
+  const actors = THREAT_ACTORS.filter(a => a.techniques.includes(d.id)).map(a => a.name);
+
+  tooltip.innerHTML = `
+    <div class="tt-id">${d.id}</div>
+    <div class="tt-name">${d.name}</div>
+    <div class="tt-tactic" style="background:${tactic?.color || '#666'}22;color:${tactic?.color || '#fff'}">${tactic?.name || 'Unknown'}</div>
+    <div class="tt-desc">${d.desc}</div>
+    <div class="tt-coverage" style="color:${covered ? 'var(--accent-green)' : 'var(--accent-red)'}">
+      ${covered ? '● COVERED' : '○ UNCOVERED'} — Click to toggle
+    </div>
+    ${actors.length > 0 ? `<div style="margin-top:6px;font-size:10px;color:var(--accent-pink)">Used by: ${actors.join(', ')}</div>` : ''}
+    <div style="margin-top:4px;font-size:10px;color:var(--text-muted)">
+      Connections: ${(adjacency[d.id]?.length || 0)} out, ${(reverseAdj[d.id]?.length || 0)} in
+    </div>
+  `;
+
+  const rect = document.getElementById('graph-container').getBoundingClientRect();
+  let x = event.clientX - rect.left + 15;
+  let y = event.clientY - rect.top - 10;
+  if (x + 320 > rect.width) x = x - 340;
+  if (y + 200 > rect.height) y = y - 200;
+
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+  tooltip.style.display = 'block';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI CONTROLS
+// ═══════════════════════════════════════════════════════════════
+function buildTacticFilters() {
+  const container = document.getElementById('tactic-filters');
+  container.innerHTML = TACTICS.map(t => {
+    const count = TECHNIQUES.filter(tech => tech.tactic === t.id).length;
+    return `
+      <div class="tactic-filter ${state.activeTactics.has(t.id) ? '' : 'inactive'}"
+           onclick="toggleTactic('${t.id}')">
+        <div class="dot" style="background:${t.color}"></div>
+        <div class="name">${t.name}</div>
+        <div class="count">${count}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleTactic(tacticId) {
+  if (state.activeTactics.has(tacticId)) {
+    state.activeTactics.delete(tacticId);
+  } else {
+    state.activeTactics.add(tacticId);
+  }
+  buildTacticFilters();
+  buildGraph();
+}
+
+function buildActorList() {
+  renderActorList(THREAT_ACTORS);
+}
+
+function renderActorList(actors) {
+  const container = document.getElementById('actor-list');
+  container.innerHTML = actors.map(a => `
+    <div class="actor-item ${state.selectedActors.has(a.name) ? 'selected' : ''}"
+         onclick="toggleActor('${a.name.replace(/'/g, "\\'")}')">
+      <span>${a.name}</span>
+      <span class="tech-count">${a.techniques.length} TTPs</span>
+    </div>
+  `).join('');
+}
+
+function toggleActor(name) {
+  if (state.selectedActors.has(name)) {
+    state.selectedActors.delete(name);
+  } else {
+    state.selectedActors.add(name);
+  }
+  buildActorList();
+  updateVisuals();
+}
+
+function filterActors(query) {
+  const q = query.toLowerCase();
+  const filtered = THREAT_ACTORS.filter(a =>
+    a.name.toLowerCase().includes(q) || a.origin.toLowerCase().includes(q)
+  );
+  renderActorList(filtered);
+}
+
+function filterSearch(query) {
+  state.searchFilter = query;
+  updateVisuals();
+}
+
+function buildQuickCoverage() {
+  const container = document.getElementById('quick-coverage');
+  container.innerHTML = TACTICS.map(t => {
+    const techs = TECHNIQUES.filter(tech => tech.tactic === t.id);
+    const allCovered = techs.every(tech => state.coverage.has(tech.id));
+    return `<button class="cov-btn ${allCovered ? 'covered' : ''}"
+              onclick="toggleTacticCoverage('${t.id}')"
+              title="Toggle all ${t.name} coverage">${t.short}</button>`;
+  }).join('');
+}
+
+function updateQuickCoverage() {
+  buildQuickCoverage();
+}
+
+function toggleTacticCoverage(tacticId) {
+  const techs = TECHNIQUES.filter(t => t.tactic === tacticId);
+  const allCovered = techs.every(t => state.coverage.has(t.id));
+  
+  if (allCovered) {
+    techs.forEach(t => state.coverage.delete(t.id));
+  } else {
+    techs.forEach(t => state.coverage.add(t.id));
+  }
+  updateVisuals();
+  updateQuickCoverage();
+}
+
+// Layout switcher
+function setLayout(layout) {
+  state.layout = layout;
+  document.querySelectorAll('.view-modes .btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`btn-${layout}`).classList.add('active');
+  buildGraph();
+}
+
+function resetZoom() {
+  svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+}
+
+function showHelp() { document.getElementById('help-modal').classList.add('visible'); }
+function hideHelp() { document.getElementById('help-modal').classList.remove('visible'); }
+document.getElementById('help-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideHelp();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INITIALIZE
+// ═══════════════════════════════════════════════════════════════
+buildTacticFilters();
+buildActorList();
+buildQuickCoverage();
+buildGraph();
+
+// Set some initial coverage to make it interesting
+['T1566', 'T1059', 'T1003', 'T1071', 'T1021', 'T1087', 'T1547', 'T1486'].forEach(t => state.coverage.add(t));
+updateVisuals();
+updateQuickCoverage();
+
+document.getElementById('status-text').textContent =
+  `Graph loaded — ${TECHNIQUES.length} techniques, ${ATTACK_FLOWS.length} attack flows, ${THREAT_ACTORS.length} threat actors`;
+
+// Handle resize
+window.addEventListener('resize', () => {
+  // Graph container will resize naturally with CSS grid
+});
+</script>
+</body>
+</html>
