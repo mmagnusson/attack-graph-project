@@ -1139,12 +1139,13 @@ function AttackPathOptimizer() {
     setEnvPreset("government");
     setSectorFilter("all");
     setRemediationBudget(5);
-    setDataSource("stix");
-    setCustomData(null);
     setCustomPositions({});
     setDeployedTech(new Set());
     setShowROI(false);
     try { localStorage.removeItem("attackPathOptimizer"); } catch (e) {}
+    // Force STIX reload: briefly switch away then back so the effect always fires
+    setDataSource("builtin");
+    setTimeout(() => setDataSource("stix"), 0);
   };
 
   const selectedTechData = activeTechniques.find(t => t.id === selectedTech);
