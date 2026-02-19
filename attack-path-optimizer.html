@@ -259,23 +259,109 @@ const STIX_TACTIC_MAP = {
 const TACTIC_PHASE = {};
 TACTICS.forEach(t => TACTIC_PHASE[t.id] = t.phase);
 
-// ─── Security Technologies (ROI Model) ───────────────────────────────────────
+// ─── Security Controls (Controls Framework) ──────────────────────────────────
 
-const SECURITY_TECHNOLOGIES = [
-  { id: "edr", name: "EDR/XDR Platform", cost: "$$$$",
+const CONTROL_CATEGORIES = [
+  { id: "technical", name: "Technical / Preventive", color: "#14b8a6", icon: "\u26E9" },
+  { id: "detective", name: "Detective / Monitoring", color: "#3b82f6", icon: "\u25CE" },
+  { id: "administrative", name: "Administrative / Policy", color: "#a855f7", icon: "\u00A7" },
+  { id: "physical", name: "Physical / Operational", color: "#f59e0b", icon: "\u25A3" },
+];
+
+const SECURITY_CONTROLS = [
+  // ── Technical / Preventive ──
+  { id: "edr", name: "EDR/XDR Platform", category: "technical", cost: "$$$$",
     coverage: { "T1059": -0.4, "T1055": -0.5, "T1547": -0.3, "T1543": -0.3, "T1546": -0.3, "T1204": -0.3, "T1047": -0.3 } },
-  { id: "email-sec", name: "Email Security Gateway", cost: "$$",
+  { id: "email-sec", name: "Email Security Gateway", category: "technical", cost: "$$",
     coverage: { "T1566": -0.5, "T1598": -0.4, "T1204": -0.3 } },
-  { id: "mfa", name: "Multi-Factor Auth", cost: "$",
+  { id: "mfa", name: "Multi-Factor Auth", category: "technical", cost: "$",
     coverage: { "T1078": -0.6, "T1110": -0.5, "T1550": -0.4 } },
-  { id: "seg", name: "Network Segmentation", cost: "$$$",
+  { id: "seg", name: "Network Segmentation", category: "technical", cost: "$$$",
     coverage: { "T1021": -0.5, "T1570": -0.5, "T1046": -0.4 } },
-  { id: "pam", name: "Privileged Access Mgmt", cost: "$$$",
+  { id: "pam", name: "Privileged Access Mgmt", category: "technical", cost: "$$$",
     coverage: { "T1068": -0.4, "T1548": -0.4, "T1134": -0.3, "T1003": -0.3 } },
-  { id: "dlp", name: "Data Loss Prevention", cost: "$$",
+  { id: "dlp", name: "Data Loss Prevention", category: "technical", cost: "$$",
     coverage: { "T1041": -0.5, "T1048": -0.5, "T1560": -0.3, "T1005": -0.3 } },
-  { id: "backup", name: "Immutable Backups", cost: "$$",
+  { id: "backup", name: "Immutable Backups", category: "technical", cost: "$$",
     coverage: { "T1486": -0.6, "T1485": -0.5, "T1489": -0.3, "T1529": -0.3 } },
+  { id: "app-wl", name: "App Whitelisting", category: "technical", cost: "$$",
+    coverage: { "T1059": -0.3, "T1204": -0.3, "T1047": -0.25, "T1053": -0.25 } },
+  { id: "waf", name: "Web App Firewall", category: "technical", cost: "$$",
+    coverage: { "T1190": -0.4, "T1059": -0.2 } },
+  { id: "ztna", name: "Zero Trust Network Access", category: "technical", cost: "$$$",
+    coverage: { "T1021": -0.4, "T1550": -0.35, "T1570": -0.3 } },
+  { id: "sandbox", name: "Sandbox / Detonation", category: "technical", cost: "$$",
+    coverage: { "T1566": -0.35, "T1204": -0.3, "T1059": -0.2 } },
+  { id: "secrets", name: "Secrets Management", category: "technical", cost: "$",
+    coverage: { "T1003": -0.3, "T1558": -0.25, "T1110": -0.3 } },
+  { id: "patch", name: "Patch Management", category: "technical", cost: "$",
+    coverage: { "T1190": -0.35, "T1068": -0.3 } },
+  { id: "tls-inspect", name: "TLS Inspection / Decryption", category: "technical", cost: "$$",
+    coverage: { "T1557": -0.5, "T1071": -0.2 } },
+  { id: "proxy", name: "Web Proxy / Content Filter", category: "technical", cost: "$$",
+    coverage: { "T1105": -0.4, "T1071": -0.2, "T1059": -0.15 } },
+  { id: "dns-filter", name: "DNS Filtering", category: "technical", cost: "$",
+    coverage: { "T1071": -0.25, "T1572": -0.3, "T1105": -0.2 } },
+  { id: "ad-harden", name: "Active Directory Hardening", category: "technical", cost: "$$",
+    coverage: { "T1087": -0.3, "T1069": -0.3, "T1136": -0.25, "T1003": -0.2 } },
+
+  // ── Detective / Monitoring ──
+  { id: "siem", name: "SIEM / SOC", category: "detective", cost: "$$$$",
+    coverage: { "T1059": -0.3, "T1055": -0.35, "T1021": -0.25, "T1071": -0.3, "T1572": -0.25 } },
+  { id: "hunt", name: "Threat Hunting", category: "detective", cost: "$$$",
+    coverage: { "T1027": -0.35, "T1070": -0.3, "T1055": -0.3, "T1562": -0.3 } },
+  { id: "vuln-scan", name: "Vulnerability Scanning", category: "detective", cost: "$",
+    coverage: { "T1190": -0.25, "T1068": -0.2, "T1548": -0.2 } },
+  { id: "ids", name: "IDS / IPS", category: "detective", cost: "$$",
+    coverage: { "T1071": -0.35, "T1572": -0.3, "T1041": -0.3, "T1048": -0.3 } },
+  { id: "uba", name: "User Behavior Analytics", category: "detective", cost: "$$$",
+    coverage: { "T1078": -0.3, "T1134": -0.25, "T1021": -0.2, "T1087": -0.2 } },
+  { id: "easm", name: "Attack Surface Management", category: "detective", cost: "$$",
+    coverage: { "T1595": -0.4, "T1592": -0.35, "T1190": -0.2 } },
+  { id: "ndr", name: "Network Detection & Response", category: "detective", cost: "$$$",
+    coverage: { "T1557": -0.35, "T1071": -0.25, "T1570": -0.25, "T1021": -0.2 } },
+  { id: "deception", name: "Deception / Honeypots", category: "detective", cost: "$$",
+    coverage: { "T1082": -0.35, "T1069": -0.3, "T1046": -0.3, "T1087": -0.25 } },
+  { id: "log-mgmt", name: "Centralized Log Management", category: "detective", cost: "$$",
+    coverage: { "T1070": -0.35, "T1562": -0.25, "T1059": -0.15 } },
+  { id: "email-mon", name: "Email Security Monitoring", category: "detective", cost: "$",
+    coverage: { "T1114": -0.4, "T1566": -0.15, "T1598": -0.15 } },
+
+  // ── Administrative / Policy ──
+  { id: "training", name: "Security Awareness Training", category: "administrative", cost: "$",
+    coverage: { "T1566": -0.3, "T1598": -0.3, "T1204": -0.35, "T1078": -0.2 } },
+  { id: "access-review", name: "Access Review Policy", category: "administrative", cost: "$",
+    coverage: { "T1078": -0.25, "T1136": -0.3, "T1134": -0.2 } },
+  { id: "ir-plan", name: "Incident Response Plan", category: "administrative", cost: "$",
+    coverage: { "T1486": -0.25, "T1485": -0.25, "T1489": -0.2, "T1529": -0.2 } },
+  { id: "change-mgmt", name: "Change Management", category: "administrative", cost: "$",
+    coverage: { "T1543": -0.25, "T1547": -0.2, "T1546": -0.2 } },
+  { id: "least-priv", name: "Least Privilege Policy", category: "administrative", cost: "$",
+    coverage: { "T1068": -0.25, "T1548": -0.25, "T1134": -0.2, "T1003": -0.2 } },
+  { id: "ti-program", name: "Threat Intelligence Program", category: "administrative", cost: "$$",
+    coverage: { "T1583": -0.3, "T1588": -0.3, "T1586": -0.2, "T1595": -0.2 } },
+  { id: "identity-gov", name: "Identity Governance", category: "administrative", cost: "$$",
+    coverage: { "T1136": -0.3, "T1078": -0.2, "T1134": -0.2, "T1069": -0.2 } },
+  { id: "data-class", name: "Data Classification Policy", category: "administrative", cost: "$",
+    coverage: { "T1005": -0.25, "T1114": -0.25, "T1560": -0.2 } },
+  { id: "vendor-mgmt", name: "Third-Party Risk Management", category: "administrative", cost: "$$",
+    coverage: { "T1199": -0.35, "T1586": -0.25, "T1583": -0.2 } },
+
+  // ── Physical / Operational ──
+  { id: "airgap", name: "Air-Gapped Networks", category: "physical", cost: "$$$$",
+    coverage: { "T1071": -0.5, "T1572": -0.5, "T1041": -0.5, "T1048": -0.5, "T1105": -0.4 } },
+  { id: "phys-access", name: "Physical Access Controls", category: "physical", cost: "$$",
+    coverage: { "T1078": -0.2, "T1199": -0.25 } },
+  { id: "supply-chain", name: "Supply Chain Verification", category: "physical", cost: "$$",
+    coverage: { "T1199": -0.3, "T1586": -0.25, "T1195": -0.3 } },
+  { id: "media-control", name: "Removable Media Control", category: "physical", cost: "$",
+    coverage: { "T1048": -0.25, "T1005": -0.2, "T1105": -0.2 } },
+  { id: "secure-build", name: "Secure Build / Golden Images", category: "physical", cost: "$$",
+    coverage: { "T1588": -0.3, "T1543": -0.2, "T1547": -0.2, "T1053": -0.25 } },
+  { id: "net-monitor", name: "Network Traffic Monitoring", category: "physical", cost: "$$",
+    coverage: { "T1082": -0.25, "T1046": -0.25, "T1572": -0.2 } },
+  { id: "red-team", name: "Red Team / Pen Testing", category: "physical", cost: "$$$",
+    coverage: { "T1190": -0.2, "T1068": -0.2, "T1059": -0.15, "T1003": -0.15 } },
 ];
 
 // ─── IndexedDB STIX Cache ─────────────────────────────────────────────────────
@@ -935,6 +1021,72 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
   );
 }
 
+// ─── Popout Helpers ───────────────────────────────────────────────────────────
+
+function PopoutPanel({ title, width, height, onClose, children }) {
+  const [container, setContainer] = useState(null);
+  const winRef = useRef(null);
+
+  useEffect(() => {
+    const w = width || 500;
+    const h = height || 600;
+    const win = window.open('', '', 'width=' + w + ',height=' + h);
+    if (!win) { onClose(); return; }
+    winRef.current = win;
+    win.document.title = title || 'Panel';
+    win.document.head.innerHTML =
+      '<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">' +
+      '<style>' +
+      '*{margin:0;padding:0;box-sizing:border-box}' +
+      'body{background:#0a0f1a;color:#e2e8f0;font-family:"JetBrains Mono","Fira Code","SF Mono",monospace}' +
+      '::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}' +
+      '::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}' +
+      '::-webkit-scrollbar-thumb:hover{background:#334155}' +
+      '</style>';
+    const div = win.document.createElement('div');
+    div.style.cssText = 'padding:12px 16px;height:100vh;overflow:auto';
+    win.document.body.appendChild(div);
+    setContainer(div);
+
+    const poll = setInterval(() => { if (win.closed) { clearInterval(poll); onClose(); } }, 300);
+    return () => { clearInterval(poll); setContainer(null); if (!win.closed) win.close(); };
+  }, []);
+
+  useEffect(() => {
+    if (winRef.current && !winRef.current.closed) winRef.current.document.title = title || 'Panel';
+  }, [title]);
+
+  if (!container) return null;
+  return ReactDOM.createPortal(children, container);
+}
+
+function PopoutButton({ onClick, title }) {
+  return (
+    <button onClick={onClick} title={title || 'Pop out'}
+      style={{
+        background: 'transparent', color: '#64748b', border: '1px solid #334155',
+        borderRadius: 3, width: 20, height: 20, cursor: 'pointer', fontSize: 11,
+        fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        marginLeft: 6, lineHeight: 1, padding: 0, flexShrink: 0,
+      }}>{"\u2197"}</button>
+  );
+}
+
+function PopoutPlaceholder({ label, onRestore }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      height: '100%', color: '#475569', fontSize: '11px', gap: 8,
+    }}>
+      <span>{label} is in a separate window</span>
+      <button onClick={onRestore} style={{
+        background: 'transparent', color: '#3b82f6', border: '1px solid #3b82f6',
+        borderRadius: 4, padding: '4px 10px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit',
+      }}>Restore Inline</button>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 function AttackPathOptimizer() {
@@ -955,9 +1107,16 @@ function AttackPathOptimizer() {
   const [stixLoading, setStixLoading] = useState(false);
   const [stixError, setStixError] = useState(null);
 
-  // Phase 5: Technology ROI
-  const [deployedTech, setDeployedTech] = useState(new Set());
-  const [showROI, setShowROI] = useState(false);
+  // Phase 5: Security Controls
+  const [deployedControls, setDeployedControls] = useState(new Set());
+  const [showControls, setShowControls] = useState(false);
+
+  // Popout panel states
+  const [popoutChains, setPopoutChains] = useState(false);
+  const [popoutPriority, setPopoutPriority] = useState(false);
+  const [popoutDetail, setPopoutDetail] = useState(false);
+  const [popoutAnalysis, setPopoutAnalysis] = useState(false);
+  const [popoutControls, setPopoutControls] = useState(false);
 
   // Node dragging: custom position overrides
   const [customPositions, setCustomPositions] = useState({});
@@ -972,19 +1131,19 @@ function AttackPathOptimizer() {
   const activeEdges = customData?.edges || EDGES;
   const activeChains = customData?.chains || ATTACK_CHAINS;
 
-  // Phase 5: Compute effective exposures with tech ROI adjustments
+  // Phase 5: Compute effective exposures with security control adjustments
   const effectiveExposures = useMemo(() => {
-    if (deployedTech.size === 0) return exposures;
+    if (deployedControls.size === 0) return exposures;
     const result = { ...exposures };
-    SECURITY_TECHNOLOGIES.forEach(tech => {
-      if (!deployedTech.has(tech.id)) return;
-      Object.entries(tech.coverage).forEach(([tid, reduction]) => {
+    SECURITY_CONTROLS.forEach(ctrl => {
+      if (!deployedControls.has(ctrl.id)) return;
+      Object.entries(ctrl.coverage).forEach(([tid, reduction]) => {
         const current = result[tid] ?? 1.0;
         result[tid] = Math.max(0, Math.min(1, current * (1 + reduction)));
       });
     });
     return result;
-  }, [exposures, deployedTech]);
+  }, [exposures, deployedControls]);
 
   // Draggable divider between graph and bottom panels
   useEffect(() => {
@@ -1140,8 +1299,13 @@ function AttackPathOptimizer() {
     setSectorFilter("all");
     setRemediationBudget(5);
     setCustomPositions({});
-    setDeployedTech(new Set());
-    setShowROI(false);
+    setDeployedControls(new Set());
+    setShowControls(false);
+    setPopoutChains(false);
+    setPopoutPriority(false);
+    setPopoutDetail(false);
+    setPopoutAnalysis(false);
+    setPopoutControls(false);
     try { localStorage.removeItem("attackPathOptimizer"); } catch (e) {}
     // Force STIX reload: briefly switch away then back so the effect always fires
     setDataSource("builtin");
@@ -1304,12 +1468,12 @@ function AttackPathOptimizer() {
         }}>
           EXPORT CSV
         </button>
-        <button onClick={() => setShowROI(!showROI)} style={{
-          background: showROI ? "#14b8a6" : "transparent", color: showROI ? "#0a0f1a" : "#14b8a6",
+        <button onClick={() => { const next = !showControls; setShowControls(next); if (!next) setPopoutControls(false); }} style={{
+          background: showControls ? "#14b8a6" : "transparent", color: showControls ? "#0a0f1a" : "#14b8a6",
           border: "1px solid #14b8a6", borderRadius: "4px",
           padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
         }}>
-          TECH ROI
+          CONTROLS
         </button>
         {Object.keys(customPositions).length > 0 && (
           <button onClick={() => setCustomPositions({})} style={{
@@ -1328,7 +1492,7 @@ function AttackPathOptimizer() {
         {showSaved && (
           <span style={{ fontSize: "9px", color: "#22c55e", opacity: 0.8, transition: "opacity 0.3s" }}>Saved</span>
         )}
-        <button onClick={() => setShowAnalysis(!showAnalysis)} style={{
+        <button onClick={() => { const next = !showAnalysis; setShowAnalysis(next); if (!next) setPopoutAnalysis(false); }} style={{
           background: showAnalysis ? "#3b82f6" : "transparent", color: showAnalysis ? "#fff" : "#64748b",
           border: "1px solid #334155", borderRadius: "4px",
           padding: "6px 12px", fontSize: "10px", cursor: "pointer", fontFamily: "inherit",
@@ -1428,293 +1592,453 @@ function AttackPathOptimizer() {
         {/* Bottom panels */}
         <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
           {/* Attack Chains Panel */}
-          <div style={{ flex: "1 1 280px", borderRight: "1px solid #1e293b", padding: "12px 16px", overflow: "auto" }}>
-          <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0" }}>
-            Attack Chains ({filteredChains.length})
-          </h3>
-          {chainStatus.map((chain, i) => (
-            <div key={i}
-              onClick={() => setHighlightedChain(highlightedChain?.name === chain.name ? null : chain)}
-              style={{
-                padding: "8px 10px", marginBottom: "4px", borderRadius: "4px", cursor: "pointer",
-                background: highlightedChain?.name === chain.name ? "#1e293b" : "transparent",
-                border: "1px solid " + (chain.broken ? "#22c55e33" : "#ef444433"),
-                opacity: chain.broken ? 0.6 : 1,
-              }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "11px", fontWeight: 600, color: chain.broken ? "#22c55e" : "#f8fafc" }}>
-                  {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
-                </span>
-                <span style={{
-                  fontSize: "9px", padding: "1px 6px", borderRadius: "8px",
-                  background: chain.severity > 0.85 ? "#ef444430" : "#f59e0b30",
-                  color: chain.severity > 0.85 ? "#ef4444" : "#f59e0b",
-                }}>
-                  {(chain.severity * 100).toFixed(0)}%
-                </span>
-              </div>
-              <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>{chain.description}</div>
-              <div style={{ fontSize: "8px", color: "#475569", marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "2px" }}>
-                {chain.path.map((tid, j) => (
-                  <span key={j} style={{
-                    padding: "1px 3px", borderRadius: "2px",
-                    background: remediated.has(tid) ? "#22c55e20" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef444420" : "#1e293b",
-                    color: remediated.has(tid) ? "#22c55e" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef4444" : "#94a3b8",
-                    textDecoration: remediated.has(tid) ? "line-through" : "none",
-                  }}>
-                    {tid}{j < chain.path.length - 1 ? " \u2192" : ""}
-                  </span>
+          {(() => {
+            const chainsContent = (
+              <>
+                <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0", display: "flex", alignItems: "center" }}>
+                  Attack Chains ({filteredChains.length})
+                  {!popoutChains && <PopoutButton onClick={() => setPopoutChains(true)} title="Pop out Attack Chains" />}
+                </h3>
+                {chainStatus.map((chain, i) => (
+                  <div key={i}
+                    onClick={() => setHighlightedChain(highlightedChain?.name === chain.name ? null : chain)}
+                    style={{
+                      padding: "8px 10px", marginBottom: "4px", borderRadius: "4px", cursor: "pointer",
+                      background: highlightedChain?.name === chain.name ? "#1e293b" : "transparent",
+                      border: "1px solid " + (chain.broken ? "#22c55e33" : "#ef444433"),
+                      opacity: chain.broken ? 0.6 : 1,
+                    }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: chain.broken ? "#22c55e" : "#f8fafc" }}>
+                        {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
+                      </span>
+                      <span style={{
+                        fontSize: "9px", padding: "1px 6px", borderRadius: "8px",
+                        background: chain.severity > 0.85 ? "#ef444430" : "#f59e0b30",
+                        color: chain.severity > 0.85 ? "#ef4444" : "#f59e0b",
+                      }}>
+                        {(chain.severity * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>{chain.description}</div>
+                    <div style={{ fontSize: "8px", color: "#475569", marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "2px" }}>
+                      {chain.path.map((tid, j) => (
+                        <span key={j} style={{
+                          padding: "1px 3px", borderRadius: "2px",
+                          background: remediated.has(tid) ? "#22c55e20" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef444420" : "#1e293b",
+                          color: remediated.has(tid) ? "#22c55e" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef4444" : "#94a3b8",
+                          textDecoration: remediated.has(tid) ? "line-through" : "none",
+                        }}>
+                          {tid}{j < chain.path.length - 1 ? " \u2192" : ""}
+                        </span>
+                      ))}
+                    </div>
+                    {chain.broken && chain.breakpoints.length > 0 && (
+                      <div style={{ fontSize: "8px", color: "#22c55e", marginTop: "3px" }}>
+                        Broken at: {chain.breakpoints.join(", ")}
+                      </div>
+                    )}
+                  </div>
                 ))}
+              </>
+            );
+            return (
+              <div style={{ flex: "1 1 280px", borderRight: "1px solid #1e293b", padding: popoutChains ? 0 : "12px 16px", overflow: "auto" }}>
+                {popoutChains ? (
+                  <>
+                    <PopoutPlaceholder label="Attack Chains" onRestore={() => setPopoutChains(false)} />
+                    <PopoutPanel title={"Attack Chains (" + filteredChains.length + ")"} width={500} height={700} onClose={() => setPopoutChains(false)}>
+                      {chainsContent}
+                    </PopoutPanel>
+                  </>
+                ) : chainsContent}
               </div>
-              {chain.broken && chain.breakpoints.length > 0 && (
-                <div style={{ fontSize: "8px", color: "#22c55e", marginTop: "3px" }}>
-                  Broken at: {chain.breakpoints.join(", ")}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+            );
+          })()}
 
         {/* Priority Ranking Panel */}
-        <div style={{ flex: "1 1 240px", borderRight: "1px solid #1e293b", padding: "12px 16px", overflow: "auto" }}>
-          <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0" }}>
-            Remediation Priority
-          </h3>
-          {priorityRanking.map((t, i) => (
-            <div key={t.id} style={{
-              display: "flex", alignItems: "center", gap: "8px", padding: "6px 8px", marginBottom: "3px",
-              borderRadius: "4px", background: selectedTech === t.id ? "#1e293b" : "transparent",
-              cursor: "pointer",
-            }} onClick={() => { setSelectedTech(t.id); }}>
-              <span style={{ fontSize: "10px", color: "#475569", width: "16px" }}>#{i + 1}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "10px", fontWeight: 600, color: "#f8fafc" }}>{t.id}</div>
-                <div style={{ fontSize: "8px", color: "#64748b" }}>{t.name}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "10px", color: "#f59e0b", fontWeight: 700 }}>{(t.priority * 100).toFixed(0)}</div>
-                <div style={{ fontSize: "7px", color: "#475569" }}>
-                  E:{(t.exposure * 100).toFixed(0)} B:{(t.betweennessVal * 100).toFixed(0)} C:{t.chainCount}
+        {(() => {
+          const priorityContent = (
+            <>
+              <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0", display: "flex", alignItems: "center" }}>
+                Remediation Priority
+                {!popoutPriority && <PopoutButton onClick={() => setPopoutPriority(true)} title="Pop out Priority" />}
+              </h3>
+              {priorityRanking.map((t, i) => (
+                <div key={t.id} style={{
+                  display: "flex", alignItems: "center", gap: "8px", padding: "6px 8px", marginBottom: "3px",
+                  borderRadius: "4px", background: selectedTech === t.id ? "#1e293b" : "transparent",
+                  cursor: "pointer",
+                }} onClick={() => { setSelectedTech(t.id); }}>
+                  <span style={{ fontSize: "10px", color: "#475569", width: "16px" }}>#{i + 1}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "10px", fontWeight: 600, color: "#f8fafc" }}>{t.id}</div>
+                    <div style={{ fontSize: "8px", color: "#64748b" }}>{t.name}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "10px", color: "#f59e0b", fontWeight: 700 }}>{(t.priority * 100).toFixed(0)}</div>
+                    <div style={{ fontSize: "7px", color: "#475569" }}>
+                      E:{(t.exposure * 100).toFixed(0)} B:{(t.betweennessVal * 100).toFixed(0)} C:{t.chainCount}
+                    </div>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); toggleRemediate(t.id); }}
+                    style={{
+                      background: optimal.selected.includes(t.id) ? "#f59e0b" : "#334155",
+                      color: optimal.selected.includes(t.id) ? "#0a0f1a" : "#94a3b8",
+                      border: "none", borderRadius: "3px", padding: "3px 6px",
+                      fontSize: "8px", cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
+                    }}>
+                    FIX
+                  </button>
                 </div>
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); toggleRemediate(t.id); }}
-                style={{
-                  background: optimal.selected.includes(t.id) ? "#f59e0b" : "#334155",
-                  color: optimal.selected.includes(t.id) ? "#0a0f1a" : "#94a3b8",
-                  border: "none", borderRadius: "3px", padding: "3px 6px",
-                  fontSize: "8px", cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
-                }}>
-                FIX
-              </button>
+              ))}
+            </>
+          );
+          return (
+            <div style={{ flex: "1 1 240px", borderRight: "1px solid #1e293b", padding: popoutPriority ? 0 : "12px 16px", overflow: "auto" }}>
+              {popoutPriority ? (
+                <>
+                  <PopoutPlaceholder label="Remediation Priority" onRestore={() => setPopoutPriority(false)} />
+                  <PopoutPanel title="Remediation Priority" width={400} height={600} onClose={() => setPopoutPriority(false)}>
+                    {priorityContent}
+                  </PopoutPanel>
+                </>
+              ) : priorityContent}
             </div>
-          ))}
-        </div>
+          );
+        })()}
 
         {/* Detail / Exposure Panel */}
-        <div style={{ flex: "1 1 240px", padding: "12px 16px", overflow: "auto" }}>
-          {selectedTechData ? (
+        {(() => {
+          const detailContent = (
             <>
-              <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0" }}>
-                Node Detail: {selectedTechData.id}
-              </h3>
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 700, color: "#f8fafc" }}>{selectedTechData.name}</div>
-                <div style={{ fontSize: "9px", color: selectedTactic?.color, marginTop: "2px" }}>
-                  {selectedTactic?.name} ({selectedTactic?.id})
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
-                <MetricBox label="Betweenness" value={((betweenness[selectedTech] ?? 0) * 100).toFixed(1)} unit="%" color="#3b82f6" />
-                <MetricBox label="Chain Count" value={chainCoverage[selectedTech] ?? 0} unit={"/" + filteredChains.length} color="#6366f1" />
-                <MetricBox label="Exposure" value={((effectiveExposures[selectedTech] ?? 1) * 100).toFixed(0)} unit="%" color={
-                  (effectiveExposures[selectedTech] ?? 1) > 0.7 ? "#ef4444" : (effectiveExposures[selectedTech] ?? 1) > 0.4 ? "#f59e0b" : "#22c55e"
-                } />
-                <MetricBox label="Priority Score" value={(
-                  (betweenness[selectedTech] ?? 0) * (effectiveExposures[selectedTech] ?? 1) * (chainCoverage[selectedTech] ?? 0) / Math.max(filteredChains.length, 1) * 100
-                ).toFixed(1)} unit="pts" color="#f59e0b" />
-              </div>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={{ fontSize: "9px", color: "#64748b", display: "block", marginBottom: "4px" }}>
-                  Adjust Exposure ({selectedTech})
-                </label>
-                <input type="range" min={0} max={100} value={((exposures[selectedTech] ?? 1) * 100)}
-                  onChange={e => handleExposureChange(selectedTech, e.target.value / 100)}
-                  style={{ width: "100%", accentColor: "#f59e0b" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8px", color: "#475569" }}>
-                  <span>Fully Mitigated</span><span>Fully Exposed</span>
-                </div>
-                {deployedTech.size > 0 && (exposures[selectedTech] ?? 1) !== (effectiveExposures[selectedTech] ?? 1) && (
-                  <div style={{ fontSize: "8px", color: "#14b8a6", marginTop: "2px" }}>
-                    Tech-adjusted: {((effectiveExposures[selectedTech] ?? 1) * 100).toFixed(0)}%
+              {selectedTechData ? (
+                <>
+                  <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0", display: "flex", alignItems: "center" }}>
+                    Node Detail: {selectedTechData.id}
+                    {!popoutDetail && <PopoutButton onClick={() => setPopoutDetail(true)} title="Pop out Detail" />}
+                  </h3>
+                  <div style={{ marginBottom: "12px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#f8fafc" }}>{selectedTechData.name}</div>
+                    <div style={{ fontSize: "9px", color: selectedTactic?.color, marginTop: "2px" }}>
+                      {selectedTactic?.name} ({selectedTactic?.id})
+                    </div>
                   </div>
-                )}
-              </div>
-
-              <button onClick={() => toggleRemediate(selectedTech)}
-                style={{
-                  width: "100%", padding: "8px",
-                  background: remediated.has(selectedTech) ? "#22c55e20" : "#f59e0b",
-                  color: remediated.has(selectedTech) ? "#22c55e" : "#0a0f1a",
-                  border: remediated.has(selectedTech) ? "1px solid #22c55e" : "none",
-                  borderRadius: "4px", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                }}>
-                {remediated.has(selectedTech) ? "\u2713 REMEDIATED \u2014 UNDO" : "MARK AS REMEDIATED"}
-              </button>
-
-              <div style={{ marginTop: "12px" }}>
-                <div style={{ fontSize: "9px", color: "#64748b", marginBottom: "4px" }}>Appears in chains:</div>
-                {filteredChains.filter(c => c.path.includes(selectedTech)).map((c, i) => (
-                  <div key={i} style={{
-                    fontSize: "9px", color: "#94a3b8", padding: "2px 0",
-                    cursor: "pointer", textDecoration: chainStatus[filteredChains.indexOf(c)]?.broken ? "line-through" : "none",
-                    opacity: chainStatus[filteredChains.indexOf(c)]?.broken ? 0.5 : 1,
-                  }} onClick={() => setHighlightedChain(c)}>
-                    {"\u2192"} {c.name}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+                    <MetricBox label="Betweenness" value={((betweenness[selectedTech] ?? 0) * 100).toFixed(1)} unit="%" color="#3b82f6" />
+                    <MetricBox label="Chain Count" value={chainCoverage[selectedTech] ?? 0} unit={"/" + filteredChains.length} color="#6366f1" />
+                    <MetricBox label="Exposure" value={((effectiveExposures[selectedTech] ?? 1) * 100).toFixed(0)} unit="%" color={
+                      (effectiveExposures[selectedTech] ?? 1) > 0.7 ? "#ef4444" : (effectiveExposures[selectedTech] ?? 1) > 0.4 ? "#f59e0b" : "#22c55e"
+                    } />
+                    <MetricBox label="Priority Score" value={(
+                      (betweenness[selectedTech] ?? 0) * (effectiveExposures[selectedTech] ?? 1) * (chainCoverage[selectedTech] ?? 0) / Math.max(filteredChains.length, 1) * 100
+                    ).toFixed(1)} unit="pts" color="#f59e0b" />
                   </div>
-                ))}
-              </div>
+
+                  <div style={{ marginBottom: "12px" }}>
+                    <label style={{ fontSize: "9px", color: "#64748b", display: "block", marginBottom: "4px" }}>
+                      Adjust Exposure ({selectedTech})
+                    </label>
+                    <input type="range" min={0} max={100} value={((exposures[selectedTech] ?? 1) * 100)}
+                      onChange={e => handleExposureChange(selectedTech, e.target.value / 100)}
+                      style={{ width: "100%", accentColor: "#f59e0b" }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8px", color: "#475569" }}>
+                      <span>Fully Mitigated</span><span>Fully Exposed</span>
+                    </div>
+                    {deployedControls.size > 0 && (exposures[selectedTech] ?? 1) !== (effectiveExposures[selectedTech] ?? 1) && (
+                      <div style={{ fontSize: "8px", color: "#14b8a6", marginTop: "2px" }}>
+                        Control-adjusted: {((effectiveExposures[selectedTech] ?? 1) * 100).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+
+                  <button onClick={() => toggleRemediate(selectedTech)}
+                    style={{
+                      width: "100%", padding: "8px",
+                      background: remediated.has(selectedTech) ? "#22c55e20" : "#f59e0b",
+                      color: remediated.has(selectedTech) ? "#22c55e" : "#0a0f1a",
+                      border: remediated.has(selectedTech) ? "1px solid #22c55e" : "none",
+                      borderRadius: "4px", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                    }}>
+                    {remediated.has(selectedTech) ? "\u2713 REMEDIATED \u2014 UNDO" : "MARK AS REMEDIATED"}
+                  </button>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <div style={{ fontSize: "9px", color: "#64748b", marginBottom: "4px" }}>Appears in chains:</div>
+                    {filteredChains.filter(c => c.path.includes(selectedTech)).map((c, i) => (
+                      <div key={i} style={{
+                        fontSize: "9px", color: "#94a3b8", padding: "2px 0",
+                        cursor: "pointer", textDecoration: chainStatus[filteredChains.indexOf(c)]?.broken ? "line-through" : "none",
+                        opacity: chainStatus[filteredChains.indexOf(c)]?.broken ? 0.5 : 1,
+                      }} onClick={() => setHighlightedChain(c)}>
+                        {"\u2192"} {c.name}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: "#475569", fontSize: "11px", paddingTop: "40px", textAlign: "center" }}>
+                  Click a node to inspect
+                </div>
+              )}
             </>
-          ) : (
-            <div style={{ color: "#475569", fontSize: "11px", paddingTop: "40px", textAlign: "center" }}>
-              Click a node to inspect
+          );
+          return (
+            <div style={{ flex: "1 1 240px", padding: popoutDetail ? 0 : "12px 16px", overflow: "auto" }}>
+              {popoutDetail ? (
+                <>
+                  <PopoutPlaceholder label="Node Detail" onRestore={() => setPopoutDetail(false)} />
+                  <PopoutPanel title={"Node Detail" + (selectedTechData ? ": " + selectedTechData.id : "")} width={400} height={700} onClose={() => setPopoutDetail(false)}>
+                    {detailContent}
+                  </PopoutPanel>
+                </>
+              ) : detailContent}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
       </div>{/* end split-container */}
 
-      {/* Phase 5: Technology ROI Panel */}
-      {showROI && (
-        <div style={{
-          borderTop: "1px solid #1e293b", padding: "16px 24px",
-          background: "#0d1321", flexShrink: 0, maxHeight: "35vh", overflow: "auto",
-        }}>
-          <h3 style={{ fontSize: "11px", color: "#14b8a6", margin: "0 0 12px 0", letterSpacing: "0.5px" }}>
-            TECHNOLOGY ROI MODEL
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
-            {SECURITY_TECHNOLOGIES.map(tech => {
-              const deployed = deployedTech.has(tech.id);
-              const techCount = Object.keys(tech.coverage).filter(tid => activeTechniques.some(t => t.id === tid)).length;
+      {/* Phase 5: Security Controls Panel */}
+      {(() => {
+        const controlsContent = (
+          <>
+            <h3 style={{ fontSize: "11px", color: "#14b8a6", margin: "0 0 12px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
+              SECURITY CONTROLS
+              {!popoutControls && <PopoutButton onClick={() => setPopoutControls(true)} title="Pop out Controls" />}
+            </h3>
+            {CONTROL_CATEGORIES.map(cat => {
+              const catControls = SECURITY_CONTROLS.filter(c => c.category === cat.id);
+              const catDeployed = catControls.filter(c => deployedControls.has(c.id)).length;
+              const allDeployed = catDeployed === catControls.length;
               return (
-                <div key={tech.id} style={{
-                  background: "#0a0f1a", border: "1px solid " + (deployed ? "#14b8a630" : "#1e293b"),
-                  borderRadius: "6px", padding: "12px",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                    <div>
-                      <div style={{ fontSize: "11px", fontWeight: 600, color: deployed ? "#14b8a6" : "#f8fafc" }}>{tech.name}</div>
-                      <div style={{ fontSize: "9px", color: "#64748b" }}>{tech.cost} · {techCount} techniques</div>
-                    </div>
+                <div key={cat.id} style={{ marginBottom: "16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "13px" }}>{cat.icon}</span>
+                    <span style={{ fontSize: "10px", fontWeight: 700, color: cat.color, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      {cat.name}
+                    </span>
+                    <span style={{ fontSize: "9px", color: "#64748b" }}>
+                      {catDeployed}/{catControls.length} deployed
+                    </span>
                     <button onClick={() => {
-                      setDeployedTech(prev => {
+                      setDeployedControls(prev => {
                         const next = new Set(prev);
-                        if (next.has(tech.id)) next.delete(tech.id);
-                        else next.add(tech.id);
+                        if (allDeployed) {
+                          catControls.forEach(c => next.delete(c.id));
+                        } else {
+                          catControls.forEach(c => next.add(c.id));
+                        }
                         return next;
                       });
                     }} style={{
-                      background: deployed ? "#14b8a6" : "#334155",
-                      color: deployed ? "#0a0f1a" : "#94a3b8",
-                      border: "none", borderRadius: "4px", padding: "4px 10px",
-                      fontSize: "9px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                      background: "transparent", color: allDeployed ? "#ef4444" : cat.color,
+                      border: "1px solid " + (allDeployed ? "#ef444466" : cat.color + "66"),
+                      borderRadius: "3px", padding: "2px 8px", fontSize: "8px", fontWeight: 700,
+                      cursor: "pointer", fontFamily: "inherit", marginLeft: "auto",
                     }}>
-                      {deployed ? "DEPLOYED" : "DEPLOY"}
+                      {allDeployed ? "CLEAR" : "DEPLOY ALL"}
                     </button>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "3px" }}>
-                    {Object.entries(tech.coverage).map(([tid, red]) => (
-                      <span key={tid} style={{
-                        fontSize: "8px", padding: "1px 4px", borderRadius: "2px",
-                        background: deployed ? "#14b8a615" : "#1e293b",
-                        color: deployed ? "#14b8a6" : "#475569",
-                      }}>
-                        {tid} ({(red * 100).toFixed(0)}%)
-                      </span>
-                    ))}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+                    {catControls.map(ctrl => {
+                      const deployed = deployedControls.has(ctrl.id);
+                      const techCount = Object.keys(ctrl.coverage).filter(tid => activeTechniques.some(t => t.id === tid)).length;
+                      return (
+                        <div key={ctrl.id} style={{
+                          background: "#0a0f1a", border: "1px solid " + (deployed ? cat.color + "30" : "#1e293b"),
+                          borderRadius: "6px", padding: "10px",
+                          borderLeft: "3px solid " + (deployed ? cat.color : "#1e293b"),
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+                            <div>
+                              <div style={{ fontSize: "10px", fontWeight: 600, color: deployed ? cat.color : "#f8fafc" }}>{ctrl.name}</div>
+                              <div style={{ fontSize: "8px", color: "#64748b" }}>{ctrl.cost} · {techCount} techniques</div>
+                            </div>
+                            <button onClick={() => {
+                              setDeployedControls(prev => {
+                                const next = new Set(prev);
+                                if (next.has(ctrl.id)) next.delete(ctrl.id);
+                                else next.add(ctrl.id);
+                                return next;
+                              });
+                            }} style={{
+                              background: deployed ? cat.color : "#334155",
+                              color: deployed ? "#0a0f1a" : "#94a3b8",
+                              border: "none", borderRadius: "4px", padding: "3px 8px",
+                              fontSize: "8px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                            }}>
+                              {deployed ? "DEPLOYED" : "DEPLOY"}
+                            </button>
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "3px" }}>
+                            {Object.entries(ctrl.coverage).map(([tid, red]) => (
+                              <span key={tid} style={{
+                                fontSize: "7px", padding: "1px 3px", borderRadius: "2px",
+                                background: deployed ? cat.color + "15" : "#1e293b",
+                                color: deployed ? cat.color : "#475569",
+                              }}>
+                                {tid} ({(red * 100).toFixed(0)}%)
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
             })}
-          </div>
-          {deployedTech.size > 0 && (() => {
-            const baseAvg = activeTechniques.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / activeTechniques.length;
-            const effAvg = activeTechniques.reduce((s, t) => s + (effectiveExposures[t.id] ?? 1), 0) / activeTechniques.length;
-            const reduction = baseAvg > 0 ? ((baseAvg - effAvg) / baseAvg * 100).toFixed(1) : "0.0";
-            return (
-              <div style={{ marginTop: "12px", padding: "8px 12px", background: "#14b8a610", borderRadius: "4px", fontSize: "10px", color: "#14b8a6" }}>
-                Deploying {deployedTech.size} technolog{deployedTech.size === 1 ? "y" : "ies"} reduces average exposure by {reduction}%
+            {/* Summary */}
+            {deployedControls.size > 0 && (() => {
+              const baseAvg = activeTechniques.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / activeTechniques.length;
+              const effAvg = activeTechniques.reduce((s, t) => s + (effectiveExposures[t.id] ?? 1), 0) / activeTechniques.length;
+              const reduction = baseAvg > 0 ? ((baseAvg - effAvg) / baseAvg * 100).toFixed(1) : "0.0";
+              const costTally = {};
+              SECURITY_CONTROLS.forEach(c => {
+                if (!deployedControls.has(c.id)) return;
+                const tier = c.cost;
+                costTally[tier] = (costTally[tier] || 0) + 1;
+              });
+              const costSummary = Object.entries(costTally).sort((a, b) => b[0].length - a[0].length).map(([t, n]) => n + "x" + t).join("  ");
+              return (
+                <div style={{ marginTop: "8px", padding: "10px 12px", background: "#14b8a610", borderRadius: "4px" }}>
+                  <div style={{ fontSize: "10px", color: "#14b8a6", marginBottom: "6px" }}>
+                    {deployedControls.size} control{deployedControls.size === 1 ? "" : "s"} deployed — average exposure reduced by {reduction}%
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "9px" }}>
+                    {CONTROL_CATEGORIES.map(cat => {
+                      const catCtrls = SECURITY_CONTROLS.filter(c => c.category === cat.id);
+                      const catDep = catCtrls.filter(c => deployedControls.has(c.id)).length;
+                      return (
+                        <span key={cat.id} style={{ color: catDep > 0 ? cat.color : "#475569" }}>
+                          {cat.icon} {cat.name.split(" / ")[0]}: {catDep}/{catCtrls.length}
+                        </span>
+                      );
+                    })}
+                    <span style={{ color: "#64748b", marginLeft: "auto" }}>Cost: {costSummary}</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
+        );
+        return (
+          <>
+            {showControls && !popoutControls && (
+              <div style={{
+                borderTop: "1px solid #1e293b", padding: "16px 24px",
+                background: "#0d1321", flexShrink: 0, maxHeight: "45vh", overflow: "auto",
+              }}>
+                {controlsContent}
               </div>
-            );
-          })()}
-        </div>
-      )}
+            )}
+            {showControls && popoutControls && (
+              <div style={{
+                borderTop: "1px solid #1e293b", padding: 0,
+                background: "#0d1321", flexShrink: 0,
+              }}>
+                <PopoutPlaceholder label="Security Controls" onRestore={() => setPopoutControls(false)} />
+              </div>
+            )}
+            {popoutControls && (
+              <PopoutPanel title="Security Controls" width={900} height={600} onClose={() => setPopoutControls(false)}>
+                {controlsContent}
+              </PopoutPanel>
+            )}
+          </>
+        );
+      })()}
 
       {/* Analysis Panel */}
-      {showAnalysis && (
-        <div style={{
-          borderTop: "1px solid #1e293b", padding: "16px 24px",
-          background: "#0d1321", flexShrink: 0, maxHeight: "40vh", overflow: "auto",
-        }}>
-          <h3 style={{ fontSize: "11px", color: "#f59e0b", margin: "0 0 12px 0", letterSpacing: "0.5px" }}>
-            OPTIMIZATION ANALYSIS
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-            <AnalysisCard title="Greedy Set Cover Result">
-              <p>With a budget of <strong style={{ color: "#f59e0b" }}>{remediationBudget}</strong> remediations,
-              the optimal selection disrupts <strong style={{ color: "#22c55e" }}>{optimal.chainsDisrupted}/{optimal.chainsTotal}</strong> attack chains.</p>
-              <p style={{ marginTop: "6px" }}>Optimal targets: {optimal.selected.map(id => {
-                const t = activeTechniques.find(t => t.id === id);
-                return t ? id + " (" + t.name + ")" : id;
-              }).join(", ")}</p>
-              <p style={{ marginTop: "6px", color: "#64748b" }}>
-                Algorithm: Greedy weighted maximum coverage. Each iteration selects the technique
-                that covers the most remaining unchained paths, weighted by severity x exposure.
-                Guaranteed {"\u2265"}63% of optimal (1 - 1/e approximation bound).
-              </p>
-            </AnalysisCard>
-            <AnalysisCard title="Chokepoint Analysis">
-              <p>Highest betweenness centrality nodes (most paths flow through):</p>
-              {activeTechniques
-                .map(t => ({ ...t, bc: betweenness[t.id] ?? 0 }))
-                .sort((a, b) => b.bc - a.bc)
-                .slice(0, 5)
-                .map((t, i) => (
-                  <div key={i} style={{ fontSize: "10px", marginTop: "4px" }}>
-                    <span style={{ color: "#f59e0b" }}>{t.id}</span> {t.name} — centrality: {(t.bc * 100).toFixed(1)}%
-                    {remediated.has(t.id) && <span style={{ color: "#22c55e" }}> {"\u2713"}</span>}
-                  </div>
-                ))
-              }
-            </AnalysisCard>
-            <AnalysisCard title="Risk Posture Summary">
-              {(() => {
-                const avgExposure = activeTechniques.reduce((s, t) => s + (effectiveExposures[t.id] ?? 1), 0) / activeTechniques.length;
-                const highExposed = activeTechniques.filter(t => (effectiveExposures[t.id] ?? 1) > 0.7).length;
-                const disruptionRate = totalDisrupted / Math.max(filteredChains.length, 1);
-                return (
-                  <>
-                    <p>Average node exposure: <strong style={{
-                      color: avgExposure > 0.6 ? "#ef4444" : avgExposure > 0.3 ? "#f59e0b" : "#22c55e"
-                    }}>{(avgExposure * 100).toFixed(0)}%</strong></p>
-                    <p>High-exposure nodes ({">"}70%): <strong style={{ color: "#ef4444" }}>{highExposed}</strong> of {activeTechniques.length}</p>
-                    <p>Chain disruption rate: <strong style={{
-                      color: disruptionRate > 0.8 ? "#22c55e" : disruptionRate > 0.5 ? "#f59e0b" : "#ef4444"
-                    }}>{(disruptionRate * 100).toFixed(0)}%</strong></p>
-                    <p style={{ marginTop: "6px", color: "#64748b" }}>
-                      {disruptionRate === 1 ? "All known attack chains have at least one broken link." :
-                        disruptionRate > 0.7 ? "Good coverage but some chains remain viable." :
-                          disruptionRate > 0.4 ? "Moderate risk \u2014 several attack paths remain open." :
-                            "Critical risk \u2014 majority of attack paths are unimpeded."}
-                    </p>
-                  </>
-                );
-              })()}
-            </AnalysisCard>
-          </div>
-        </div>
-      )}
+      {(() => {
+        const analysisContent = (
+          <>
+            <h3 style={{ fontSize: "11px", color: "#f59e0b", margin: "0 0 12px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
+              OPTIMIZATION ANALYSIS
+              {!popoutAnalysis && <PopoutButton onClick={() => setPopoutAnalysis(true)} title="Pop out Analysis" />}
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+              <AnalysisCard title="Greedy Set Cover Result">
+                <p>With a budget of <strong style={{ color: "#f59e0b" }}>{remediationBudget}</strong> remediations,
+                the optimal selection disrupts <strong style={{ color: "#22c55e" }}>{optimal.chainsDisrupted}/{optimal.chainsTotal}</strong> attack chains.</p>
+                <p style={{ marginTop: "6px" }}>Optimal targets: {optimal.selected.map(id => {
+                  const t = activeTechniques.find(t => t.id === id);
+                  return t ? id + " (" + t.name + ")" : id;
+                }).join(", ")}</p>
+                <p style={{ marginTop: "6px", color: "#64748b" }}>
+                  Algorithm: Greedy weighted maximum coverage. Each iteration selects the technique
+                  that covers the most remaining unchained paths, weighted by severity x exposure.
+                  Guaranteed {"\u2265"}63% of optimal (1 - 1/e approximation bound).
+                </p>
+              </AnalysisCard>
+              <AnalysisCard title="Chokepoint Analysis">
+                <p>Highest betweenness centrality nodes (most paths flow through):</p>
+                {activeTechniques
+                  .map(t => ({ ...t, bc: betweenness[t.id] ?? 0 }))
+                  .sort((a, b) => b.bc - a.bc)
+                  .slice(0, 5)
+                  .map((t, i) => (
+                    <div key={i} style={{ fontSize: "10px", marginTop: "4px" }}>
+                      <span style={{ color: "#f59e0b" }}>{t.id}</span> {t.name} — centrality: {(t.bc * 100).toFixed(1)}%
+                      {remediated.has(t.id) && <span style={{ color: "#22c55e" }}> {"\u2713"}</span>}
+                    </div>
+                  ))
+                }
+              </AnalysisCard>
+              <AnalysisCard title="Risk Posture Summary">
+                {(() => {
+                  const avgExposure = activeTechniques.reduce((s, t) => s + (effectiveExposures[t.id] ?? 1), 0) / activeTechniques.length;
+                  const highExposed = activeTechniques.filter(t => (effectiveExposures[t.id] ?? 1) > 0.7).length;
+                  const disruptionRate = totalDisrupted / Math.max(filteredChains.length, 1);
+                  return (
+                    <>
+                      <p>Average node exposure: <strong style={{
+                        color: avgExposure > 0.6 ? "#ef4444" : avgExposure > 0.3 ? "#f59e0b" : "#22c55e"
+                      }}>{(avgExposure * 100).toFixed(0)}%</strong></p>
+                      <p>High-exposure nodes ({">"}70%): <strong style={{ color: "#ef4444" }}>{highExposed}</strong> of {activeTechniques.length}</p>
+                      <p>Chain disruption rate: <strong style={{
+                        color: disruptionRate > 0.8 ? "#22c55e" : disruptionRate > 0.5 ? "#f59e0b" : "#ef4444"
+                      }}>{(disruptionRate * 100).toFixed(0)}%</strong></p>
+                      <p style={{ marginTop: "6px", color: "#64748b" }}>
+                        {disruptionRate === 1 ? "All known attack chains have at least one broken link." :
+                          disruptionRate > 0.7 ? "Good coverage but some chains remain viable." :
+                            disruptionRate > 0.4 ? "Moderate risk \u2014 several attack paths remain open." :
+                              "Critical risk \u2014 majority of attack paths are unimpeded."}
+                      </p>
+                    </>
+                  );
+                })()}
+              </AnalysisCard>
+            </div>
+          </>
+        );
+        return (
+          <>
+            {showAnalysis && !popoutAnalysis && (
+              <div style={{
+                borderTop: "1px solid #1e293b", padding: "16px 24px",
+                background: "#0d1321", flexShrink: 0, maxHeight: "40vh", overflow: "auto",
+              }}>
+                {analysisContent}
+              </div>
+            )}
+            {showAnalysis && popoutAnalysis && (
+              <div style={{
+                borderTop: "1px solid #1e293b", padding: 0,
+                background: "#0d1321", flexShrink: 0,
+              }}>
+                <PopoutPlaceholder label="Analysis" onRestore={() => setPopoutAnalysis(false)} />
+              </div>
+            )}
+            {popoutAnalysis && (
+              <PopoutPanel title="Optimization Analysis" width={900} height={500} onClose={() => setPopoutAnalysis(false)}>
+                {analysisContent}
+              </PopoutPanel>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
