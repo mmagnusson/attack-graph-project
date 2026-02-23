@@ -401,7 +401,7 @@ function setCachedStix(version, data) {
 // ─── STIX Data Loader ─────────────────────────────────────────────────────────
 
 async function loadStixData() {
-  const version = "enterprise-attack-v1";
+  const version = "enterprise-attack-v2";
   const cached = await getCachedStix(version).catch(() => null);
   if (cached) return cached;
 
@@ -419,13 +419,13 @@ async function loadStixData() {
     const mitreRef = extRefs.find(r => r.source_name === "mitre-attack");
     if (!mitreRef || !mitreRef.external_id) return;
     const techId = mitreRef.external_id;
-    if (techId.includes(".")) return;
+    const parentId = techId.includes(".") ? techId.split(".")[0] : null;
     const phases = o.kill_chain_phases || [];
     const phase = phases.find(p => p.kill_chain_name === "mitre-attack");
     if (!phase) return;
     const tacticId = STIX_TACTIC_MAP[phase.phase_name];
     if (!tacticId) return;
-    techniques.push({ id: techId, name: o.name, tactic: tacticId, baseCriticality: 0.5 });
+    techniques.push({ id: techId, name: o.name, tactic: tacticId, baseCriticality: 0.5, parentId });
     techById[o.id] = techId;
   });
 
@@ -623,7 +623,10 @@ function layoutNodes(techniques) {
     if (n <= 30) return 4;
     if (n <= 42) return 5;
     if (n <= 56) return 6;
-    return 7;
+    if (n <= 72) return 7;
+    if (n <= 90) return 8;
+    if (n <= 110) return 9;
+    return 10;
   }
 
   // Compute cluster dimensions per tactic
@@ -662,7 +665,7 @@ function layoutNodes(techniques) {
   tacticOrder.forEach((tac, ti) => {
     const info = clusterInfo[tac.id];
     const cx = curX + info.w / 2;
-    phaseCenters.push({ x: cx, label: tac.name, color: tac.color });
+    phaseCenters.push({ x: cx, label: tac.name, color: tac.color, tacticId: tac.id });
     info.techs.forEach((t, i) => {
       const col = i % info.cols;
       const row = Math.floor(i / info.cols);
@@ -695,10 +698,14 @@ function ZoomButton({ label, onClick }) {
 
 function GraphView({ techniques, edges, positions, exposures, betweenness, chainCoverage,
   selectedTech, onSelectTech, highlightedChain, remediated, optimalSet,
-  viewHeight, viewWidth, phaseCenters, onNodeDrag }) {
+  viewHeight, viewWidth, phaseCenters, onNodeDrag, searchMatches,
+  collapsedTactics, onToggleCollapse, chainBuilderMode, chainBuilderPath, onChainBuilderClick,
+  isolateChain }) {
 
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState(null);
   const isPanning = useRef(false);
   const didDrag = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
@@ -716,6 +723,10 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
   onNodeDragRef.current = onNodeDrag;
   const onSelectTechRef = useRef(onSelectTech);
   onSelectTechRef.current = onSelectTech;
+  const chainBuilderModeRef = useRef(chainBuilderMode);
+  chainBuilderModeRef.current = chainBuilderMode;
+  const onChainBuilderClickRef = useRef(onChainBuilderClick);
+  onChainBuilderClickRef.current = onChainBuilderClick;
 
   const vh = viewHeight || 420;
   const vw = viewWidth || 1000;
@@ -734,7 +745,78 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
     return new Set(highlightedChain.path);
   }, [highlightedChain]);
 
-  // Phase labels no longer used — tactic names come from phaseCenters prop
+  // Collapse support: maps and memos
+  const techTacticMap = useMemo(() => {
+    const m = {};
+    techniques.forEach(t => { m[t.id] = t.tactic; });
+    return m;
+  }, [techniques]);
+
+  const collapsedSummary = useMemo(() => {
+    if (!collapsedTactics || collapsedTactics.size === 0) return {};
+    const summary = {};
+    collapsedTactics.forEach(tacId => {
+      const tacTechs = techniques.filter(t => t.tactic === tacId);
+      if (tacTechs.length === 0) return;
+      let sx = 0, sy = 0, count = 0;
+      tacTechs.forEach(t => {
+        const p = positions[t.id];
+        if (p) { sx += p.x; sy += p.y; count++; }
+      });
+      if (count > 0) summary[tacId] = { x: sx / count, y: sy / count, count };
+    });
+    return summary;
+  }, [collapsedTactics, techniques, positions]);
+
+  const processedEdges = useMemo(() => {
+    if (!collapsedTactics || collapsedTactics.size === 0) return edges;
+    const seen = new Set();
+    return edges.filter(e => {
+      const fromTac = techTacticMap[e.from];
+      const toTac = techTacticMap[e.to];
+      const fromCol = fromTac && collapsedTactics.has(fromTac);
+      const toCol = toTac && collapsedTactics.has(toTac);
+      if (fromCol && toCol && fromTac === toTac) return false;
+      const fk = fromCol ? "~" + fromTac : e.from;
+      const tk = toCol ? "~" + toTac : e.to;
+      const key = fk + ">" + tk;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [edges, collapsedTactics, techTacticMap]);
+
+  const getNodePos = useCallback((techId) => {
+    const tac = techTacticMap[techId];
+    if (tac && collapsedTactics && collapsedTactics.has(tac) && collapsedSummary[tac]) {
+      return collapsedSummary[tac];
+    }
+    return positions[techId];
+  }, [techTacticMap, collapsedTactics, collapsedSummary, positions]);
+
+  // Chain path edges that don't exist in the graph edge set — render explicitly
+  const missingChainEdges = useMemo(() => {
+    if (!highlightedChain) return [];
+    const edgeSet = new Set(edges.map(e => e.from + "->" + e.to));
+    const missing = [];
+    for (let i = 0; i < highlightedChain.path.length - 1; i++) {
+      const key = highlightedChain.path[i] + "->" + highlightedChain.path[i + 1];
+      if (!edgeSet.has(key)) {
+        missing.push({ from: highlightedChain.path[i], to: highlightedChain.path[i + 1] });
+      }
+    }
+    return missing;
+  }, [highlightedChain, edges]);
+
+  // Chain builder edges for SVG rendering
+  const builderEdges = useMemo(() => {
+    if (!chainBuilderMode || !chainBuilderPath || chainBuilderPath.length < 2) return [];
+    const result = [];
+    for (let i = 0; i < chainBuilderPath.length - 1; i++) {
+      result.push({ from: chainBuilderPath[i], to: chainBuilderPath[i + 1] });
+    }
+    return result;
+  }, [chainBuilderMode, chainBuilderPath]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -765,6 +847,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
     dragNodeRef.current = nodeId;
     dragDidMove.current = false;
     lastMouse.current = { x: e.clientX, y: e.clientY };
+    setHoveredNode(null); setTooltipPos(null);
   }, []);
 
   const handleMouseDown = useCallback((e) => {
@@ -810,8 +893,12 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
 
   const handleMouseUp = useCallback(() => {
     if (dragNodeRef.current) {
-      if (!dragDidMove.current && onSelectTechRef.current) {
-        onSelectTechRef.current(dragNodeRef.current);
+      if (!dragDidMove.current) {
+        if (chainBuilderModeRef.current && onChainBuilderClickRef.current) {
+          onChainBuilderClickRef.current(dragNodeRef.current);
+        } else if (onSelectTechRef.current) {
+          onSelectTechRef.current(dragNodeRef.current);
+        }
       }
       dragNodeRef.current = null;
       dragDidMove.current = false;
@@ -849,6 +936,25 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
   }, [centerY]);
 
   const resetZoom = useCallback(() => setTransform({ x: 0, y: 0, scale: 1 }), []);
+
+  const zoomToFit = useCallback(() => {
+    const nodeIds = Object.keys(positions);
+    if (nodeIds.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodeIds.forEach(id => {
+      const p = positions[id];
+      if (p) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
+    });
+    const pad = 50;
+    minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+    const bw = maxX - minX;
+    const bh = maxY - minY;
+    if (bw <= 0 || bh <= 0) return;
+    const scale = Math.min(vw / bw, vh / bh);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    setTransform({ x: vw / 2 - cx * scale, y: vh / 2 - cy * scale, scale });
+  }, [positions, vw, vh]);
 
   const handlePopout = useCallback(() => {
     const svg = svgRef.current;
@@ -897,6 +1003,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
         <ZoomButton label="+" onClick={zoomIn} />
         <ZoomButton label={"\u2212"} onClick={zoomOut} />
         <ZoomButton label={"\u21BA"} onClick={resetZoom} />
+        <ZoomButton label="FIT" onClick={zoomToFit} />
         <ZoomButton label={"\u2197"} onClick={handlePopout} />
       </div>
       <div style={{ position: "absolute", bottom: 8, right: 8, fontSize: "9px", color: "#64748b", fontFamily: "monospace", background: "rgba(10,15,26,0.7)", padding: "2px 6px", borderRadius: 3, zIndex: 10 }}>
@@ -917,25 +1024,89 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
           <marker id="arrowhead-active" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
             <polygon points="0 0, 6 2, 0 4" fill="#f59e0b" />
           </marker>
+          <marker id="arrowhead-builder" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
+            <polygon points="0 0, 6 2, 0 4" fill="#a855f7" />
+          </marker>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
         <g transform={"translate(" + transform.x + "," + transform.y + ") scale(" + transform.scale + ")"}>
-          {(phaseCenters || []).map((pc, i) => (
-            <text key={i} x={pc.x} y={18} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="7.5" fontFamily="monospace" opacity={0.7}>
-              {pc.label}
-            </text>
-          ))}
+          {(phaseCenters || []).map((pc, i) => {
+            const isCollapsed = collapsedTactics && collapsedTactics.has(pc.tacticId);
+            return (
+              <text key={i} x={pc.x} y={18} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="7.5" fontFamily="monospace" opacity={0.7}
+                style={{ cursor: "pointer" }}
+                onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(pc.tacticId); }}
+              >
+                {(isCollapsed ? "[+] " : "[\u2212] ") + pc.label}
+              </text>
+            );
+          })}
 
-          {edges.map((e, i) => {
+          {/* Collapsed tactic summary circles */}
+          {collapsedTactics && Object.entries(collapsedSummary).map(([tacId, info]) => {
+            const tac = TACTICS.find(t => t.id === tacId);
+            return (
+              <g key={"collapsed-" + tacId} style={{ cursor: "pointer" }}
+                onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(tacId); }}>
+                <circle cx={info.x} cy={info.y} r={20}
+                  fill={tac?.color || "#6366f1"} fillOpacity={0.15}
+                  stroke={tac?.color || "#6366f1"} strokeWidth={1.5} strokeOpacity={0.5} strokeDasharray="4,2"
+                />
+                <text x={info.x} y={info.y + 4} textAnchor="middle" fill={tac?.color || "#fff"} fontSize="10" fontWeight="bold" fontFamily="monospace">
+                  {info.count}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Missing chain path edges (consecutive chain nodes with no graph edge) */}
+          {missingChainEdges.map((e, i) => {
+            const from = getNodePos(e.from);
+            const to = getNodePos(e.to);
+            if (!from || !to) return null;
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len === 0) return null;
+            const ux = dx / len, uy = dy / len, r = 14;
+            return (
+              <line key={"chain-gap-" + i} x1={from.x + ux * r} y1={from.y + uy * r}
+                x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
+                stroke="#f59e0b" strokeWidth={2} strokeOpacity={0.9}
+                markerEnd="url(#arrowhead-active)" />
+            );
+          })}
+
+          {/* Chain builder path edges */}
+          {builderEdges.map((e, i) => {
             const from = positions[e.from];
             const to = positions[e.to];
+            if (!from || !to) return null;
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len === 0) return null;
+            const ux = dx / len, uy = dy / len, r = 14;
+            return (
+              <line key={"builder-" + i} x1={from.x + ux * r} y1={from.y + uy * r}
+                x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
+                stroke="#a855f7" strokeWidth={2.5} strokeOpacity={0.8}
+                markerEnd="url(#arrowhead-builder)" strokeDasharray="6,3" />
+            );
+          })}
+
+          {processedEdges.map((e, i) => {
+            const from = getNodePos(e.from);
+            const to = getNodePos(e.to);
             if (!from || !to) return null;
             const isChainEdge = chainEdges.has(e.from + "->" + e.to);
             const isRemediatedEdge = remediated.has(e.from) || remediated.has(e.to);
             const dimmed = highlightedChain && !isChainEdge;
+            if (dimmed && isolateChain) return null;
+            const searchDimmedEdge = searchMatches && searchMatches.size > 0 && !searchMatches.has(e.from) && !searchMatches.has(e.to);
 
             const dx = to.x - from.x;
             const dy = to.y - from.y;
@@ -952,7 +1123,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
                 x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
                 stroke={isRemediatedEdge ? "#22c55e" : isChainEdge ? "#f59e0b" : "#334155"}
                 strokeWidth={isChainEdge ? 2 : 0.7}
-                strokeOpacity={dimmed ? 0.08 : isRemediatedEdge ? 0.3 : isChainEdge ? 0.9 : 0.2}
+                strokeOpacity={searchDimmedEdge ? 0.04 : dimmed ? 0.08 : isRemediatedEdge ? 0.3 : isChainEdge ? 0.9 : 0.2}
                 markerEnd={isChainEdge ? "url(#arrowhead-active)" : "url(#arrowhead)"}
                 strokeDasharray={isRemediatedEdge ? "3,3" : "none"}
               />
@@ -962,6 +1133,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
           {techniques.map(t => {
             const pos = positions[t.id];
             if (!pos) return null;
+            if (collapsedTactics && collapsedTactics.has(t.tactic)) return null;
             const tactic = TACTICS.find(ta => ta.id === t.tactic);
             const exposure = exposures[t.id] ?? 1.0;
             const bc = betweenness[t.id] ?? 0;
@@ -972,14 +1144,23 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             const isRemediated = remediated.has(t.id);
             const isOptimal = optimalSet.includes(t.id);
             const dimmed = highlightedChain && !isInChain;
+            if (dimmed && isolateChain) return null;
+            const searchDimmed = searchMatches && searchMatches.size > 0 && !searchMatches.has(t.id);
 
-            const radius = 8 + priority * 10;
+            const isSub = !!t.parentId;
+            const radius = isSub ? (5 + priority * 6) : (8 + priority * 10);
             const nodeColor = isRemediated ? "#22c55e" : tactic?.color || "#6366f1";
-            const opacity = dimmed ? 0.15 : exposure < 0.2 ? 0.3 : 1;
+            const baseOpacity = dimmed ? 0.15 : exposure < 0.2 ? 0.3 : isSub ? 0.7 : 1;
+            const opacity = searchDimmed ? Math.min(baseOpacity, 0.12) : baseOpacity;
 
             return (
               <g key={t.id}
                 onMouseDown={(e) => handleNodeMouseDown(e, t.id)}
+                onMouseEnter={(e) => {
+                  const rect = svgRef.current?.parentElement?.getBoundingClientRect();
+                  if (rect) { setHoveredNode(t.id); setTooltipPos({ x: e.clientX - rect.left + 14, y: e.clientY - rect.top - 10 }); }
+                }}
+                onMouseLeave={() => { setHoveredNode(null); setTooltipPos(null); }}
                 style={{ cursor: dragNodeRef.current === t.id ? "grabbing" : "pointer" }}
                 opacity={opacity}
               >
@@ -1017,6 +1198,34 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
           })}
         </g>
       </svg>
+      {hoveredNode && tooltipPos && (() => {
+        const ht = techniques.find(t => t.id === hoveredNode);
+        if (!ht) return null;
+        const htTactic = TACTICS.find(ta => ta.id === ht.tactic);
+        const htExposure = exposures[hoveredNode] ?? 1.0;
+        const htBetweenness = betweenness[hoveredNode] ?? 0;
+        const htChainCount = chainCoverage[hoveredNode] ?? 0;
+        return (
+          <div style={{
+            position: "absolute", left: tooltipPos.x, top: tooltipPos.y,
+            background: "#1e293bee", border: "1px solid #475569", borderRadius: 6,
+            padding: "8px 10px", pointerEvents: "none", zIndex: 30,
+            maxWidth: 220, fontSize: "10px", color: "#e2e8f0",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 3 }}>{ht.name}</div>
+            <div style={{ color: htTactic?.color, fontSize: "9px", marginBottom: 4 }}>{htTactic?.name}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px", fontSize: "9px" }}>
+              <span style={{ color: "#64748b" }}>Exposure</span>
+              <span style={{ color: htExposure > 0.7 ? "#ef4444" : htExposure > 0.4 ? "#f59e0b" : "#22c55e" }}>{(htExposure * 100).toFixed(0)}%</span>
+              <span style={{ color: "#64748b" }}>Betweenness</span>
+              <span style={{ color: "#3b82f6" }}>{(htBetweenness * 100).toFixed(1)}%</span>
+              <span style={{ color: "#64748b" }}>Chains</span>
+              <span style={{ color: "#6366f1" }}>{htChainCount}</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1094,6 +1303,9 @@ function AttackPathOptimizer() {
   const [exposures, setExposures] = useState({});
   const [selectedTech, setSelectedTech] = useState(null);
   const [highlightedChain, setHighlightedChain] = useState(null);
+  const [isolateChain, setIsolateChain] = useState(false);
+  // Auto-clear isolate when chain is deselected
+  useEffect(() => { if (!highlightedChain) setIsolateChain(false); }, [highlightedChain]);
   const [remediated, setRemediated] = useState(new Set());
   const [remediationBudget, setRemediationBudget] = useState(5);
   const [sectorFilter, setSectorFilter] = useState("all");
@@ -1121,6 +1333,27 @@ function AttackPathOptimizer() {
   // Node dragging: custom position overrides
   const [customPositions, setCustomPositions] = useState({});
 
+  // Feature: Technique search
+  const [techSearchQuery, setTechSearchQuery] = useState("");
+  // Feature: Chain search
+  const [chainSearchQuery, setChainSearchQuery] = useState("");
+  // Feature: Collapsible tactic clusters
+  const [collapsedTactics, setCollapsedTactics] = useState(() => {
+    try { const s = localStorage.getItem("attackPathOptimizer_collapsed"); return s ? new Set(JSON.parse(s)) : new Set(); } catch(e) { return new Set(); }
+  });
+  // Feature: Sub-techniques
+  const [showSubTechniques, setShowSubTechniques] = useState(false);
+  // Feature: Custom chain builder
+  const [chainBuilderMode, setChainBuilderMode] = useState(false);
+  const [chainBuilderPath, setChainBuilderPath] = useState([]);
+  const [chainBuilderName, setChainBuilderName] = useState("");
+  const [customChains, setCustomChains] = useState(() => {
+    try { const s = localStorage.getItem("attackPathOptimizer_customChains"); return s ? JSON.parse(s) : []; } catch(e) { return []; }
+  });
+  // Feature: Executive summary
+  const [showExecutiveSummary, setShowExecutiveSummary] = useState(false);
+  const [popoutExecutive, setPopoutExecutive] = useState(false);
+
   // Phase 3: Persistence helpers
   const [showSaved, setShowSaved] = useState(false);
   const skipEnvEffect = useRef(false);
@@ -1129,7 +1362,34 @@ function AttackPathOptimizer() {
   // Phase 1: Derive active data from source
   const activeTechniques = customData?.techniques || TECHNIQUES;
   const activeEdges = customData?.edges || EDGES;
-  const activeChains = customData?.chains || ATTACK_CHAINS;
+  const activeChains = useMemo(() => [...(customData?.chains || ATTACK_CHAINS), ...customChains], [customData, customChains]);
+
+  // Feature: Display techniques (filtered by sub-technique toggle)
+  const displayTechniques = useMemo(() => {
+    if (showSubTechniques) {
+      return [...activeTechniques].sort((a, b) => {
+        if (a.tactic !== b.tactic) return 0;
+        const aBase = a.parentId || a.id;
+        const bBase = b.parentId || b.id;
+        if (aBase !== bBase) return aBase.localeCompare(bBase);
+        if (!a.parentId && b.parentId) return -1;
+        if (a.parentId && !b.parentId) return 1;
+        return a.id.localeCompare(b.id);
+      });
+    }
+    return activeTechniques.filter(t => !t.parentId);
+  }, [activeTechniques, showSubTechniques]);
+
+  // Feature: Technique search matches
+  const techSearchMatches = useMemo(() => {
+    if (!techSearchQuery.trim()) return null;
+    const q = techSearchQuery.toLowerCase().trim();
+    const matches = new Set();
+    displayTechniques.forEach(t => {
+      if (t.id.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)) matches.add(t.id);
+    });
+    return matches;
+  }, [techSearchQuery, displayTechniques]);
 
   // Phase 5: Compute effective exposures with security control adjustments
   const effectiveExposures = useMemo(() => {
@@ -1231,7 +1491,11 @@ function AttackPathOptimizer() {
     }
   }, [dataSource]);
 
-  const layoutResult = useMemo(() => layoutNodes(activeTechniques), [activeTechniques]);
+  const layoutResult = useMemo(() => layoutNodes(displayTechniques), [displayTechniques]);
+  const displayEdges = useMemo(() => {
+    const techSet = new Set(displayTechniques.map(t => t.id));
+    return activeEdges.filter(e => techSet.has(e.from) && techSet.has(e.to));
+  }, [displayTechniques, activeEdges]);
   const viewHeight = layoutResult.viewHeight;
   const viewWidth = layoutResult.viewWidth;
   const phaseCenters = layoutResult.phaseCenters;
@@ -1264,6 +1528,16 @@ function AttackPathOptimizer() {
   }, [filteredChains, remediated, effectiveExposures]);
 
   const totalDisrupted = chainStatus.filter(c => c.broken).length;
+
+  // Feature: Chain search display filter
+  const displayedChainStatus = useMemo(() => {
+    if (!chainSearchQuery.trim()) return chainStatus;
+    const q = chainSearchQuery.toLowerCase().trim();
+    return chainStatus.filter(c =>
+      c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q) ||
+      c.path.some(tid => tid.toLowerCase().includes(q))
+    );
+  }, [chainStatus, chainSearchQuery]);
 
   const handleExposureChange = (techId, value) => {
     setExposures(prev => ({ ...prev, [techId]: value }));
@@ -1306,17 +1580,26 @@ function AttackPathOptimizer() {
     setPopoutDetail(false);
     setPopoutAnalysis(false);
     setPopoutControls(false);
-    try { localStorage.removeItem("attackPathOptimizer"); } catch (e) {}
+    setTechSearchQuery("");
+    setChainSearchQuery("");
+    setCollapsedTactics(new Set());
+    setShowSubTechniques(false);
+    setChainBuilderMode(false);
+    setChainBuilderPath([]);
+    setChainBuilderName("");
+    setShowExecutiveSummary(false);
+    setPopoutExecutive(false);
+    try { localStorage.removeItem("attackPathOptimizer"); localStorage.removeItem("attackPathOptimizer_collapsed"); } catch (e) {}
     // Force STIX reload: briefly switch away then back so the effect always fires
     setDataSource("builtin");
     setTimeout(() => setDataSource("stix"), 0);
   };
 
-  const selectedTechData = activeTechniques.find(t => t.id === selectedTech);
+  const selectedTechData = displayTechniques.find(t => t.id === selectedTech);
   const selectedTactic = selectedTechData ? TACTICS.find(ta => ta.id === selectedTechData.tactic) : null;
 
   const priorityRanking = useMemo(() => {
-    return activeTechniques
+    return displayTechniques
       .map(t => ({
         ...t,
         exposure: effectiveExposures[t.id] ?? 1.0,
@@ -1327,12 +1610,12 @@ function AttackPathOptimizer() {
       .filter(t => t.priority > 0 && !remediated.has(t.id))
       .sort((a, b) => b.priority - a.priority)
       .slice(0, 12);
-  }, [activeTechniques, effectiveExposures, betweenness, chainCoverage, remediated, filteredChains]);
+  }, [displayTechniques, effectiveExposures, betweenness, chainCoverage, remediated, filteredChains]);
 
   // Phase 4: CSV Export
   const exportCSV = useCallback(() => {
     let csv = "Rank,Technique ID,Name,Tactic,Exposure%,Betweenness%,Chain Count,Priority Score,Remediated,In Optimal Set\n";
-    activeTechniques
+    displayTechniques
       .map(t => ({
         ...t,
         exposure: effectiveExposures[t.id] ?? 1.0,
@@ -1369,7 +1652,7 @@ function AttackPathOptimizer() {
     a.download = "attack-path-analysis-" + new Date().toISOString().split("T")[0] + ".csv";
     a.click();
     URL.revokeObjectURL(url);
-  }, [activeTechniques, effectiveExposures, betweenness, chainCoverage, filteredChains, remediated, optimal, chainStatus]);
+  }, [displayTechniques, effectiveExposures, betweenness, chainCoverage, filteredChains, remediated, optimal, chainStatus]);
 
   return (
     <div style={{
@@ -1411,7 +1694,7 @@ function AttackPathOptimizer() {
             </select>
           </div>
           <span style={{ fontSize: "9px", color: "#64748b", padding: "2px 6px", background: "#1e293b", borderRadius: "8px", alignSelf: "flex-end", marginBottom: "2px" }}>
-            {activeTechniques.length} techniques, {activeChains.length} chains
+            {displayTechniques.length}{showSubTechniques && displayTechniques.length !== activeTechniques.length ? "/" + activeTechniques.length : ""} techniques, {activeChains.length} chains
           </span>
           {stixError && (
             <span style={{ fontSize: "9px", color: "#ef4444", padding: "2px 6px", background: "#ef444415", borderRadius: "4px", alignSelf: "flex-end", marginBottom: "2px" }}>
@@ -1441,6 +1724,20 @@ function AttackPathOptimizer() {
             <input type="range" min={1} max={10} value={remediationBudget} onChange={e => setRemediationBudget(+e.target.value)}
               style={{ width: "80px", accentColor: "#f59e0b" }} />
             <span style={{ fontSize: "10px", color: "#f59e0b", textAlign: "center" }}>{remediationBudget}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            <label style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Search</label>
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <input type="text" value={techSearchQuery} onChange={e => setTechSearchQuery(e.target.value)}
+                placeholder="Search techniques..."
+                style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 24px 4px 8px", fontSize: "11px", fontFamily: "inherit", width: "150px" }} />
+              {techSearchQuery && (
+                <button onClick={() => setTechSearchQuery("")} style={{
+                  position: "absolute", right: 4, background: "transparent", border: "none", color: "#64748b",
+                  cursor: "pointer", fontSize: "12px", lineHeight: 1, padding: "2px",
+                }}>{"\u2715"}</button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1475,6 +1772,38 @@ function AttackPathOptimizer() {
         }}>
           CONTROLS
         </button>
+        {dataSource === "stix" && (
+          <button onClick={() => setShowSubTechniques(prev => !prev)} style={{
+            background: showSubTechniques ? "#8b5cf6" : "transparent", color: showSubTechniques ? "#fff" : "#8b5cf6",
+            border: "1px solid #8b5cf6", borderRadius: "4px",
+            padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            {showSubTechniques ? "HIDE" : "SHOW"} SUB-TECH
+          </button>
+        )}
+        <button onClick={() => { setChainBuilderMode(prev => !prev); if (chainBuilderMode) { setChainBuilderPath([]); setChainBuilderName(""); } }} style={{
+          background: chainBuilderMode ? "#a855f7" : "transparent", color: chainBuilderMode ? "#fff" : "#a855f7",
+          border: "1px solid #a855f7", borderRadius: "4px",
+          padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>
+          {chainBuilderMode ? "EXIT BUILDER" : "BUILD CHAIN"}
+        </button>
+        <button onClick={() => { const next = !showExecutiveSummary; setShowExecutiveSummary(next); if (!next) setPopoutExecutive(false); }} style={{
+          background: showExecutiveSummary ? "#06b6d4" : "transparent", color: showExecutiveSummary ? "#fff" : "#06b6d4",
+          border: "1px solid #06b6d4", borderRadius: "4px",
+          padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>
+          EXECUTIVE
+        </button>
+        {highlightedChain && (
+          <button onClick={() => setIsolateChain(prev => !prev)} style={{
+            background: isolateChain ? "#ec4899" : "transparent", color: isolateChain ? "#fff" : "#ec4899",
+            border: "1px solid #ec4899", borderRadius: "4px",
+            padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            {isolateChain ? "SHOW ALL" : "ISOLATE"}
+          </button>
+        )}
         {Object.keys(customPositions).length > 0 && (
           <button onClick={() => setCustomPositions({})} style={{
             background: "transparent", color: "#8b5cf6", border: "1px solid #8b5cf6", borderRadius: "4px",
@@ -1506,7 +1835,7 @@ function AttackPathOptimizer() {
         {/* Graph area */}
         <div style={{ height: graphHeight, flexShrink: 0, overflow: "hidden", padding: "8px 16px", position: "relative" }}>
           <GraphView
-            techniques={activeTechniques} edges={activeEdges} positions={positions}
+            techniques={displayTechniques} edges={displayEdges} positions={positions}
             exposures={effectiveExposures} betweenness={betweenness} chainCoverage={chainCoverage}
             selectedTech={selectedTech} onSelectTech={setSelectedTech}
             highlightedChain={highlightedChain}
@@ -1516,7 +1845,65 @@ function AttackPathOptimizer() {
             viewWidth={viewWidth}
             phaseCenters={phaseCenters}
             onNodeDrag={handleNodeDrag}
+            searchMatches={techSearchMatches}
+            collapsedTactics={collapsedTactics}
+            onToggleCollapse={(tacId) => setCollapsedTactics(prev => {
+              const next = new Set(prev);
+              if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
+              try { localStorage.setItem("attackPathOptimizer_collapsed", JSON.stringify([...next])); } catch(e) {}
+              return next;
+            })}
+            isolateChain={isolateChain}
+            chainBuilderMode={chainBuilderMode}
+            chainBuilderPath={chainBuilderPath}
+            onChainBuilderClick={(techId) => {
+              if (!chainBuilderPath.includes(techId)) setChainBuilderPath(prev => [...prev, techId]);
+            }}
           />
+          {chainBuilderMode && (
+            <div style={{
+              position: "absolute", top: 8, left: 16, right: 16,
+              background: "#1e293bee", border: "1px solid #a855f7", borderRadius: 6,
+              padding: "10px 14px", zIndex: 15,
+              display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
+            }}>
+              <span style={{ fontSize: "10px", color: "#a855f7", fontWeight: 700 }}>CHAIN BUILDER</span>
+              <div style={{ flex: 1, display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
+                {chainBuilderPath.length === 0 ? (
+                  <span style={{ fontSize: "9px", color: "#64748b" }}>Click nodes to build a path...</span>
+                ) : chainBuilderPath.map((tid, i) => (
+                  <React.Fragment key={i}>
+                    {i > 0 && <span style={{ fontSize: "9px", color: "#a855f7" }}>{"\u2192"}</span>}
+                    <span style={{ fontSize: "9px", color: "#e2e8f0", background: "#a855f720", padding: "2px 5px", borderRadius: 3 }}>{tid}</span>
+                  </React.Fragment>
+                ))}
+              </div>
+              <input type="text" value={chainBuilderName} onChange={e => setChainBuilderName(e.target.value)}
+                placeholder="Chain name..."
+                style={{ background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", fontSize: "10px", fontFamily: "inherit", width: "120px" }} />
+              <button onClick={() => setChainBuilderPath(prev => prev.slice(0, -1))} disabled={chainBuilderPath.length === 0}
+                style={{ background: "transparent", color: "#64748b", border: "1px solid #334155", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit", opacity: chainBuilderPath.length === 0 ? 0.3 : 1 }}>UNDO</button>
+              <button onClick={() => setChainBuilderPath([])}
+                style={{ background: "transparent", color: "#ef4444", border: "1px solid #ef444466", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit" }}>CLEAR</button>
+              <button onClick={() => {
+                if (chainBuilderPath.length < 2) return;
+                const name = chainBuilderName.trim() || ("Custom Chain " + (customChains.length + 1));
+                const newChain = { name, description: "Custom chain", sector: "all", path: [...chainBuilderPath], severity: 0.5, custom: true };
+                setCustomChains(prev => {
+                  const next = [...prev, newChain];
+                  try { localStorage.setItem("attackPathOptimizer_customChains", JSON.stringify(next)); } catch(e) {}
+                  return next;
+                });
+                setChainBuilderPath([]);
+                setChainBuilderName("");
+              }} disabled={chainBuilderPath.length < 2}
+                style={{
+                  background: chainBuilderPath.length < 2 ? "#334155" : "#a855f7",
+                  color: chainBuilderPath.length < 2 ? "#475569" : "#fff",
+                  border: "none", borderRadius: 3, padding: "3px 10px", fontSize: "9px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>SAVE</button>
+            </div>
+          )}
           {stixLoading && (
             <div style={{
               position: "absolute", inset: 0, background: "rgba(10,15,26,0.85)",
@@ -1599,7 +1986,18 @@ function AttackPathOptimizer() {
                   Attack Chains ({filteredChains.length})
                   {!popoutChains && <PopoutButton onClick={() => setPopoutChains(true)} title="Pop out Attack Chains" />}
                 </h3>
-                {chainStatus.map((chain, i) => (
+                <div style={{ position: "relative", marginBottom: "8px" }}>
+                  <input type="text" value={chainSearchQuery} onChange={e => setChainSearchQuery(e.target.value)}
+                    placeholder="Search chains..."
+                    style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 24px 4px 8px", fontSize: "10px", fontFamily: "inherit", width: "100%" }} />
+                  {chainSearchQuery && (
+                    <button onClick={() => setChainSearchQuery("")} style={{
+                      position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: "#64748b",
+                      cursor: "pointer", fontSize: "11px", lineHeight: 1, padding: "2px",
+                    }}>{"\u2715"}</button>
+                  )}
+                </div>
+                {displayedChainStatus.map((chain, i) => (
                   <div key={i}
                     onClick={() => setHighlightedChain(highlightedChain?.name === chain.name ? null : chain)}
                     style={{
@@ -1611,14 +2009,30 @@ function AttackPathOptimizer() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: "11px", fontWeight: 600, color: chain.broken ? "#22c55e" : "#f8fafc" }}>
                         {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
+                        {chain.custom && <span style={{ fontSize: "7px", color: "#a855f7", background: "#a855f715", padding: "1px 4px", borderRadius: 3, marginLeft: 6, fontWeight: 700 }}>CUSTOM</span>}
                       </span>
-                      <span style={{
-                        fontSize: "9px", padding: "1px 6px", borderRadius: "8px",
-                        background: chain.severity > 0.85 ? "#ef444430" : "#f59e0b30",
-                        color: chain.severity > 0.85 ? "#ef4444" : "#f59e0b",
-                      }}>
-                        {(chain.severity * 100).toFixed(0)}%
-                      </span>
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                        <span style={{
+                          fontSize: "9px", padding: "1px 6px", borderRadius: "8px",
+                          background: chain.severity > 0.85 ? "#ef444430" : "#f59e0b30",
+                          color: chain.severity > 0.85 ? "#ef4444" : "#f59e0b",
+                        }}>
+                          {(chain.severity * 100).toFixed(0)}%
+                        </span>
+                        {chain.custom && (
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            setCustomChains(prev => {
+                              const next = prev.filter(c => c.name !== chain.name || c.path.join(",") !== chain.path.join(","));
+                              try { localStorage.setItem("attackPathOptimizer_customChains", JSON.stringify(next)); } catch(e) {}
+                              return next;
+                            });
+                          }} style={{
+                            background: "transparent", color: "#ef4444", border: "none", fontSize: "10px",
+                            cursor: "pointer", padding: "0 2px", lineHeight: 1,
+                          }}>{"\u2715"}</button>
+                        )}
+                      </div>
                     </div>
                     <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>{chain.description}</div>
                     <div style={{ fontSize: "8px", color: "#475569", marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "2px" }}>
@@ -2039,7 +2453,200 @@ function AttackPathOptimizer() {
           </>
         );
       })()}
+
+      {/* Executive Summary Panel */}
+      {(() => {
+        const execProps = {
+          techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
+          filteredChains, chainStatus, remediated, optimal, deployedControls,
+        };
+        return (
+          <>
+            {showExecutiveSummary && !popoutExecutive && (
+              <div style={{
+                borderTop: "1px solid #1e293b", padding: "16px 24px",
+                background: "#0d1321", flexShrink: 0, maxHeight: "50vh", overflow: "auto",
+              }}>
+                <ExecutiveSummary {...execProps} popout={false} onPopout={() => setPopoutExecutive(true)} />
+              </div>
+            )}
+            {showExecutiveSummary && popoutExecutive && (
+              <div style={{
+                borderTop: "1px solid #1e293b", padding: 0,
+                background: "#0d1321", flexShrink: 0,
+              }}>
+                <PopoutPlaceholder label="Executive Summary" onRestore={() => setPopoutExecutive(false)} />
+              </div>
+            )}
+            {popoutExecutive && (
+              <PopoutPanel title="Executive Summary" width={600} height={800} onClose={() => setPopoutExecutive(false)}>
+                <ExecutiveSummary {...execProps} popout={true} />
+              </PopoutPanel>
+            )}
+          </>
+        );
+      })()}
     </div>
+  );
+}
+
+function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, filteredChains,
+  chainStatus, remediated, optimal, deployedControls, popout, onPopout }) {
+  const avgExposure = techniques.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / Math.max(techniques.length, 1);
+  const highExposed = techniques.filter(t => (exposures[t.id] ?? 1) > 0.7).length;
+  const totalDisrupted = chainStatus.filter(c => c.broken).length;
+  const disruptionRate = totalDisrupted / Math.max(filteredChains.length, 1);
+  const riskScore = Math.round(Math.min(100, (avgExposure * 40 + (1 - disruptionRate) * 35 + (highExposed / Math.max(techniques.length, 1)) * 25)));
+  const riskColor = riskScore > 70 ? "#ef4444" : riskScore > 40 ? "#f59e0b" : "#22c55e";
+
+  const topRisks = techniques
+    .map(t => ({ ...t, exposure: exposures[t.id] ?? 1, bc: betweenness[t.id] ?? 0, cc: chainCoverage[t.id] ?? 0 }))
+    .sort((a, b) => (b.exposure * b.bc) - (a.exposure * a.bc))
+    .filter(t => !remediated.has(t.id))
+    .slice(0, 5);
+
+  const tacticExposures = {};
+  TACTICS.forEach(tac => {
+    const tacTechs = techniques.filter(t => t.tactic === tac.id);
+    if (tacTechs.length === 0) return;
+    const avg = tacTechs.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / tacTechs.length;
+    tacticExposures[tac.id] = { avg, count: tacTechs.length, name: tac.name, color: tac.color };
+  });
+  const coverageGaps = Object.values(tacticExposures).sort((a, b) => b.avg - a.avg).slice(0, 5);
+
+  const topUndeployedControls = SECURITY_CONTROLS
+    .filter(c => !deployedControls.has(c.id))
+    .map(c => {
+      const totalReduction = Object.values(c.coverage).reduce((s, v) => s + Math.abs(v), 0);
+      return { ...c, impact: totalReduction };
+    })
+    .sort((a, b) => b.impact - a.impact)
+    .slice(0, 3);
+
+  const sectionStyle = { background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: "16px 20px", marginBottom: 12 };
+  const labelStyle = { fontSize: "9px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 };
+
+  return (
+    <>
+      <h3 style={{ fontSize: "12px", color: "#06b6d4", margin: "0 0 14px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
+        EXECUTIVE SUMMARY
+        {!popout && onPopout && <PopoutButton onClick={onPopout} title="Pop out Executive Summary" />}
+      </h3>
+
+      {/* Risk Score */}
+      <div style={{ ...sectionStyle, textAlign: "center" }}>
+        <div style={labelStyle}>Overall Risk Score</div>
+        <div style={{ fontSize: "48px", fontWeight: 700, color: riskColor, lineHeight: 1.1 }}>{riskScore}</div>
+        <div style={{ fontSize: "10px", color: "#64748b", marginTop: 4 }}>
+          {riskScore > 70 ? "Critical — Immediate action required" : riskScore > 40 ? "Moderate — Improvements recommended" : "Good — Maintain current posture"}
+        </div>
+      </div>
+
+      {/* Key Metrics Grid */}
+      <div style={{ ...sectionStyle }}>
+        <div style={labelStyle}>Key Metrics</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+          {[
+            { label: "Techniques", value: techniques.length, color: "#6366f1" },
+            { label: "Attack Chains", value: filteredChains.length, color: "#8b5cf6" },
+            { label: "Disruption Rate", value: (disruptionRate * 100).toFixed(0) + "%", color: disruptionRate > 0.7 ? "#22c55e" : "#f59e0b" },
+            { label: "Avg Exposure", value: (avgExposure * 100).toFixed(0) + "%", color: avgExposure > 0.6 ? "#ef4444" : "#f59e0b" },
+            { label: "Remediated", value: remediated.size, color: "#22c55e" },
+            { label: "Controls Deployed", value: deployedControls.size, color: "#14b8a6" },
+          ].map((m, i) => (
+            <div key={i} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: m.color }}>{m.value}</div>
+              <div style={{ fontSize: "8px", color: "#64748b" }}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top 5 Risks */}
+      <div style={{ ...sectionStyle }}>
+        <div style={labelStyle}>Top 5 Risks</div>
+        {topRisks.map((t, i) => {
+          const tactic = TACTICS.find(ta => ta.id === t.tactic);
+          return (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < 4 ? "1px solid #1e293b" : "none" }}>
+              <span style={{ fontSize: "12px", color: "#475569", width: 20, fontWeight: 700 }}>#{i + 1}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#f8fafc" }}>{t.id} — {t.name}</div>
+                <div style={{ fontSize: "9px", color: tactic?.color }}>{tactic?.name}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: t.exposure > 0.7 ? "#ef4444" : "#f59e0b" }}>{(t.exposure * 100).toFixed(0)}%</div>
+                <div style={{ fontSize: "8px", color: "#475569" }}>exposure</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Coverage Gaps */}
+      <div style={{ ...sectionStyle }}>
+        <div style={labelStyle}>Coverage Gaps (Highest Exposure Tactics)</div>
+        {coverageGaps.map((tac, i) => (
+          <div key={i} style={{ marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: 2 }}>
+              <span style={{ color: tac.color }}>{tac.name}</span>
+              <span style={{ color: tac.avg > 0.7 ? "#ef4444" : "#f59e0b" }}>{(tac.avg * 100).toFixed(0)}%</span>
+            </div>
+            <div style={{ height: 6, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: (tac.avg * 100) + "%", background: tac.color, borderRadius: 3, opacity: 0.7 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Recommended Actions */}
+      <div style={{ ...sectionStyle }}>
+        <div style={labelStyle}>Recommended Actions</div>
+        <div style={{ fontSize: "9px", color: "#94a3b8", marginBottom: 8 }}>Top remediation targets:</div>
+        {optimal.selected.slice(0, 3).map((id, i) => {
+          const t = techniques.find(t => t.id === id);
+          return (
+            <div key={id} style={{ fontSize: "10px", color: "#f59e0b", padding: "3px 0" }}>
+              {i + 1}. Remediate <strong>{id}</strong>{t ? " (" + t.name + ")" : ""}
+            </div>
+          );
+        })}
+        {topUndeployedControls.length > 0 && (
+          <>
+            <div style={{ fontSize: "9px", color: "#94a3b8", marginTop: 10, marginBottom: 4 }}>Top undeployed controls:</div>
+            {topUndeployedControls.map((c, i) => (
+              <div key={c.id} style={{ fontSize: "10px", color: "#14b8a6", padding: "3px 0" }}>
+                {i + 1}. Deploy <strong>{c.name}</strong> ({c.cost})
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Tactic Heatmap */}
+      <div style={{ ...sectionStyle }}>
+        <div style={labelStyle}>Tactic Exposure Heatmap</div>
+        {TACTICS.map(tac => {
+          const info = tacticExposures[tac.id];
+          if (!info) return null;
+          return (
+            <div key={tac.id} style={{ marginBottom: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8px", marginBottom: 1 }}>
+                <span style={{ color: tac.color }}>{tac.name}</span>
+                <span style={{ color: "#64748b" }}>{(info.avg * 100).toFixed(0)}% ({info.count})</span>
+              </div>
+              <div style={{ height: 8, background: "#1e293b", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: (info.avg * 100) + "%", borderRadius: 4,
+                  background: info.avg > 0.7 ? "#ef4444" : info.avg > 0.4 ? "#f59e0b" : "#22c55e",
+                  opacity: 0.8,
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
