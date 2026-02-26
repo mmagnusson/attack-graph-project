@@ -52,6 +52,13 @@ const TACTICS = [
   { id: "TA0040", name: "Impact", phase: 8, color: "#a855f7" },
 ];
 
+const CHAIN_COLORS = [
+  { color: "#f59e0b", label: "amber" },
+  { color: "#06b6d4", label: "cyan" },
+  { color: "#ec4899", label: "pink" },
+];
+const MAX_HIGHLIGHTED_CHAINS = 3;
+
 const TECHNIQUES = [
   { id: "T1595", name: "Active Scanning", tactic: "TA0043", baseCriticality: 0.3 },
   { id: "T1598", name: "Phishing for Info", tactic: "TA0043", baseCriticality: 0.5 },
@@ -400,16 +407,9 @@ function setCachedStix(version, data) {
 
 // ─── STIX Data Loader ─────────────────────────────────────────────────────────
 
-async function loadStixData() {
-  const version = "enterprise-attack-v2";
-  const cached = await getCachedStix(version).catch(() => null);
-  if (cached) return cached;
+function parseStixBundle(bundle) {
+  if (!bundle || !bundle.objects) throw new Error("Invalid STIX bundle: missing objects array");
 
-  const resp = await fetch("https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json");
-  if (!resp.ok) throw new Error("Failed to fetch STIX data: " + resp.status);
-  const bundle = await resp.json();
-
-  // Extract techniques (attack-patterns, skip sub-techniques)
   const techniques = [];
   const techById = {};
   bundle.objects.forEach(o => {
@@ -429,7 +429,8 @@ async function loadStixData() {
     techById[o.id] = techId;
   });
 
-  // Extract intrusion-set → technique relationships
+  if (techniques.length === 0) throw new Error("No valid techniques found in STIX bundle");
+
   const groupTechniques = {};
   const groupNames = {};
   bundle.objects.forEach(o => {
@@ -445,7 +446,6 @@ async function loadStixData() {
     groupTechniques[o.source_ref].push(techById[o.target_ref]);
   });
 
-  // Compute baseCriticality from usage frequency
   const usageCount = {};
   techniques.forEach(t => { usageCount[t.id] = 0; });
   Object.values(groupTechniques).forEach(techs => {
@@ -456,7 +456,6 @@ async function loadStixData() {
     t.baseCriticality = Math.max(0.1, (usageCount[t.id] || 0) / maxUsage);
   });
 
-  // Build attack chains from intrusion-sets
   const techPhase = {};
   techniques.forEach(t => { techPhase[t.id] = TACTIC_PHASE[t.tactic] ?? 99; });
   const techSet = new Set(techniques.map(t => t.id));
@@ -477,7 +476,6 @@ async function loadStixData() {
     }
   });
 
-  // Derive edges from chain co-occurrence
   const edgeSet = new Set();
   const edges = [];
   chains.forEach(chain => {
@@ -490,7 +488,19 @@ async function loadStixData() {
     }
   });
 
-  const result = { techniques, edges, chains };
+  return { techniques, edges, chains };
+}
+
+async function loadStixData() {
+  const version = "enterprise-attack-v2";
+  const cached = await getCachedStix(version).catch(() => null);
+  if (cached) return cached;
+
+  const resp = await fetch("https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json");
+  if (!resp.ok) throw new Error("Failed to fetch STIX data: " + resp.status);
+  const bundle = await resp.json();
+
+  const result = parseStixBundle(bundle);
   await setCachedStix(version, result).catch(() => {});
   return result;
 }
@@ -697,7 +707,7 @@ function ZoomButton({ label, onClick }) {
 }
 
 function GraphView({ techniques, edges, positions, exposures, betweenness, chainCoverage,
-  selectedTech, onSelectTech, highlightedChain, remediated, optimalSet,
+  selectedTech, onSelectTech, highlightedChains, remediated, optimalSet,
   viewHeight, viewWidth, phaseCenters, onNodeDrag, searchMatches,
   collapsedTactics, onToggleCollapse, chainBuilderMode, chainBuilderPath, onChainBuilderClick,
   isolateChain }) {
@@ -731,19 +741,67 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
   const vh = viewHeight || 420;
   const vw = viewWidth || 1000;
 
-  const chainEdges = useMemo(() => {
-    if (!highlightedChain) return new Set();
-    const s = new Set();
-    for (let i = 0; i < highlightedChain.path.length - 1; i++) {
-      s.add(highlightedChain.path[i] + "->" + highlightedChain.path[i + 1]);
-    }
-    return s;
-  }, [highlightedChain]);
+  // Multi-chain computation: per-chain projected paths, edges, nodes, colors
+  const displayTechSet = useMemo(() => new Set(techniques.map(t => t.id)), [techniques]);
 
-  const chainNodes = useMemo(() => {
-    if (!highlightedChain) return new Set();
-    return new Set(highlightedChain.path);
-  }, [highlightedChain]);
+  const chainComputations = useMemo(() => {
+    return highlightedChains.map((chain, colorIndex) => {
+      const projected = [];
+      for (const tid of chain.path) {
+        let mapped = tid;
+        if (!displayTechSet.has(tid)) {
+          const parentId = tid.includes('.') ? tid.split('.')[0] : null;
+          if (parentId && displayTechSet.has(parentId)) {
+            mapped = parentId;
+          } else {
+            continue;
+          }
+        }
+        if (projected.length === 0 || projected[projected.length - 1] !== mapped) {
+          projected.push(mapped);
+        }
+      }
+      const edgesSet = new Set();
+      for (let i = 0; i < projected.length - 1; i++) {
+        edgesSet.add(projected[i] + "->" + projected[i + 1]);
+      }
+      return { chain, colorIndex, projected, edges: edgesSet, nodes: new Set(projected), color: CHAIN_COLORS[colorIndex].color };
+    });
+  }, [highlightedChains, displayTechSet]);
+
+  const anyChainNode = useMemo(() => {
+    const s = new Set();
+    chainComputations.forEach(c => c.nodes.forEach(n => s.add(n)));
+    return s;
+  }, [chainComputations]);
+
+  const anyChainEdge = useMemo(() => {
+    const s = new Set();
+    chainComputations.forEach(c => c.edges.forEach(e => s.add(e)));
+    return s;
+  }, [chainComputations]);
+
+  const nodeChainMap = useMemo(() => {
+    const m = {};
+    chainComputations.forEach(c => {
+      c.nodes.forEach(n => {
+        if (!m[n]) m[n] = [];
+        m[n].push(c.colorIndex);
+      });
+    });
+    return m;
+  }, [chainComputations]);
+
+  const edgeChainMap = useMemo(() => {
+    const m = {};
+    chainComputations.forEach(c => {
+      c.edges.forEach(e => {
+        if (!m[e]) m[e] = [];
+        m[e].push(c.colorIndex);
+      });
+    });
+    return m;
+  }, [chainComputations]);
 
   // Collapse support: maps and memos
   const techTacticMap = useMemo(() => {
@@ -796,17 +854,21 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
 
   // Chain path edges that don't exist in the graph edge set — render explicitly
   const missingChainEdges = useMemo(() => {
-    if (!highlightedChain) return [];
-    const edgeSet = new Set(edges.map(e => e.from + "->" + e.to));
+    if (highlightedChains.length === 0) return [];
+    const graphEdgeSet = new Set(edges.map(e => e.from + "->" + e.to));
     const missing = [];
-    for (let i = 0; i < highlightedChain.path.length - 1; i++) {
-      const key = highlightedChain.path[i] + "->" + highlightedChain.path[i + 1];
-      if (!edgeSet.has(key)) {
-        missing.push({ from: highlightedChain.path[i], to: highlightedChain.path[i + 1] });
+    const seen = new Set();
+    chainComputations.forEach(c => {
+      for (let i = 0; i < c.projected.length - 1; i++) {
+        const key = c.projected[i] + "->" + c.projected[i + 1];
+        if (!graphEdgeSet.has(key) && !seen.has(key + ":" + c.colorIndex)) {
+          seen.add(key + ":" + c.colorIndex);
+          missing.push({ from: c.projected[i], to: c.projected[i + 1], colorIndex: c.colorIndex, color: c.color });
+        }
       }
-    }
+    });
     return missing;
-  }, [highlightedChain, edges]);
+  }, [highlightedChains, chainComputations, edges]);
 
   // Chain builder edges for SVG rendering
   const builderEdges = useMemo(() => {
@@ -1024,6 +1086,11 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
           <marker id="arrowhead-active" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
             <polygon points="0 0, 6 2, 0 4" fill="#f59e0b" />
           </marker>
+          {CHAIN_COLORS.map((cc, i) => (
+            <marker key={"chain-marker-" + i} id={"arrowhead-chain-" + i} markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
+              <polygon points="0 0, 6 2, 0 4" fill={cc.color} />
+            </marker>
+          ))}
           <marker id="arrowhead-builder" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
             <polygon points="0 0, 6 2, 0 4" fill="#a855f7" />
           </marker>
@@ -1075,8 +1142,8 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             return (
               <line key={"chain-gap-" + i} x1={from.x + ux * r} y1={from.y + uy * r}
                 x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
-                stroke="#f59e0b" strokeWidth={2} strokeOpacity={0.9}
-                markerEnd="url(#arrowhead-active)" />
+                stroke={e.color} strokeWidth={2} strokeOpacity={0.9}
+                markerEnd={"url(#arrowhead-chain-" + e.colorIndex + ")"} />
             );
           })}
 
@@ -1102,9 +1169,11 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             const from = getNodePos(e.from);
             const to = getNodePos(e.to);
             if (!from || !to) return null;
-            const isChainEdge = chainEdges.has(e.from + "->" + e.to);
+            const edgeKey = e.from + "->" + e.to;
+            const chainColors = edgeChainMap[edgeKey];
+            const isChainEdge = !!chainColors;
             const isRemediatedEdge = remediated.has(e.from) || remediated.has(e.to);
-            const dimmed = highlightedChain && !isChainEdge;
+            const dimmed = highlightedChains.length > 0 && !isChainEdge;
             if (dimmed && isolateChain) return null;
             const searchDimmedEdge = searchMatches && searchMatches.size > 0 && !searchMatches.has(e.from) && !searchMatches.has(e.to);
 
@@ -1116,15 +1185,37 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             const uy = dy / len;
             const r = 14;
 
+            if (isChainEdge && chainColors.length > 1) {
+              const px = -uy, py = ux;
+              const spacing = 3;
+              const totalWidth = (chainColors.length - 1) * spacing;
+              return (
+                <g key={i}>
+                  {chainColors.map((ci, j) => {
+                    const offset = -totalWidth / 2 + j * spacing;
+                    return (
+                      <line key={j}
+                        x1={from.x + ux * r + px * offset} y1={from.y + uy * r + py * offset}
+                        x2={to.x - ux * (r + 6) + px * offset} y2={to.y - uy * (r + 6) + py * offset}
+                        stroke={CHAIN_COLORS[ci].color} strokeWidth={1.5} strokeOpacity={searchDimmedEdge ? 0.04 : 0.9}
+                        markerEnd={"url(#arrowhead-chain-" + ci + ")"}
+                      />
+                    );
+                  })}
+                </g>
+              );
+            }
+
+            const chainColor = isChainEdge ? CHAIN_COLORS[chainColors[0]].color : null;
             return (
               <line
                 key={i}
                 x1={from.x + ux * r} y1={from.y + uy * r}
                 x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
-                stroke={isRemediatedEdge ? "#22c55e" : isChainEdge ? "#f59e0b" : "#334155"}
+                stroke={isRemediatedEdge ? "#22c55e" : isChainEdge ? chainColor : "#334155"}
                 strokeWidth={isChainEdge ? 2 : 0.7}
                 strokeOpacity={searchDimmedEdge ? 0.04 : dimmed ? 0.08 : isRemediatedEdge ? 0.3 : isChainEdge ? 0.9 : 0.2}
-                markerEnd={isChainEdge ? "url(#arrowhead-active)" : "url(#arrowhead)"}
+                markerEnd={isChainEdge ? "url(#arrowhead-chain-" + chainColors[0] + ")" : "url(#arrowhead)"}
                 strokeDasharray={isRemediatedEdge ? "3,3" : "none"}
               />
             );
@@ -1140,10 +1231,11 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             const cc = chainCoverage[t.id] ?? 0;
             const priority = bc * exposure;
             const isSelected = selectedTech === t.id;
-            const isInChain = chainNodes.has(t.id);
+            const nodeColors = nodeChainMap[t.id];
+            const isInChain = !!nodeColors;
             const isRemediated = remediated.has(t.id);
             const isOptimal = optimalSet.includes(t.id);
-            const dimmed = highlightedChain && !isInChain;
+            const dimmed = highlightedChains.length > 0 && !isInChain;
             if (dimmed && isolateChain) return null;
             const searchDimmed = searchMatches && searchMatches.size > 0 && !searchMatches.has(t.id);
 
@@ -1152,6 +1244,8 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             const nodeColor = isRemediated ? "#22c55e" : tactic?.color || "#6366f1";
             const baseOpacity = dimmed ? 0.15 : exposure < 0.2 ? 0.3 : isSub ? 0.7 : 1;
             const opacity = searchDimmed ? Math.min(baseOpacity, 0.12) : baseOpacity;
+
+            const chainStrokeColor = isInChain && nodeColors.length === 1 ? CHAIN_COLORS[nodeColors[0]].color : null;
 
             return (
               <g key={t.id}
@@ -1178,10 +1272,23 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
                 )}
                 <circle cx={pos.x} cy={pos.y} r={radius}
                   fill={nodeColor} fillOpacity={isRemediated ? 0.3 : 0.8}
-                  stroke={isSelected ? "#fff" : isInChain ? "#f59e0b" : "transparent"}
+                  stroke={isSelected ? "#fff" : chainStrokeColor || "transparent"}
                   strokeWidth={isSelected ? 2 : isInChain ? 1.5 : 0}
                   filter={isSelected || isInChain ? "url(#glow)" : "none"}
                 />
+                {isInChain && nodeColors.length > 1 && (() => {
+                  const ringR = radius + 1;
+                  const circumference = 2 * Math.PI * ringR;
+                  const segLen = circumference / nodeColors.length;
+                  return nodeColors.map((ci, j) => (
+                    <circle key={"ring-" + j} cx={pos.x} cy={pos.y} r={ringR}
+                      fill="none" stroke={CHAIN_COLORS[ci].color} strokeWidth={2}
+                      strokeDasharray={segLen + " " + (circumference - segLen)}
+                      strokeDashoffset={-j * segLen}
+                      filter="url(#glow)"
+                    />
+                  ));
+                })()}
                 {cc > 0 && !dimmed && (
                   <text x={pos.x} y={pos.y + 3} textAnchor="middle" fill="#fff" fontSize="8" fontWeight="bold" fontFamily="monospace">
                     {cc}
@@ -1296,16 +1403,46 @@ function PopoutPlaceholder({ label, onRestore }) {
   );
 }
 
+// ─── URL State Sharing ────────────────────────────────────────────────────────
+
+function encodeStateToHash(state) {
+  const p = new URLSearchParams();
+  if (state.dataSource && state.dataSource !== "stix") p.set("ds", state.dataSource);
+  if (state.envPreset && state.envPreset !== "government") p.set("env", state.envPreset);
+  if (state.sectorFilter && state.sectorFilter !== "all") p.set("sec", state.sectorFilter);
+  if (state.remediationBudget && state.remediationBudget !== 5) p.set("budget", String(state.remediationBudget));
+  if (state.remediated && state.remediated.length > 0) p.set("rem", state.remediated.join(","));
+  if (state.deployedControls && state.deployedControls.length > 0) p.set("ctrl", state.deployedControls.join(","));
+  if (state.chains && state.chains.length > 0) p.set("chains", state.chains.join("|"));
+  return p.toString();
+}
+
+function decodeHashToState(hash) {
+  if (!hash || hash.length < 2) return null;
+  try {
+    const p = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const state = {};
+    if (p.has("ds")) state.dataSource = p.get("ds");
+    if (p.has("env")) state.envPreset = p.get("env");
+    if (p.has("sec")) state.sectorFilter = p.get("sec");
+    if (p.has("budget")) state.remediationBudget = parseInt(p.get("budget"), 10);
+    if (p.has("rem")) state.remediated = p.get("rem").split(",").filter(Boolean);
+    if (p.has("ctrl")) state.deployedControls = p.get("ctrl").split(",").filter(Boolean);
+    if (p.has("chains")) state.chains = p.get("chains").split("|").filter(Boolean);
+    return Object.keys(state).length > 0 ? state : null;
+  } catch (e) { return null; }
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 function AttackPathOptimizer() {
   const [envPreset, setEnvPreset] = useState("government");
   const [exposures, setExposures] = useState({});
   const [selectedTech, setSelectedTech] = useState(null);
-  const [highlightedChain, setHighlightedChain] = useState(null);
+  const [highlightedChains, setHighlightedChains] = useState([]);
   const [isolateChain, setIsolateChain] = useState(false);
-  // Auto-clear isolate when chain is deselected
-  useEffect(() => { if (!highlightedChain) setIsolateChain(false); }, [highlightedChain]);
+  // Auto-clear isolate when all chains are deselected
+  useEffect(() => { if (highlightedChains.length === 0) setIsolateChain(false); }, [highlightedChains]);
   const [remediated, setRemediated] = useState(new Set());
   const [remediationBudget, setRemediationBudget] = useState(5);
   const [sectorFilter, setSectorFilter] = useState("all");
@@ -1318,6 +1455,9 @@ function AttackPathOptimizer() {
   const [customData, setCustomData] = useState(null);
   const [stixLoading, setStixLoading] = useState(false);
   const [stixError, setStixError] = useState(null);
+  const [uploadedFileName, setUploadedFileName] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Phase 5: Security Controls
   const [deployedControls, setDeployedControls] = useState(new Set());
@@ -1358,6 +1498,9 @@ function AttackPathOptimizer() {
   const [showSaved, setShowSaved] = useState(false);
   const skipEnvEffect = useRef(false);
   const mountTime = useRef(Date.now());
+  // Feature: Shareable URLs
+  const hashChainNamesRef = useRef(null);
+  const [shareConfirm, setShareConfirm] = useState(false);
 
   // Phase 1: Derive active data from source
   const activeTechniques = customData?.techniques || TECHNIQUES;
@@ -1428,8 +1571,20 @@ function AttackPathOptimizer() {
     document.body.style.userSelect = 'none';
   }, []);
 
-  // Phase 3: Restore state from localStorage on mount
+  // Phase 3: Restore state from hash or localStorage on mount
   useEffect(() => {
+    const hashState = decodeHashToState(window.location.hash);
+    if (hashState) {
+      if (hashState.envPreset) { skipEnvEffect.current = true; setEnvPreset(hashState.envPreset); }
+      if (hashState.sectorFilter) setSectorFilter(hashState.sectorFilter);
+      if (hashState.remediationBudget) setRemediationBudget(hashState.remediationBudget);
+      if (hashState.dataSource) setDataSource(hashState.dataSource);
+      if (hashState.remediated) setRemediated(new Set(hashState.remediated));
+      if (hashState.deployedControls) setDeployedControls(new Set(hashState.deployedControls));
+      if (hashState.chains) hashChainNamesRef.current = hashState.chains;
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      return;
+    }
     try {
       const raw = localStorage.getItem("attackPathOptimizer");
       if (!raw) return;
@@ -1440,8 +1595,18 @@ function AttackPathOptimizer() {
       if (saved.dataSource) setDataSource(saved.dataSource);
       if (saved.exposures) setExposures(saved.exposures);
       if (saved.remediated) setRemediated(new Set(saved.remediated));
+      if (saved.deployedControls) setDeployedControls(new Set(saved.deployedControls));
     } catch (e) {}
   }, []);
+
+  // Resolve chain names from hash once chains are loaded
+  useEffect(() => {
+    if (!hashChainNamesRef.current || activeChains.length === 0) return;
+    const names = hashChainNamesRef.current;
+    hashChainNamesRef.current = null;
+    const matched = names.map(n => activeChains.find(c => c.name === n)).filter(Boolean);
+    if (matched.length > 0) setHighlightedChains(matched.slice(0, MAX_HIGHLIGHTED_CHAINS));
+  }, [activeChains]);
 
   // Environment preset → exposures
   useEffect(() => {
@@ -1459,8 +1624,10 @@ function AttackPathOptimizer() {
     const timer = setTimeout(() => {
       try {
         localStorage.setItem("attackPathOptimizer", JSON.stringify({
-          envPreset, sectorFilter, remediationBudget, dataSource,
+          envPreset, sectorFilter, remediationBudget,
+          dataSource: dataSource === "upload" ? "builtin" : dataSource,
           exposures, remediated: [...remediated],
+          deployedControls: [...deployedControls],
         }));
         if (Date.now() - mountTime.current > 1000) {
           setShowSaved(true);
@@ -1469,7 +1636,7 @@ function AttackPathOptimizer() {
       } catch (e) {}
     }, 500);
     return () => clearTimeout(timer);
-  }, [envPreset, sectorFilter, remediationBudget, dataSource, exposures, remediated]);
+  }, [envPreset, sectorFilter, remediationBudget, dataSource, exposures, remediated, deployedControls]);
 
   // Phase 2: STIX data loading
   useEffect(() => {
@@ -1485,9 +1652,13 @@ function AttackPathOptimizer() {
         setStixLoading(false);
         setDataSource("builtin");
       });
+    } else if (dataSource === "upload") {
+      // Data already set by handleStixFileUpload
     } else {
       setCustomData(null);
       setStixError(null);
+      setUploadedFileName(null);
+      setUploadError(null);
     }
   }, [dataSource]);
 
@@ -1556,6 +1727,55 @@ function AttackPathOptimizer() {
     setRemediated(new Set(optimal.selected));
   };
 
+  const toggleHighlightedChain = useCallback((chain) => {
+    setHighlightedChains(prev => {
+      const idx = prev.findIndex(c => c.name === chain.name);
+      if (idx >= 0) return prev.filter((_, i) => i !== idx);
+      if (prev.length >= MAX_HIGHLIGHTED_CHAINS) return [...prev.slice(1), chain];
+      return [...prev, chain];
+    });
+  }, []);
+
+  const handleStixFileUpload = useCallback((file) => {
+    setUploadError(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const bundle = JSON.parse(e.target.result);
+        const result = parseStixBundle(bundle);
+        setCustomData(result);
+        setUploadedFileName(file.name);
+        setDataSource("upload");
+      } catch (err) {
+        setUploadError(err.message || "Failed to parse STIX file");
+      }
+    };
+    reader.onerror = () => setUploadError("Failed to read file");
+    reader.readAsText(file);
+  }, []);
+
+  const handleShare = useCallback(() => {
+    const state = {
+      dataSource: dataSource === "upload" ? "builtin" : dataSource,
+      envPreset,
+      sectorFilter,
+      remediationBudget,
+      remediated: [...remediated],
+      deployedControls: [...deployedControls],
+      chains: highlightedChains.map(c => c.name),
+    };
+    const hash = encodeStateToHash(state);
+    const url = window.location.pathname + window.location.search + (hash ? "#" + hash : "");
+    window.history.replaceState(null, "", url);
+    navigator.clipboard.writeText(window.location.origin + url).then(() => {
+      setShareConfirm(true);
+      setTimeout(() => setShareConfirm(false), 2000);
+    }).catch(() => {
+      setShareConfirm(true);
+      setTimeout(() => setShareConfirm(false), 2000);
+    });
+  }, [dataSource, envPreset, sectorFilter, remediationBudget, remediated, deployedControls, highlightedChains]);
+
   const handleNodeDrag = useCallback((nodeId, dx, dy) => {
     setCustomPositions(prev => {
       const base = layoutResult.positions[nodeId] || { x: 0, y: 0 };
@@ -1567,7 +1787,7 @@ function AttackPathOptimizer() {
   const resetAll = () => {
     setRemediated(new Set());
     setSelectedTech(null);
-    setHighlightedChain(null);
+    setHighlightedChains([]);
     setShowAnalysis(false);
     setEnvPreset("government");
     setSectorFilter("all");
@@ -1589,6 +1809,9 @@ function AttackPathOptimizer() {
     setChainBuilderName("");
     setShowExecutiveSummary(false);
     setPopoutExecutive(false);
+    setUploadedFileName(null);
+    setUploadError(null);
+    setShareConfirm(false);
     try { localStorage.removeItem("attackPathOptimizer"); localStorage.removeItem("attackPathOptimizer_collapsed"); } catch (e) {}
     // Force STIX reload: briefly switch away then back so the effect always fires
     setDataSource("builtin");
@@ -1687,11 +1910,20 @@ function AttackPathOptimizer() {
           {/* Phase 2: Data Source selector */}
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
             <label style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Data Source</label>
-            <select value={dataSource} onChange={e => setDataSource(e.target.value)}
-              style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 8px", fontSize: "11px", fontFamily: "inherit" }}>
-              <option value="builtin">Built-in (8 chains)</option>
-              <option value="stix">MITRE ATT&CK STIX (Live)</option>
-            </select>
+            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+              <select value={dataSource} onChange={e => setDataSource(e.target.value)}
+                style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 8px", fontSize: "11px", fontFamily: "inherit" }}>
+                <option value="builtin">Built-in (8 chains)</option>
+                <option value="stix">MITRE ATT&CK STIX (Live)</option>
+                {uploadedFileName && <option value="upload">Upload: {uploadedFileName}</option>}
+              </select>
+              <input type="file" ref={fileInputRef} accept=".json" style={{ display: "none" }}
+                onChange={e => { if (e.target.files[0]) handleStixFileUpload(e.target.files[0]); e.target.value = ""; }} />
+              <button onClick={() => fileInputRef.current?.click()} style={{
+                background: "#1e293b", color: "#06b6d4", border: "1px solid #06b6d4", borderRadius: "4px",
+                padding: "4px 8px", fontSize: "9px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+              }}>UPLOAD</button>
+            </div>
           </div>
           <span style={{ fontSize: "9px", color: "#64748b", padding: "2px 6px", background: "#1e293b", borderRadius: "8px", alignSelf: "flex-end", marginBottom: "2px" }}>
             {displayTechniques.length}{showSubTechniques && displayTechniques.length !== activeTechniques.length ? "/" + activeTechniques.length : ""} techniques, {activeChains.length} chains
@@ -1699,6 +1931,11 @@ function AttackPathOptimizer() {
           {stixError && (
             <span style={{ fontSize: "9px", color: "#ef4444", padding: "2px 6px", background: "#ef444415", borderRadius: "4px", alignSelf: "flex-end", marginBottom: "2px" }}>
               STIX: {stixError}
+            </span>
+          )}
+          {uploadError && (
+            <span style={{ fontSize: "9px", color: "#ef4444", padding: "2px 6px", background: "#ef444415", borderRadius: "4px", alignSelf: "flex-end", marginBottom: "2px" }}>
+              Upload: {uploadError}
             </span>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
@@ -1795,7 +2032,7 @@ function AttackPathOptimizer() {
         }}>
           EXECUTIVE
         </button>
-        {highlightedChain && (
+        {highlightedChains.length > 0 && (
           <button onClick={() => setIsolateChain(prev => !prev)} style={{
             background: isolateChain ? "#ec4899" : "transparent", color: isolateChain ? "#fff" : "#ec4899",
             border: "1px solid #ec4899", borderRadius: "4px",
@@ -1811,6 +2048,15 @@ function AttackPathOptimizer() {
           }}>
             AUTO-SPACE
           </button>
+        )}
+        <button onClick={handleShare} style={{
+          background: "transparent", color: "#06b6d4", border: "1px solid #06b6d4", borderRadius: "4px",
+          padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>
+          SHARE
+        </button>
+        {shareConfirm && (
+          <span style={{ fontSize: "9px", color: "#06b6d4", opacity: 0.9 }}>URL copied!</span>
         )}
         <button onClick={resetAll} style={{
           background: "transparent", color: "#64748b", border: "1px solid #334155", borderRadius: "4px",
@@ -1833,12 +2079,15 @@ function AttackPathOptimizer() {
       {/* Split container: graph + divider + bottom panels */}
       <div id="split-container" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Graph area */}
-        <div style={{ height: graphHeight, flexShrink: 0, overflow: "hidden", padding: "8px 16px", position: "relative" }}>
+        <div style={{ height: graphHeight, flexShrink: 0, overflow: "hidden", padding: "8px 16px", position: "relative" }}
+          onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+          onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f && f.name.endsWith('.json')) handleStixFileUpload(f); }}
+        >
           <GraphView
             techniques={displayTechniques} edges={displayEdges} positions={positions}
             exposures={effectiveExposures} betweenness={betweenness} chainCoverage={chainCoverage}
             selectedTech={selectedTech} onSelectTech={setSelectedTech}
-            highlightedChain={highlightedChain}
+            highlightedChains={highlightedChains}
             remediated={remediated}
             optimalSet={optimal.selected}
             viewHeight={viewHeight}
@@ -1997,17 +2246,22 @@ function AttackPathOptimizer() {
                     }}>{"\u2715"}</button>
                   )}
                 </div>
-                {displayedChainStatus.map((chain, i) => (
+                {displayedChainStatus.map((chain, i) => {
+                  const activeIdx = highlightedChains.findIndex(c => c.name === chain.name);
+                  const isActive = activeIdx >= 0;
+                  const activeColor = isActive ? CHAIN_COLORS[activeIdx].color : null;
+                  return (
                   <div key={i}
-                    onClick={() => setHighlightedChain(highlightedChain?.name === chain.name ? null : chain)}
+                    onClick={() => toggleHighlightedChain(chain)}
                     style={{
                       padding: "8px 10px", marginBottom: "4px", borderRadius: "4px", cursor: "pointer",
-                      background: highlightedChain?.name === chain.name ? "#1e293b" : "transparent",
-                      border: "1px solid " + (chain.broken ? "#22c55e33" : "#ef444433"),
+                      background: isActive ? "#1e293b" : "transparent",
+                      border: "1px solid " + (isActive ? activeColor + "66" : chain.broken ? "#22c55e33" : "#ef444433"),
                       opacity: chain.broken ? 0.6 : 1,
                     }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: "11px", fontWeight: 600, color: chain.broken ? "#22c55e" : "#f8fafc" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: chain.broken ? "#22c55e" : "#f8fafc", display: "flex", alignItems: "center", gap: "6px" }}>
+                        {isActive && <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: activeColor, flexShrink: 0 }} />}
                         {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
                         {chain.custom && <span style={{ fontSize: "7px", color: "#a855f7", background: "#a855f715", padding: "1px 4px", borderRadius: 3, marginLeft: 6, fontWeight: 700 }}>CUSTOM</span>}
                       </span>
@@ -2053,7 +2307,8 @@ function AttackPathOptimizer() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </>
             );
             return (
@@ -2184,7 +2439,7 @@ function AttackPathOptimizer() {
                         fontSize: "9px", color: "#94a3b8", padding: "2px 0",
                         cursor: "pointer", textDecoration: chainStatus[filteredChains.indexOf(c)]?.broken ? "line-through" : "none",
                         opacity: chainStatus[filteredChains.indexOf(c)]?.broken ? 0.5 : 1,
-                      }} onClick={() => setHighlightedChain(c)}>
+                      }} onClick={() => toggleHighlightedChain(c)}>
                         {"\u2192"} {c.name}
                       </div>
                     ))}
