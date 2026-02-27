@@ -1441,7 +1441,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
   selectedTech, onSelectTech, highlightedChains, remediated, optimalSet,
   viewHeight, viewWidth, phaseCenters, onNodeDrag, searchMatches,
   collapsedTactics, onToggleCollapse, chainBuilderMode, chainBuilderPath, onChainBuilderClick,
-  isolateChain, gapNodes, techDescriptions }) {
+  isolateChain, gapNodes, techDescriptions, onPopout }) {
 
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -1759,47 +1759,6 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
     setTransform({ x: vw / 2 - cx * scale, y: vh / 2 - cy * scale, scale });
   }, [positions, vw, vh]);
 
-  const handlePopout = useCallback(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const clone = svg.cloneNode(true);
-    const g = clone.querySelector('g');
-    if (g) g.setAttribute('transform', 'translate(0,0) scale(1)');
-    clone.setAttribute('style', 'width:100vw;height:100vh;background:#0a0f1a;cursor:grab;');
-    const svgString = new XMLSerializer().serializeToString(clone);
-    const vhNow = viewHeightRef.current;
-    const vwNow = viewWidthRef.current;
-    const halfVh = Math.round(vhNow / 2);
-    const halfVw = Math.round(vwNow / 2);
-    const scriptClose = '</' + 'script>';
-    const win = window.open('', 'attack-graph-popout', 'width=1400,height=800');
-    if (!win) return;
-    win.document.write('<!DOCTYPE html><html><head><title>ATT&CK Graph</title>' +
-      '<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">' +
-      '<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0f1a;overflow:hidden}svg{width:100vw;height:100vh}' +
-      '.ctrls{position:fixed;top:12px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:10}' +
-      '.ctrls button{width:32px;height:32px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:16px;font-family:"JetBrains Mono",monospace}' +
-      '.ctrls button:hover{background:#334155}' +
-      '.zlvl{position:fixed;bottom:12px;right:12px;font-size:10px;color:#64748b;font-family:"JetBrains Mono",monospace;background:rgba(10,15,26,0.8);padding:2px 8px;border-radius:3px}</style></head><body>' +
-      '<div class="ctrls"><button id="zi">+</button><button id="zo">\u2212</button><button id="zr">\u21BA</button></div>' +
-      '<div class="zlvl" id="zl">100%</div>' + svgString +
-      '<script>' +
-      'var svg=document.querySelector("svg"),g=svg.querySelector("g"),tx=0,ty=0,sc=1,ip=false,lx=0,ly=0;' +
-      'function upd(){g.setAttribute("transform","translate("+tx+","+ty+") scale("+sc+")");document.getElementById("zl").textContent=(sc*100).toFixed(0)+"%"}' +
-      'svg.addEventListener("wheel",function(e){e.preventDefault();var r=svg.getBoundingClientRect(),mx=(e.clientX-r.left)/r.width*' + vwNow + ',' +
-      'my=(e.clientY-r.top)/r.height*' + vhNow + ',f=e.deltaY>0?0.9:1.1,ns=Math.max(0.1,Math.min(20,sc*f)),rt=ns/sc;' +
-      'tx=mx-(mx-tx)*rt;ty=my-(my-ty)*rt;sc=ns;upd()},{passive:false});' +
-      'svg.addEventListener("mousedown",function(e){ip=true;lx=e.clientX;ly=e.clientY;svg.style.cursor="grabbing"});' +
-      'window.addEventListener("mousemove",function(e){if(!ip)return;var r=svg.getBoundingClientRect();' +
-      'tx+=(e.clientX-lx)/r.width*' + vwNow + ';ty+=(e.clientY-ly)/r.height*' + vhNow + ';lx=e.clientX;ly=e.clientY;upd()});' +
-      'window.addEventListener("mouseup",function(){ip=false;svg.style.cursor="grab"});' +
-      'document.getElementById("zi").onclick=function(){var ns=Math.min(20,sc*1.3),rt=ns/sc;tx=' + halfVw + '-(' + halfVw + '-tx)*rt;ty=' + halfVh + '-(' + halfVh + '-ty)*rt;sc=ns;upd()};' +
-      'document.getElementById("zo").onclick=function(){var ns=Math.max(0.1,sc*0.77),rt=ns/sc;tx=' + halfVw + '-(' + halfVw + '-tx)*rt;ty=' + halfVh + '-(' + halfVh + '-ty)*rt;sc=ns;upd()};' +
-      'document.getElementById("zr").onclick=function(){tx=0;ty=0;sc=1;upd()};' +
-      scriptClose + '</body></html>');
-    win.document.close();
-  }, []);
-
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div style={{ position: "absolute", top: 8, right: 8, display: "flex", flexDirection: "column", gap: 4, zIndex: 10 }}>
@@ -1807,7 +1766,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
         <ZoomButton label={"\u2212"} onClick={zoomOut} />
         <ZoomButton label={"\u21BA"} onClick={resetZoom} />
         <ZoomButton label="FIT" onClick={zoomToFit} />
-        <ZoomButton label={"\u2197"} onClick={handlePopout} />
+        {onPopout && <ZoomButton label={"\u2197"} onClick={onPopout} />}
       </div>
       <div style={{ position: "absolute", bottom: 8, right: 8, fontSize: "9px", color: "#64748b", fontFamily: "monospace", background: "rgba(10,15,26,0.7)", padding: "2px 6px", borderRadius: 3, zIndex: 10 }}>
         {(transform.scale * 100).toFixed(0)}%
@@ -2113,7 +2072,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
 
 // ─── Popout Helpers ───────────────────────────────────────────────────────────
 
-function PopoutPanel({ title, width, height, onClose, children }) {
+function PopoutPanel({ title, width, height, onClose, children, graphMode }) {
   const [container, setContainer] = useState(null);
   const winRef = useRef(null);
 
@@ -2134,7 +2093,7 @@ function PopoutPanel({ title, width, height, onClose, children }) {
       '::-webkit-scrollbar-thumb:hover{background:#334155}' +
       '</style>';
     const div = win.document.createElement('div');
-    div.style.cssText = 'padding:12px 16px;height:100vh;overflow:auto';
+    div.style.cssText = graphMode ? 'height:100vh;overflow:hidden;padding:0' : 'padding:12px 16px;height:100vh;overflow:auto';
     win.document.body.appendChild(div);
     setContainer(div);
 
@@ -2257,6 +2216,7 @@ function AttackPathOptimizer() {
   // Gap Analysis
   const [showGapAnalysis, setShowGapAnalysis] = useState(false);
   const [popoutGapAnalysis, setPopoutGapAnalysis] = useState(false);
+  const [popoutGraph, setPopoutGraph] = useState(false);
 
   // Node dragging: custom position overrides
   const [customPositions, setCustomPositions] = useState({});
@@ -2695,6 +2655,7 @@ function AttackPathOptimizer() {
     setShowBottomPanels(true);
     setShowGapAnalysis(false);
     setPopoutGapAnalysis(false);
+    setPopoutGraph(false);
     setPhaseWeighting(false);
     setSelectedPlatforms(null);
     setControlPreset("none");
@@ -3190,34 +3151,73 @@ function AttackPathOptimizer() {
           onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
           onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f && f.name.endsWith('.json')) handleStixFileUpload(f); }}
         >
-          <GraphView
-            techniques={displayTechniques} edges={displayEdges} positions={positions}
-            exposures={effectiveExposures} betweenness={betweenness} chainCoverage={chainCoverage}
-            selectedTech={selectedTech} onSelectTech={setSelectedTech}
-            highlightedChains={highlightedChains}
-            remediated={remediated}
-            optimalSet={optimal.selected}
-            viewHeight={viewHeight}
-            viewWidth={viewWidth}
-            phaseCenters={phaseCenters}
-            onNodeDrag={handleNodeDrag}
-            searchMatches={techSearchMatches}
-            collapsedTactics={collapsedTactics}
-            onToggleCollapse={(tacId) => setCollapsedTactics(prev => {
-              const next = new Set(prev);
-              if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
-              try { localStorage.setItem("attackPathOptimizer_collapsed", JSON.stringify([...next])); } catch(e) {}
-              return next;
-            })}
-            isolateChain={isolateChain}
-            chainBuilderMode={chainBuilderMode}
-            chainBuilderPath={chainBuilderPath}
-            onChainBuilderClick={(techId) => {
-              if (!chainBuilderPath.includes(techId)) setChainBuilderPath(prev => [...prev, techId]);
-            }}
-            gapNodes={gapNodeSet}
-            techDescriptions={activeTechDescriptions}
-          />
+          {popoutGraph ? (
+            <PopoutPlaceholder label="Graph" onRestore={() => setPopoutGraph(false)} />
+          ) : (
+            <GraphView
+              techniques={displayTechniques} edges={displayEdges} positions={positions}
+              exposures={effectiveExposures} betweenness={betweenness} chainCoverage={chainCoverage}
+              selectedTech={selectedTech} onSelectTech={setSelectedTech}
+              highlightedChains={highlightedChains}
+              remediated={remediated}
+              optimalSet={optimal.selected}
+              viewHeight={viewHeight}
+              viewWidth={viewWidth}
+              phaseCenters={phaseCenters}
+              onNodeDrag={handleNodeDrag}
+              searchMatches={techSearchMatches}
+              collapsedTactics={collapsedTactics}
+              onToggleCollapse={(tacId) => setCollapsedTactics(prev => {
+                const next = new Set(prev);
+                if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
+                try { localStorage.setItem("attackPathOptimizer_collapsed", JSON.stringify([...next])); } catch(e) {}
+                return next;
+              })}
+              isolateChain={isolateChain}
+              chainBuilderMode={chainBuilderMode}
+              chainBuilderPath={chainBuilderPath}
+              onChainBuilderClick={(techId) => {
+                if (!chainBuilderPath.includes(techId)) setChainBuilderPath(prev => [...prev, techId]);
+              }}
+              gapNodes={gapNodeSet}
+              techDescriptions={activeTechDescriptions}
+              onPopout={() => setPopoutGraph(true)}
+            />
+          )}
+          {popoutGraph && (
+            <PopoutPanel title="ATT&CK Graph" width={1400} height={900} onClose={() => setPopoutGraph(false)} graphMode>
+              <div style={{ width: "100%", height: "100vh" }}>
+                <GraphView
+                  techniques={displayTechniques} edges={displayEdges} positions={positions}
+                  exposures={effectiveExposures} betweenness={betweenness} chainCoverage={chainCoverage}
+                  selectedTech={selectedTech} onSelectTech={setSelectedTech}
+                  highlightedChains={highlightedChains}
+                  remediated={remediated}
+                  optimalSet={optimal.selected}
+                  viewHeight={900}
+                  viewWidth={1400}
+                  phaseCenters={phaseCenters}
+                  onNodeDrag={handleNodeDrag}
+                  searchMatches={techSearchMatches}
+                  collapsedTactics={collapsedTactics}
+                  onToggleCollapse={(tacId) => setCollapsedTactics(prev => {
+                    const next = new Set(prev);
+                    if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
+                    try { localStorage.setItem("attackPathOptimizer_collapsed", JSON.stringify([...next])); } catch(e) {}
+                    return next;
+                  })}
+                  isolateChain={isolateChain}
+                  chainBuilderMode={chainBuilderMode}
+                  chainBuilderPath={chainBuilderPath}
+                  onChainBuilderClick={(techId) => {
+                    if (!chainBuilderPath.includes(techId)) setChainBuilderPath(prev => [...prev, techId]);
+                  }}
+                  gapNodes={gapNodeSet}
+                  techDescriptions={activeTechDescriptions}
+                />
+              </div>
+            </PopoutPanel>
+          )}
           {chainBuilderMode && (
             <div style={{
               position: "absolute", top: 8, left: 16, right: 16,
