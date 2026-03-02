@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://raw.githubusercontent.com; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
 <title>ATT&CK Path Optimizer — Weighted Graph Analysis for Optimal Cybersecurity Expenditure</title>
+<!-- TODO: Self-host Google Fonts for production to avoid privacy leak (visitor IP/UA sent to Google) -->
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- TODO: Self-host React/ReactDOM for production to avoid privacy leak (visitor IP/UA sent to unpkg.com) -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.26.9/babel.min.js" integrity="sha384-pKNXKj7jF9BNMkQyGWg5YLfoPyqBa/gf7wjTSoTGQlwxbZB+sabJuKyOHR6JQvTd" crossorigin="anonymous"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -31,6 +34,8 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
+if (window.top !== window.self) { window.top.location = window.self.location; }
+
 const { useState, useCallback, useEffect, useRef, useMemo } = React;
 
 // ─── Data Model ───────────────────────────────────────────────────────────────
@@ -58,6 +63,52 @@ const CHAIN_COLORS = [
   { color: "#ec4899", label: "pink" },
 ];
 const MAX_HIGHLIGHTED_CHAINS = 3;
+
+// ─── ICS/OT ATT&CK Constants ─────────────────────────────────────────────────
+
+const ICS_TACTICS = [
+  { id: "TA0108", name: "Initial Access", phase: 0, color: "#ec4899" },
+  { id: "TA0104", name: "Execution", phase: 1, color: "#ef4444" },
+  { id: "TA0110", name: "Persistence", phase: 2, color: "#f97316" },
+  { id: "TA0111", name: "Priv Escalation", phase: 2, color: "#f59e0b" },
+  { id: "TA0103", name: "Evasion", phase: 3, color: "#eab308" },
+  { id: "TA0102", name: "Discovery", phase: 4, color: "#22c55e" },
+  { id: "TA0109", name: "Lateral Movement", phase: 5, color: "#14b8a6" },
+  { id: "TA0100", name: "Collection", phase: 6, color: "#06b6d4" },
+  { id: "TA0101", name: "Command & Ctrl", phase: 6, color: "#3b82f6" },
+  { id: "TA0107", name: "Inhibit Resp Fn", phase: 7, color: "#6366f1" },
+  { id: "TA0106", name: "Impair Process", phase: 7, color: "#a855f7" },
+  { id: "TA0105", name: "Impact", phase: 8, color: "#dc2626" },
+];
+
+const ICS_STIX_TACTIC_MAP = {
+  "initial-access": "TA0108",
+  "execution": "TA0104",
+  "persistence": "TA0110",
+  "privilege-escalation": "TA0111",
+  "evasion": "TA0103",
+  "discovery": "TA0102",
+  "lateral-movement": "TA0109",
+  "collection": "TA0100",
+  "command-and-control": "TA0101",
+  "inhibit-response-function": "TA0107",
+  "impair-process-control": "TA0106",
+  "impact": "TA0105",
+};
+
+const ICS_ALL_PLATFORMS = [
+  "Field Controller/RTU/PLC/IED",
+  "Human-Machine Interface",
+  "Engineering Workstation",
+  "Control Server",
+  "Data Historian",
+  "Safety Instrumented System/Protection Relay",
+  "Input/Output Server",
+];
+
+const ICS_PHASE_WEIGHTS = {
+  0: 0.6, 1: 0.7, 2: 0.8, 3: 0.9, 4: 1.0, 5: 1.0, 6: 1.1, 7: 1.4, 8: 1.6,
+};
 
 const TECHNIQUES = [
   { id: "T1595", name: "Active Scanning", tactic: "TA0043", baseCriticality: 0.3 },
@@ -244,6 +295,50 @@ const ENV_PRESETS = {
   },
 };
 
+// ─── ICS/OT Environment Presets ───────────────────────────────────────────────
+
+const ICS_ENV_PRESETS = {
+  default: {
+    name: "Unassessed (Worst Case)",
+    description: "No environment assessment applied",
+    overrides: {}
+  },
+  "air-gapped": {
+    name: "Air-Gapped OT Network",
+    description: "Isolated OT network with no direct internet connectivity",
+    overrides: {
+      "T0822": 0.1, "T0886": 0.15, "T0884": 0.2, "T0869": 0.15,
+      "T0885": 0.2, "T0831": 0.3,
+      "T0839": 0.7, "T0836": 0.8, "T0800": 0.75, "T0862": 0.65,
+      "T0865": 0.6, "T0857": 0.5, "T0821": 0.5,
+    }
+  },
+  converged: {
+    name: "Converged IT/OT Network",
+    description: "IT/OT boundary blurred, shared infrastructure",
+    overrides: {
+      "T0822": 0.75, "T0886": 0.7, "T0884": 0.7, "T0869": 0.8,
+      "T0885": 0.75, "T0831": 0.7, "T0866": 0.8, "T0830": 0.65,
+      "T0855": 0.7, "T0863": 0.65, "T0853": 0.6, "T0842": 0.65,
+      "T0836": 0.6, "T0839": 0.6, "T0821": 0.65, "T0823": 0.7,
+    }
+  },
+  "legacy-scada": {
+    name: "Legacy SCADA System",
+    description: "Old unpatched SCADA systems with minimal security controls",
+    overrides: {
+      "T0822": 0.85, "T0886": 0.8, "T0884": 0.85, "T0869": 0.9,
+      "T0885": 0.85, "T0831": 0.9, "T0866": 0.9, "T0830": 0.85,
+      "T0855": 0.9, "T0863": 0.85, "T0853": 0.85, "T0842": 0.85,
+      "T0836": 0.9, "T0839": 0.95, "T0821": 0.9, "T0823": 0.85,
+      "T0857": 0.9, "T0812": 0.85, "T0873": 0.9, "T0800": 0.85,
+      "T0840": 0.85, "T0846": 0.8, "T0888": 0.85,
+      "T0838": 0.9, "T0837": 0.85, "T0856": 0.9, "T0879": 0.9,
+      "T0826": 0.85, "T0862": 0.8, "T0865": 0.8,
+    }
+  },
+};
+
 // ─── STIX Phase → Tactic Mapping ──────────────────────────────────────────────
 
 const STIX_TACTIC_MAP = {
@@ -273,6 +368,64 @@ Object.entries(STIX_TACTIC_MAP).forEach(([name, id]) => { TACTIC_TO_PHASE_NAME[i
 const PHASE_WEIGHTS = {
   0: 0.5, 1: 0.7, 2: 0.8, 3: 0.9, 4: 1.0, 5: 1.0, 6: 1.1, 7: 1.2, 8: 1.5,
 };
+
+// ─── Framework Config ─────────────────────────────────────────────────────────
+
+function buildTacticPhase(tactics) {
+  const m = {};
+  tactics.forEach(t => m[t.id] = t.phase);
+  return m;
+}
+
+function buildTacticToPhase(stixMap) {
+  const m = {};
+  Object.entries(stixMap).forEach(([name, id]) => { m[id] = name; });
+  return m;
+}
+
+function getFrameworkConfig(fw) {
+  if (fw === "ics") {
+    return {
+      tactics: ICS_TACTICS,
+      stixTacticMap: ICS_STIX_TACTIC_MAP,
+      tacticPhase: buildTacticPhase(ICS_TACTICS),
+      tacticToPhase: buildTacticToPhase(ICS_STIX_TACTIC_MAP),
+      phaseWeights: ICS_PHASE_WEIGHTS,
+      allPlatforms: ICS_ALL_PLATFORMS,
+      killChainName: "mitre-ics-attack",
+      stixSourceName: "mitre-attack",
+      navigatorDomain: "ics-attack",
+      stixUrl: "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v16.1/ics-attack/ics-attack.json",
+      stixCacheKey: "ics-attack-v16.1",
+      hasBuiltin: false,
+      hasSubTechniques: false,
+      securityControls: ICS_SECURITY_CONTROLS,
+      controlPresets: ICS_CONTROL_PRESETS,
+      envPresets: ICS_ENV_PRESETS,
+      mitigationControlMap: ICS_MITIGATION_CONTROL_MAP,
+    };
+  }
+  // Enterprise (default)
+  return {
+    tactics: TACTICS,
+    stixTacticMap: STIX_TACTIC_MAP,
+    tacticPhase: TACTIC_PHASE,
+    tacticToPhase: TACTIC_TO_PHASE_NAME,
+    phaseWeights: PHASE_WEIGHTS,
+    allPlatforms: ALL_PLATFORMS,
+    killChainName: "mitre-attack",
+    stixSourceName: "mitre-attack",
+    navigatorDomain: "enterprise-attack",
+    stixUrl: "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v16.1/enterprise-attack/enterprise-attack.json",
+    stixCacheKey: "enterprise-attack-v16.1",
+    hasBuiltin: true,
+    hasSubTechniques: true,
+    securityControls: SECURITY_CONTROLS,
+    controlPresets: CONTROL_PRESETS,
+    envPresets: ENV_PRESETS,
+    mitigationControlMap: MITIGATION_CONTROL_MAP,
+  };
+}
 
 // ─── Security Controls (Controls Framework) ──────────────────────────────────
 
@@ -379,6 +532,82 @@ const SECURITY_CONTROLS = [
     coverage: { "T1190": -0.2, "T1068": -0.2, "T1059": -0.15, "T1003": -0.15 } },
 ];
 
+// ─── ICS/OT Security Controls ─────────────────────────────────────────────────
+
+const ICS_SECURITY_CONTROLS = [
+  // ── Technical / Preventive ──
+  { id: "ics-dpi", name: "OT Deep Packet Inspection", category: "technical", cost: "$$$",
+    coverage: { "T0831": -0.4, "T0830": -0.35, "T0855": -0.3, "T0869": -0.3, "T0885": -0.25, "T0860": -0.25 } },
+  { id: "ics-diode", name: "Unidirectional Gateway (Data Diode)", category: "technical", cost: "$$$$",
+    coverage: { "T0822": -0.5, "T0884": -0.5, "T0886": -0.5, "T0869": -0.4, "T0885": -0.4, "T0831": -0.3 } },
+  { id: "ics-app-wl", name: "Application Whitelisting (HMI/EWS)", category: "technical", cost: "$$",
+    coverage: { "T0821": -0.4, "T0823": -0.35, "T0807": -0.3, "T0853": -0.3, "T0863": -0.25 } },
+  { id: "ics-firmware", name: "Firmware Integrity Verification", category: "technical", cost: "$$",
+    coverage: { "T0839": -0.45, "T0857": -0.4, "T0836": -0.35, "T0873": -0.3 } },
+  { id: "ics-jumphost", name: "Secure Remote Access (Jump Host)", category: "technical", cost: "$$",
+    coverage: { "T0822": -0.45, "T0886": -0.4, "T0884": -0.35, "T0866": -0.3 } },
+  { id: "ics-dmz", name: "Industrial DMZ Firewall", category: "technical", cost: "$$$",
+    coverage: { "T0884": -0.4, "T0822": -0.35, "T0869": -0.3, "T0886": -0.3, "T0885": -0.25, "T0831": -0.2 } },
+  { id: "ics-seg", name: "OT Network Segmentation (Purdue)", category: "technical", cost: "$$$$",
+    coverage: { "T0866": -0.45, "T0886": -0.4, "T0822": -0.35, "T0884": -0.35, "T0869": -0.3, "T0831": -0.25, "T0855": -0.2 } },
+
+  // ── Detective / Monitoring ──
+  { id: "ics-ids", name: "OT-Specific IDS/IPS", category: "detective", cost: "$$$",
+    coverage: { "T0831": -0.35, "T0830": -0.3, "T0855": -0.3, "T0869": -0.3, "T0885": -0.25, "T0860": -0.2 } },
+  { id: "ics-anomaly", name: "Process Anomaly Detection", category: "detective", cost: "$$$",
+    coverage: { "T0836": -0.35, "T0855": -0.3, "T0856": -0.3, "T0842": -0.3, "T0837": -0.25, "T0879": -0.25 } },
+  { id: "ics-asset", name: "OT Asset Inventory & Discovery", category: "detective", cost: "$$",
+    coverage: { "T0840": -0.35, "T0846": -0.3, "T0888": -0.3, "T0842": -0.25, "T0872": -0.2 } },
+  { id: "ics-safety-mon", name: "Safety System Monitoring (SIS)", category: "detective", cost: "$$$",
+    coverage: { "T0838": -0.45, "T0837": -0.4, "T0856": -0.35, "T0879": -0.3 } },
+  { id: "ics-log", name: "OT Centralized Logging", category: "detective", cost: "$$",
+    coverage: { "T0872": -0.3, "T0842": -0.25, "T0888": -0.25, "T0853": -0.2, "T0863": -0.2 } },
+
+  // ── Administrative / Policy ──
+  { id: "ics-training", name: "OT Security Awareness Training", category: "administrative", cost: "$",
+    coverage: { "T0863": -0.3, "T0865": -0.3, "T0862": -0.25, "T0822": -0.2 } },
+  { id: "ics-vendor", name: "Vendor/Contractor Access Mgmt", category: "administrative", cost: "$",
+    coverage: { "T0822": -0.3, "T0862": -0.3, "T0866": -0.25, "T0800": -0.25 } },
+  { id: "ics-patch", name: "OT Patch Management", category: "administrative", cost: "$$",
+    coverage: { "T0866": -0.3, "T0857": -0.3, "T0812": -0.25, "T0839": -0.25, "T0873": -0.2 } },
+  { id: "ics-ir", name: "OT Incident Response Plan", category: "administrative", cost: "$",
+    coverage: { "T0879": -0.25, "T0826": -0.25, "T0838": -0.2, "T0837": -0.2, "T0856": -0.2 } },
+  { id: "ics-change", name: "OT Change Management Policy", category: "administrative", cost: "$",
+    coverage: { "T0839": -0.25, "T0857": -0.25, "T0821": -0.2, "T0836": -0.2, "T0853": -0.2 } },
+
+  // ── Physical / Operational ──
+  { id: "ics-keyswitch", name: "Physical Key Switches (Run/Prog)", category: "physical", cost: "$",
+    coverage: { "T0839": -0.4, "T0836": -0.4, "T0821": -0.35, "T0857": -0.3 } },
+  { id: "ics-tamper", name: "Tamper-Evident Seals & Enclosures", category: "physical", cost: "$",
+    coverage: { "T0839": -0.3, "T0836": -0.3, "T0800": -0.25, "T0873": -0.2 } },
+  { id: "ics-phys-access", name: "Control Room Physical Access", category: "physical", cost: "$$",
+    coverage: { "T0800": -0.4, "T0839": -0.3, "T0836": -0.25, "T0862": -0.2, "T0865": -0.2 } },
+];
+
+// Maps ICS MITRE mitigation names → ICS control IDs
+const ICS_MITIGATION_CONTROL_MAP = {
+  "Network Segmentation": "ics-seg",
+  "Filter Network Traffic": "ics-dmz",
+  "Network Intrusion Prevention": "ics-ids",
+  "Multi-factor Authentication": "ics-jumphost",
+  "User Training": "ics-training",
+  "Execution Prevention": "ics-app-wl",
+  "Communication Authenticity": "ics-dpi",
+  "Audit": "ics-log",
+  "Update Software": "ics-patch",
+  "Access Management": "ics-vendor",
+  "Data Backup": "ics-ir",
+  "Human User Authentication": "ics-jumphost",
+  "Limit Access to Resource Over Network": "ics-dmz",
+  "Restrict File and Directory Permissions": "ics-app-wl",
+  "Mechanical Protection Layers": "ics-keyswitch",
+  "Safety Instrumented Systems": "ics-safety-mon",
+  "Encrypt Network Traffic": "ics-dpi",
+  "Operating System Configuration": "ics-firmware",
+  "Out-of-Band Communications Channel": "ics-diode",
+  "Supply Chain Management": "ics-tamper",
+};
+
 // F5: Industry Control Presets
 const CONTROL_PRESETS = {
   none: { name: "Manual", controls: [] },
@@ -393,6 +622,20 @@ const CONTROL_PRESETS = {
   ]},
   "zero-trust": { name: "Zero Trust Architecture", controls: [
     "edr", "mfa", "ztna", "pam", "seg", "dns-filter", "proxy", "siem", "uba", "ndr", "least-priv", "identity-gov", "ad-harden",
+  ]},
+};
+
+// F5: ICS/OT Control Presets
+const ICS_CONTROL_PRESETS = {
+  none: { name: "Manual", controls: [] },
+  "nist-800-82": { name: "NIST SP 800-82", controls: [
+    "ics-seg", "ics-dmz", "ics-dpi", "ics-ids", "ics-anomaly", "ics-asset", "ics-jumphost", "ics-app-wl", "ics-patch", "ics-ir", "ics-training", "ics-log", "ics-phys-access",
+  ]},
+  "iec-62443": { name: "IEC 62443", controls: [
+    "ics-seg", "ics-dmz", "ics-dpi", "ics-ids", "ics-anomaly", "ics-asset", "ics-jumphost", "ics-app-wl", "ics-patch", "ics-ir", "ics-training", "ics-log", "ics-phys-access", "ics-diode", "ics-firmware", "ics-vendor", "ics-change", "ics-safety-mon",
+  ]},
+  "nerc-cip": { name: "NERC CIP", controls: [
+    "ics-seg", "ics-dmz", "ics-ids", "ics-asset", "ics-jumphost", "ics-vendor", "ics-patch", "ics-ir", "ics-training", "ics-phys-access", "ics-log", "ics-change",
   ]},
 };
 
@@ -1082,9 +1325,32 @@ function setCachedStix(version, data) {
   }));
 }
 
+// ─── Framework Auto-Detection ─────────────────────────────────────────────────
+
+function detectFramework(bundle) {
+  if (!bundle || !bundle.objects) return null;
+  for (const obj of bundle.objects) {
+    if (obj.type !== "attack-pattern" || obj.revoked || obj.x_mitre_deprecated) continue;
+    const phases = obj.kill_chain_phases || [];
+    for (const p of phases) {
+      if (p.kill_chain_name === "mitre-ics-attack") return "ics";
+    }
+  }
+  // Check if any enterprise kill chain found
+  for (const obj of bundle.objects) {
+    if (obj.type !== "attack-pattern" || obj.revoked || obj.x_mitre_deprecated) continue;
+    const phases = obj.kill_chain_phases || [];
+    for (const p of phases) {
+      if (p.kill_chain_name === "mitre-attack") return "enterprise";
+    }
+  }
+  return null;
+}
+
 // ─── STIX Data Loader ─────────────────────────────────────────────────────────
 
-function parseStixBundle(bundle) {
+function parseStixBundle(bundle, fwConfig) {
+  if (!fwConfig) fwConfig = getFrameworkConfig("enterprise");
   if (!bundle || !bundle.objects) throw new Error("Invalid STIX bundle: missing objects array");
 
   const techniques = [];
@@ -1097,23 +1363,27 @@ function parseStixBundle(bundle) {
     if (o.type !== "attack-pattern") return;
     if (o.revoked || o.x_mitre_deprecated) return;
     const extRefs = o.external_references || [];
-    const mitreRef = extRefs.find(r => r.source_name === "mitre-attack");
+    const mitreRef = extRefs.find(r => r.source_name === fwConfig.stixSourceName);
     if (!mitreRef || !mitreRef.external_id) return;
     const techId = mitreRef.external_id;
     const parentId = techId.includes(".") ? techId.split(".")[0] : null;
     const phases = o.kill_chain_phases || [];
-    const phase = phases.find(p => p.kill_chain_name === "mitre-attack");
+    const phase = phases.find(p => p.kill_chain_name === fwConfig.killChainName);
     if (!phase) return;
-    const tacticId = STIX_TACTIC_MAP[phase.phase_name];
+    const tacticId = fwConfig.stixTacticMap[phase.phase_name];
     if (!tacticId) return;
     techniques.push({ id: techId, name: o.name, tactic: tacticId, baseCriticality: 0.5, parentId });
     techById[o.id] = techId;
     stixObjById[o.id] = o;
-    // F2: extract platforms, normalize cloud variants to "Cloud"
+    // F2: extract platforms, normalize cloud variants to "Cloud" (enterprise only)
     if (o.x_mitre_platforms && o.x_mitre_platforms.length > 0) {
-      const cloudNames = new Set(["IaaS", "Azure AD", "Office 365", "Google Workspace", "SaaS"]);
-      const normalized = [...new Set(o.x_mitre_platforms.map(p => cloudNames.has(p) ? (p === "SaaS" ? "SaaS" : "Cloud") : p))];
-      techniquePlatforms[techId] = normalized;
+      if (fwConfig.killChainName === "mitre-attack") {
+        const cloudNames = new Set(["IaaS", "Azure AD", "Office 365", "Google Workspace", "SaaS"]);
+        const normalized = [...new Set(o.x_mitre_platforms.map(p => cloudNames.has(p) ? (p === "SaaS" ? "SaaS" : "Cloud") : p))];
+        techniquePlatforms[techId] = normalized;
+      } else {
+        techniquePlatforms[techId] = [...o.x_mitre_platforms];
+      }
     }
     if (o.description) {
       const cleaned = o.description.replace(/\(Citation:[^)]+\)/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
@@ -1164,7 +1434,7 @@ function parseStixBundle(bundle) {
     const techStixId = techById[o.target_ref];
     if (!coaObj || !techStixId) return;
     const coaRefs = coaObj.external_references || [];
-    const coaMitre = coaRefs.find(r => r.source_name === "mitre-attack");
+    const coaMitre = coaRefs.find(r => r.source_name === fwConfig.stixSourceName);
     if (!mitigationMap[techStixId]) mitigationMap[techStixId] = [];
     mitigationMap[techStixId].push({
       mitreId: coaMitre?.external_id || coaObj.id,
@@ -1183,7 +1453,7 @@ function parseStixBundle(bundle) {
   });
 
   const techPhase = {};
-  techniques.forEach(t => { techPhase[t.id] = TACTIC_PHASE[t.tactic] ?? 99; });
+  techniques.forEach(t => { techPhase[t.id] = fwConfig.tacticPhase[t.tactic] ?? 99; });
   const techSet = new Set(techniques.map(t => t.id));
   const chains = [];
   Object.entries(groupTechniques).forEach(([groupId, techs]) => {
@@ -1217,16 +1487,17 @@ function parseStixBundle(bundle) {
   return { techniques, edges, chains, techniqueDescriptions, chainTechContext, techniquePlatforms, mitigations: mitigationMap, groupProfiles };
 }
 
-async function loadStixData() {
-  const version = "enterprise-attack-v5";
+async function loadStixData(signal, fwConfig) {
+  if (!fwConfig) fwConfig = getFrameworkConfig("enterprise");
+  const version = fwConfig.stixCacheKey;
   const cached = await getCachedStix(version).catch(() => null);
   if (cached) return cached;
 
-  const resp = await fetch("https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json");
+  const resp = await fetch(fwConfig.stixUrl, signal ? { signal } : undefined);
   if (!resp.ok) throw new Error("Failed to fetch STIX data: " + resp.status);
   const bundle = await resp.json();
 
-  const result = parseStixBundle(bundle);
+  const result = parseStixBundle(bundle, fwConfig);
   await setCachedStix(version, result).catch(() => {});
   return result;
 }
@@ -1293,7 +1564,7 @@ function computeChainCoverage(techniques, chains) {
   return coverage;
 }
 
-function findOptimalRemediation(techniques, chains, exposures, budget, phaseWeighting) {
+function findOptimalRemediation(techniques, chains, exposures, budget, phaseWeighting, fwConfig) {
   const remaining = new Set(chains.map((_, i) => i));
   const selected = [];
   const costPerTech = 1;
@@ -1321,7 +1592,7 @@ function findOptimalRemediation(techniques, chains, exposures, budget, phaseWeig
         : 0;
       // F4: Apply phase weight when enabled
       if (phaseWeighting && score > 0) {
-        const pw = PHASE_WEIGHTS[TACTIC_PHASE[t.tactic]] ?? 1.0;
+        const pw = (fwConfig ? fwConfig.phaseWeights : PHASE_WEIGHTS)[(fwConfig ? fwConfig.tacticPhase : TACTIC_PHASE)[t.tactic]] ?? 1.0;
         score *= pw;
       }
 
@@ -1344,14 +1615,15 @@ function findOptimalRemediation(techniques, chains, exposures, budget, phaseWeig
 
 // ─── SVG Graph Renderer ───────────────────────────────────────────────────────
 
-function layoutNodes(techniques) {
+function layoutNodes(techniques, tactics) {
+  if (!tactics) tactics = TACTICS;
   // Node max visual radius: base 8 + priority*10 (max 18) + optimal ring 7 = 25
   // Two adjacent max-size nodes need 50 between centers
   // nodeW/nodeH: intra-cluster spacing; tacticGap/phaseGap: inter-cluster spacing
   const nodeW = 52, nodeH = 48, phaseGap = 64, tacticGap = 52, topMargin = 34, marginX = 40;
 
-  // Group techniques by tactic, preserving TACTICS ordering (which is phase-sorted)
-  const tacticOrder = TACTICS.filter(tac => techniques.some(t => t.tactic === tac.id));
+  // Group techniques by tactic, preserving tactics ordering (which is phase-sorted)
+  const tacticOrder = tactics.filter(tac => techniques.some(t => t.tactic === tac.id));
   const byTactic = {};
   tacticOrder.forEach(tac => {
     byTactic[tac.id] = techniques.filter(t => t.tactic === tac.id);
@@ -1441,7 +1713,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
   selectedTech, onSelectTech, highlightedChains, remediated, optimalSet,
   viewHeight, viewWidth, phaseCenters, onNodeDrag, searchMatches,
   collapsedTactics, onToggleCollapse, chainBuilderMode, chainBuilderPath, onChainBuilderClick,
-  isolateChain, gapNodes, techDescriptions, onPopout }) {
+  isolateChain, gapNodes, techDescriptions, onPopout, tactics }) {
 
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -1800,21 +2072,37 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
           </filter>
         </defs>
         <g transform={"translate(" + transform.x + "," + transform.y + ") scale(" + transform.scale + ")"}>
-          {(phaseCenters || []).map((pc, i) => {
-            const isCollapsed = collapsedTactics && collapsedTactics.has(pc.tacticId);
-            return (
-              <text key={i} x={pc.x} y={18} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="7.5" fontFamily="monospace" opacity={0.7}
-                style={{ cursor: "pointer" }}
-                onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(pc.tacticId); }}
-              >
-                {(isCollapsed ? "[+] " : "[\u2212] ") + pc.label}
-              </text>
-            );
-          })}
+          {(() => {
+            // Stagger y-positions for labels whose x-extents overlap
+            const arr = phaseCenters || [];
+            const charW = 4.5; // approximate monospace char width at fontSize 7.5
+            const placed = []; // { x, halfW, row } of already-placed labels
+            return arr.map((pc, i) => {
+              const isCollapsed = collapsedTactics && collapsedTactics.has(pc.tacticId);
+              const text = (isCollapsed ? "[+] " : "[\u2212] ") + pc.label;
+              const halfW = text.length * charW / 2;
+              // Find lowest row where this label doesn't overlap any placed label
+              let row = 0;
+              for (let r = 0; r < 4; r++) {
+                const overlaps = placed.some(p => p.row === r && Math.abs(pc.x - p.x) < halfW + p.halfW + 4);
+                if (!overlaps) { row = r; break; }
+                row = r + 1;
+              }
+              placed.push({ x: pc.x, halfW, row });
+              return (
+                <text key={i} x={pc.x} y={18 + row * 10} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="7.5" fontFamily="monospace" opacity={0.7}
+                  style={{ cursor: "pointer" }}
+                  onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(pc.tacticId); }}
+                >
+                  {text}
+                </text>
+              );
+            });
+          })()}
 
           {/* Collapsed tactic summary circles */}
           {collapsedTactics && Object.entries(collapsedSummary).map(([tacId, info]) => {
-            const tac = TACTICS.find(t => t.id === tacId);
+            const tac = (tactics || TACTICS).find(t => t.id === tacId);
             return (
               <g key={"collapsed-" + tacId} style={{ cursor: "pointer" }}
                 onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(tacId); }}>
@@ -1925,7 +2213,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
             const pos = positions[t.id];
             if (!pos) return null;
             if (collapsedTactics && collapsedTactics.has(t.tactic)) return null;
-            const tactic = TACTICS.find(ta => ta.id === t.tactic);
+            const tactic = (tactics || TACTICS).find(ta => ta.id === t.tactic);
             const exposure = exposures[t.id] ?? 1.0;
             const bc = betweenness[t.id] ?? 0;
             const cc = chainCoverage[t.id] ?? 0;
@@ -2020,7 +2308,7 @@ function GraphView({ techniques, edges, positions, exposures, betweenness, chain
       {hoveredNode && tooltipPos && (() => {
         const ht = techniques.find(t => t.id === hoveredNode);
         if (!ht) return null;
-        const htTactic = TACTICS.find(ta => ta.id === ht.tactic);
+        const htTactic = (tactics || TACTICS).find(ta => ta.id === ht.tactic);
         const htExposure = exposures[hoveredNode] ?? 1.0;
         const htBetweenness = betweenness[hoveredNode] ?? 0;
         const htChainCount = chainCoverage[hoveredNode] ?? 0;
@@ -2083,15 +2371,18 @@ function PopoutPanel({ title, width, height, onClose, children, graphMode }) {
     if (!win) { onClose(); return; }
     winRef.current = win;
     win.document.title = title || 'Panel';
-    win.document.head.innerHTML =
-      '<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">' +
-      '<style>' +
+    const link = win.document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap';
+    win.document.head.appendChild(link);
+    const style = win.document.createElement('style');
+    style.textContent =
       '*{margin:0;padding:0;box-sizing:border-box}' +
       'body{background:#0a0f1a;color:#e2e8f0;font-family:"JetBrains Mono","Fira Code","SF Mono",monospace}' +
       '::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}' +
       '::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}' +
-      '::-webkit-scrollbar-thumb:hover{background:#334155}' +
-      '</style>';
+      '::-webkit-scrollbar-thumb:hover{background:#334155}';
+    win.document.head.appendChild(style);
     const div = win.document.createElement('div');
     div.style.cssText = graphMode ? 'height:100vh;overflow:hidden;padding:0' : 'padding:12px 16px;height:100vh;overflow:auto';
     win.document.body.appendChild(div);
@@ -2136,10 +2427,19 @@ function PopoutPlaceholder({ label, onRestore }) {
   );
 }
 
+// ─── CSV Sanitization ─────────────────────────────────────────────────────────
+
+function sanitizeCSVCell(value) {
+  if (typeof value !== "string") return value;
+  if (/^[=+\-@\t\r]/.test(value)) return "'" + value;
+  return value;
+}
+
 // ─── URL State Sharing ────────────────────────────────────────────────────────
 
 function encodeStateToHash(state) {
   const p = new URLSearchParams();
+  if (state.framework && state.framework !== "enterprise") p.set("fw", state.framework);
   if (state.dataSource && state.dataSource !== "stix") p.set("ds", state.dataSource);
   if (state.envPreset && state.envPreset !== "government") p.set("env", state.envPreset);
   if (state.sectorFilter && state.sectorFilter !== "all") p.set("sec", state.sectorFilter);
@@ -2158,16 +2458,20 @@ function decodeHashToState(hash) {
   try {
     const p = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
     const state = {};
-    if (p.has("ds")) state.dataSource = p.get("ds");
-    if (p.has("env")) state.envPreset = p.get("env");
-    if (p.has("sec")) state.sectorFilter = p.get("sec");
-    if (p.has("budget")) state.remediationBudget = parseInt(p.get("budget"), 10);
+    const VALID_FW = ["enterprise", "ics"];
+    const VALID_DS = ["stix", "builtin"];
+    const VALID_SECTOR = ["all", "government", "financial"];
+    if (p.has("fw")) { const v = p.get("fw"); if (VALID_FW.includes(v)) state.framework = v; }
+    if (p.has("ds")) { const v = p.get("ds"); if (VALID_DS.includes(v)) state.dataSource = v; }
+    if (p.has("env")) { const v = p.get("env"); if (v) state.envPreset = v; }
+    if (p.has("sec")) { const v = p.get("sec"); if (VALID_SECTOR.includes(v)) state.sectorFilter = v; }
+    if (p.has("budget")) { const v = parseInt(p.get("budget"), 10); if (v >= 1 && v <= 10) state.remediationBudget = v; }
     if (p.has("rem")) state.remediated = p.get("rem").split(",").filter(Boolean);
     if (p.has("ctrl")) state.deployedControls = p.get("ctrl").split(",").filter(Boolean);
     if (p.has("chains")) state.chains = p.get("chains").split("|").filter(Boolean);
     if (p.has("pw")) state.phaseWeighting = true;
-    if (p.has("plat")) state.selectedPlatforms = p.get("plat").split(",").filter(Boolean);
-    if (p.has("cp")) state.controlPreset = p.get("cp");
+    if (p.has("plat")) { const v = p.get("plat").split(",").filter(Boolean); if (v.length > 0) state.selectedPlatforms = v; }
+    if (p.has("cp")) { const v = p.get("cp"); if (v) state.controlPreset = v; }
     return Object.keys(state).length > 0 ? state : null;
   } catch (e) { return null; }
 }
@@ -2175,6 +2479,10 @@ function decodeHashToState(hash) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 function AttackPathOptimizer() {
+  // Framework selection (enterprise vs ICS/OT)
+  const [framework, setFramework] = useState("enterprise");
+  const fwConfig = useMemo(() => getFrameworkConfig(framework), [framework]);
+
   const [envPreset, setEnvPreset] = useState("government");
   const [exposures, setExposures] = useState({});
   const [selectedTech, setSelectedTech] = useState(null);
@@ -2199,6 +2507,7 @@ function AttackPathOptimizer() {
   const [stixError, setStixError] = useState(null);
   const [uploadedFileName, setUploadedFileName] = useState(null);
   const [uploadError, setUploadError] = useState(null);
+  const [autoDetectedFw, setAutoDetectedFw] = useState(null);
   const fileInputRef = useRef(null);
   const navFileInputRef = useRef(null);
 
@@ -2249,6 +2558,13 @@ function AttackPathOptimizer() {
   const [controlPreset, setControlPreset] = useState("none");
   // F7: Threat actor profile expansion
   const [expandedChainProfile, setExpandedChainProfile] = useState(null);
+
+  // Dual-framework compare mode
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareData, setCompareData] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const otherFramework = framework === "enterprise" ? "ics" : "enterprise";
+  const otherFwConfig = useMemo(() => getFrameworkConfig(otherFramework), [otherFramework]);
 
   // Phase 3: Persistence helpers
   const [showSaved, setShowSaved] = useState(false);
@@ -2310,7 +2626,7 @@ function AttackPathOptimizer() {
   const effectiveExposures = useMemo(() => {
     if (deployedControls.size === 0) return exposures;
     const result = { ...exposures };
-    SECURITY_CONTROLS.forEach(ctrl => {
+    fwConfig.securityControls.forEach(ctrl => {
       if (!deployedControls.has(ctrl.id)) return;
       Object.entries(ctrl.coverage).forEach(([tid, reduction]) => {
         const current = result[tid] ?? 1.0;
@@ -2318,7 +2634,7 @@ function AttackPathOptimizer() {
       });
     });
     return result;
-  }, [exposures, deployedControls]);
+  }, [exposures, deployedControls, fwConfig]);
 
   // Draggable divider between graph and bottom panels (overlay)
   useEffect(() => {
@@ -2347,6 +2663,7 @@ function AttackPathOptimizer() {
   useEffect(() => {
     const hashState = decodeHashToState(window.location.hash);
     if (hashState) {
+      if (hashState.framework) setFramework(hashState.framework);
       if (hashState.envPreset) { skipEnvEffect.current = true; setEnvPreset(hashState.envPreset); }
       if (hashState.sectorFilter) setSectorFilter(hashState.sectorFilter);
       if (hashState.remediationBudget) setRemediationBudget(hashState.remediationBudget);
@@ -2364,6 +2681,7 @@ function AttackPathOptimizer() {
       const raw = localStorage.getItem("attackPathOptimizer");
       if (!raw) return;
       const saved = JSON.parse(raw);
+      if (saved.framework) setFramework(saved.framework);
       if (saved.envPreset) { skipEnvEffect.current = true; setEnvPreset(saved.envPreset); }
       if (saved.sectorFilter) setSectorFilter(saved.sectorFilter);
       if (saved.remediationBudget) setRemediationBudget(saved.remediationBudget);
@@ -2389,21 +2707,21 @@ function AttackPathOptimizer() {
   // Environment preset → exposures
   useEffect(() => {
     if (skipEnvEffect.current) { skipEnvEffect.current = false; return; }
-    const preset = ENV_PRESETS[envPreset];
+    const preset = fwConfig.envPresets[envPreset];
     if (preset?.overrides) {
       setExposures({ ...preset.overrides });
     } else {
       setExposures({});
     }
-  }, [envPreset]);
+  }, [envPreset, fwConfig]);
 
   // Phase 3: Auto-save to localStorage (debounced 500ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
         localStorage.setItem("attackPathOptimizer", JSON.stringify({
-          envPreset, sectorFilter, remediationBudget,
-          dataSource: dataSource === "upload" ? "builtin" : dataSource,
+          framework, envPreset, sectorFilter, remediationBudget,
+          dataSource: dataSource === "upload" ? (fwConfig.hasBuiltin ? "builtin" : "stix") : dataSource,
           exposures, remediated: [...remediated],
           deployedControls: [...deployedControls],
           phaseWeighting, controlPreset,
@@ -2416,21 +2734,24 @@ function AttackPathOptimizer() {
       } catch (e) {}
     }, 500);
     return () => clearTimeout(timer);
-  }, [envPreset, sectorFilter, remediationBudget, dataSource, exposures, remediated, deployedControls, phaseWeighting, controlPreset, selectedPlatforms]);
+  }, [framework, envPreset, sectorFilter, remediationBudget, dataSource, exposures, remediated, deployedControls, phaseWeighting, controlPreset, selectedPlatforms]);
 
   // Phase 2: STIX data loading
   useEffect(() => {
+    const controller = new AbortController();
     setCustomPositions({});
     if (dataSource === "stix") {
       setStixLoading(true);
       setStixError(null);
-      loadStixData().then(data => {
+      loadStixData(controller.signal, fwConfig).then(data => {
+        if (controller.signal.aborted) return;
         setCustomData(data);
         setStixLoading(false);
       }).catch(err => {
+        if (controller.signal.aborted) return;
         setStixError(err.message);
         setStixLoading(false);
-        setDataSource("builtin");
+        if (fwConfig.hasBuiltin) setDataSource("builtin");
       });
     } else if (dataSource === "upload") {
       // Data already set by handleStixFileUpload
@@ -2440,9 +2761,46 @@ function AttackPathOptimizer() {
       setUploadedFileName(null);
       setUploadError(null);
     }
-  }, [dataSource]);
+    return () => controller.abort();
+  }, [dataSource, framework]);
 
-  const layoutResult = useMemo(() => layoutNodes(displayTechniques), [displayTechniques]);
+  // Compare mode: load other framework's STIX data
+  useEffect(() => {
+    if (!compareMode) { setCompareData(null); return; }
+    const controller = new AbortController();
+    setCompareLoading(true);
+    loadStixData(controller.signal, otherFwConfig).then(data => {
+      if (controller.signal.aborted) return;
+      setCompareData(data);
+      setCompareLoading(false);
+    }).catch(err => {
+      if (controller.signal.aborted) return;
+      setCompareLoading(false);
+    });
+    return () => controller.abort();
+  }, [compareMode, otherFwConfig]);
+
+  // Framework change side effect: reset framework-dependent state
+  const prevFramework = useRef(framework);
+  useEffect(() => {
+    if (prevFramework.current === framework) return;
+    prevFramework.current = framework;
+    setSelectedPlatforms(null);
+    setHighlightedChains([]);
+    setSelectedTech(null);
+    setShowSubTechniques(false);
+    setExpandedChainProfile(null);
+    setCollapsedTactics(new Set());
+    setCustomPositions({});
+    setEnvPreset("default");
+    setControlPreset("none");
+    setDeployedControls(new Set());
+    // Auto-switch to STIX if framework has no builtin
+    const cfg = getFrameworkConfig(framework);
+    if (!cfg.hasBuiltin && dataSource === "builtin") setDataSource("stix");
+  }, [framework]);
+
+  const layoutResult = useMemo(() => layoutNodes(displayTechniques, fwConfig.tactics), [displayTechniques, fwConfig]);
   const displayEdges = useMemo(() => {
     const techSet = new Set(displayTechniques.map(t => t.id));
     return activeEdges.filter(e => techSet.has(e.from) && techSet.has(e.to));
@@ -2456,6 +2814,31 @@ function AttackPathOptimizer() {
   }, [layoutResult.positions, customPositions]);
   const betweenness = useMemo(() => computeBetweenness(activeTechniques, activeEdges), [activeTechniques, activeEdges]);
 
+  // Compare mode: layout for other framework
+  const compareLayout = useMemo(() => {
+    if (!compareMode || !compareData) return null;
+    const techs = compareData.techniques.filter(t => !t.parentId);
+    const layout = layoutNodes(techs, otherFwConfig.tactics);
+    const edges = (() => {
+      const techSet = new Set(techs.map(t => t.id));
+      return compareData.edges.filter(e => techSet.has(e.from) && techSet.has(e.to));
+    })();
+    const bc = computeBetweenness(techs, edges);
+    const cc = computeChainCoverage(techs, compareData.chains || []);
+    return { techniques: techs, edges, positions: layout.positions, viewHeight: layout.viewHeight, viewWidth: layout.viewWidth, phaseCenters: layout.phaseCenters, betweenness: bc, chainCoverage: cc, chains: compareData.chains || [] };
+  }, [compareMode, compareData, otherFwConfig]);
+
+  // Compare mode: convergence analysis
+  const compareAnalysis = useMemo(() => {
+    if (!compareMode || !compareData) return null;
+    const currentIds = new Set(activeTechniques.filter(t => !t.parentId).map(t => t.id));
+    const otherIds = new Set((compareData.techniques || []).filter(t => !t.parentId).map(t => t.id));
+    const shared = new Set([...currentIds].filter(id => otherIds.has(id)));
+    const uniqueCurrent = new Set([...currentIds].filter(id => !otherIds.has(id)));
+    const uniqueOther = new Set([...otherIds].filter(id => !currentIds.has(id)));
+    return { currentCount: currentIds.size, otherCount: otherIds.size, shared, uniqueCurrent, uniqueOther };
+  }, [compareMode, compareData, activeTechniques]);
+
   const filteredChains = useMemo(() => {
     if (sectorFilter === "all") return activeChains;
     return activeChains.filter(c => c.sector === sectorFilter || c.sector === "all");
@@ -2466,7 +2849,7 @@ function AttackPathOptimizer() {
   // Gap Analysis computation (must be after betweenness + chainCoverage)
   const gapAnalysis = useMemo(() => {
     const controlCoverage = {};
-    SECURITY_CONTROLS.forEach(ctrl => {
+    fwConfig.securityControls.forEach(ctrl => {
       Object.keys(ctrl.coverage).forEach(tid => {
         if (!controlCoverage[tid]) controlCoverage[tid] = [];
         controlCoverage[tid].push(ctrl);
@@ -2497,7 +2880,7 @@ function AttackPathOptimizer() {
       noCoverageCount: gaps.filter(g => g.gapType === "no-coverage").length,
       notDeployedCount: gaps.filter(g => g.gapType === "not-deployed").length,
     };
-  }, [displayTechniques, deployedControls, effectiveExposures, betweenness, chainCoverage, remediated]);
+  }, [displayTechniques, deployedControls, effectiveExposures, betweenness, chainCoverage, remediated, fwConfig]);
 
   const gapNodeSet = useMemo(() => {
     if (!showGapAnalysis) return null;
@@ -2505,8 +2888,8 @@ function AttackPathOptimizer() {
   }, [showGapAnalysis, gapAnalysis]);
 
   const optimal = useMemo(() =>
-    findOptimalRemediation(activeTechniques, filteredChains, effectiveExposures, remediationBudget, phaseWeighting),
-    [activeTechniques, filteredChains, effectiveExposures, remediationBudget, phaseWeighting]
+    findOptimalRemediation(activeTechniques, filteredChains, effectiveExposures, remediationBudget, phaseWeighting, fwConfig),
+    [activeTechniques, filteredChains, effectiveExposures, remediationBudget, phaseWeighting, fwConfig]
   );
 
   const chainStatus = useMemo(() => {
@@ -2574,11 +2957,21 @@ function AttackPathOptimizer() {
 
   const handleStixFileUpload = useCallback((file) => {
     setUploadError(null);
+    setAutoDetectedFw(null);
+    if (file.size > 100 * 1024 * 1024) { setUploadError("File too large (max 100 MB)"); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const bundle = JSON.parse(e.target.result);
-        const result = parseStixBundle(bundle);
+        const detected = detectFramework(bundle);
+        let activeFwConfig = fwConfig;
+        if (detected && detected !== framework) {
+          setFramework(detected);
+          activeFwConfig = getFrameworkConfig(detected);
+          setAutoDetectedFw(detected);
+          setTimeout(() => setAutoDetectedFw(null), 3000);
+        }
+        const result = parseStixBundle(bundle, activeFwConfig);
         setCustomData(result);
         setUploadedFileName(file.name);
         setDataSource("upload");
@@ -2588,11 +2981,12 @@ function AttackPathOptimizer() {
     };
     reader.onerror = () => setUploadError("Failed to read file");
     reader.readAsText(file);
-  }, []);
+  }, [fwConfig, framework]);
 
   const handleShare = useCallback(() => {
     const state = {
-      dataSource: dataSource === "upload" ? "builtin" : dataSource,
+      framework,
+      dataSource: dataSource === "upload" ? (fwConfig.hasBuiltin ? "builtin" : "stix") : dataSource,
       envPreset,
       sectorFilter,
       remediationBudget,
@@ -2613,7 +3007,7 @@ function AttackPathOptimizer() {
       setShareConfirm(true);
       setTimeout(() => setShareConfirm(false), 2000);
     });
-  }, [dataSource, envPreset, sectorFilter, remediationBudget, remediated, deployedControls, highlightedChains, phaseWeighting, selectedPlatforms, controlPreset]);
+  }, [framework, dataSource, envPreset, sectorFilter, remediationBudget, remediated, deployedControls, highlightedChains, phaseWeighting, selectedPlatforms, controlPreset]);
 
   const handleNodeDrag = useCallback((nodeId, dx, dy) => {
     setCustomPositions(prev => {
@@ -2624,6 +3018,7 @@ function AttackPathOptimizer() {
   }, [layoutResult.positions]);
 
   const resetAll = () => {
+    setFramework("enterprise");
     setRemediated(new Set());
     setSelectedTech(null);
     setHighlightedChains([]);
@@ -2660,6 +3055,9 @@ function AttackPathOptimizer() {
     setSelectedPlatforms(null);
     setControlPreset("none");
     setExpandedChainProfile(null);
+    setCompareMode(false);
+    setCompareData(null);
+    setAutoDetectedFw(null);
     try { localStorage.removeItem("attackPathOptimizer"); localStorage.removeItem("attackPathOptimizer_collapsed"); } catch (e) {}
     // Force STIX reload: briefly switch away then back so the effect always fires
     setDataSource("builtin");
@@ -2667,7 +3065,7 @@ function AttackPathOptimizer() {
   };
 
   const selectedTechData = displayTechniques.find(t => t.id === selectedTech);
-  const selectedTactic = selectedTechData ? TACTICS.find(ta => ta.id === selectedTechData.tactic) : null;
+  const selectedTactic = selectedTechData ? fwConfig.tactics.find(ta => ta.id === selectedTechData.tactic) : null;
 
   const techExamples = useMemo(() => {
     if (!selectedTech) return null;
@@ -2690,7 +3088,7 @@ function AttackPathOptimizer() {
     return displayTechniques
       .map(t => {
         let priority = (betweenness[t.id] ?? 0) * (effectiveExposures[t.id] ?? 1.0) * (chainCoverage[t.id] ?? 0) / Math.max(filteredChains.length, 1);
-        if (phaseWeighting) priority *= (PHASE_WEIGHTS[TACTIC_PHASE[t.tactic]] ?? 1.0);
+        if (phaseWeighting) priority *= (fwConfig.phaseWeights[fwConfig.tacticPhase[t.tactic]] ?? 1.0);
         return {
           ...t,
           exposure: effectiveExposures[t.id] ?? 1.0,
@@ -2717,9 +3115,9 @@ function AttackPathOptimizer() {
       }))
       .sort((a, b) => b.priority - a.priority)
       .forEach((t, i) => {
-        const tactic = TACTICS.find(ta => ta.id === t.tactic);
+        const tactic = fwConfig.tactics.find(ta => ta.id === t.tactic);
         csv += [
-          i + 1, t.id, '"' + t.name.replace(/"/g, '""') + '"', tactic?.name || "",
+          i + 1, sanitizeCSVCell(t.id), '"' + sanitizeCSVCell(t.name).replace(/"/g, '""') + '"', sanitizeCSVCell(tactic?.name || ""),
           (t.exposure * 100).toFixed(1), (t.bc * 100).toFixed(1), t.cc,
           (t.priority * 100).toFixed(1),
           remediated.has(t.id) ? "Y" : "N",
@@ -2729,12 +3127,12 @@ function AttackPathOptimizer() {
     csv += "\nChain Name,Severity%,Disrupted,Break Points,Avg Exposure%,Sector\n";
     chainStatus.forEach(c => {
       csv += [
-        '"' + c.name.replace(/"/g, '""') + '"',
+        '"' + sanitizeCSVCell(c.name).replace(/"/g, '""') + '"',
         (c.severity * 100).toFixed(0),
         c.broken ? "Y" : "N",
-        '"' + c.breakpoints.join("; ") + '"',
+        '"' + sanitizeCSVCell(c.breakpoints.join("; ")) + '"',
         (c.avgExposure * 100).toFixed(1),
-        c.sector,
+        sanitizeCSVCell(c.sector),
       ].join(",") + "\n";
     });
     const blob = new Blob([csv], { type: "text/csv" });
@@ -2755,7 +3153,7 @@ function AttackPathOptimizer() {
       const cc = chainCoverage[t.id] ?? 0;
       const score = Math.round(exposure * 100);
       const color = isRemediated ? "#22c55e" : exposure > 0.7 ? "#ef4444" : exposure > 0.4 ? "#f59e0b" : "#22c55e";
-      const deployedForTech = SECURITY_CONTROLS.filter(c => deployedControls.has(c.id) && c.coverage[t.id]);
+      const deployedForTech = fwConfig.securityControls.filter(c => deployedControls.has(c.id) && c.coverage[t.id]);
       const commentParts = [];
       commentParts.push(isRemediated ? "REMEDIATED" : "Exposure: " + (exposure * 100).toFixed(0) + "%");
       commentParts.push("Betweenness: " + (bc * 100).toFixed(1) + "%");
@@ -2763,7 +3161,7 @@ function AttackPathOptimizer() {
       if (deployedForTech.length > 0) commentParts.push("Controls: " + deployedForTech.map(c => c.name).join(", "));
       return {
         techniqueID: t.id,
-        tactic: TACTIC_TO_PHASE_NAME[t.tactic] || "",
+        tactic: fwConfig.tacticToPhase[t.tactic] || "",
         score,
         color,
         comment: commentParts.join(" | "),
@@ -2772,7 +3170,7 @@ function AttackPathOptimizer() {
     });
     const layer = {
       name: "ATT&CK Path Optimizer Export",
-      domain: "enterprise-attack",
+      domain: fwConfig.navigatorDomain,
       versions: { attack: "14", navigator: "4.9.1", layer: "4.5" },
       techniques,
       gradient: { colors: ["#22c55e", "#f59e0b", "#ef4444"], minValue: 0, maxValue: 100 },
@@ -2799,13 +3197,13 @@ function AttackPathOptimizer() {
     };
     let csv = "Priority Tier,Technique ID,Name,Tactic,Gap Type,Exposure%,Betweenness%,Chain Count,Risk Score,Recommended Controls\n";
     gapAnalysis.gaps.forEach(g => {
-      const tactic = TACTICS.find(ta => ta.id === g.tactic);
+      const tactic = fwConfig.tactics.find(ta => ta.id === g.tactic);
       const recCtrls = g.availableControls.map(c => c.name + " (" + c.cost + ")").join("; ") || "None available";
       csv += [
-        tierOf(g), g.id, '"' + g.name.replace(/"/g, '""') + '"', tactic?.name || "",
+        tierOf(g), sanitizeCSVCell(g.id), '"' + sanitizeCSVCell(g.name).replace(/"/g, '""') + '"', sanitizeCSVCell(tactic?.name || ""),
         g.gapType === "no-coverage" ? "No Coverage" : "Not Deployed",
         (g.exposure * 100).toFixed(1), (g.bc * 100).toFixed(1), g.cc,
-        (g.riskScore * 100).toFixed(2), '"' + recCtrls + '"',
+        (g.riskScore * 100).toFixed(2), '"' + sanitizeCSVCell(recCtrls) + '"',
       ].join(",") + "\n";
     });
     // Summary section
@@ -2816,7 +3214,7 @@ function AttackPathOptimizer() {
     const costMap = { "$": 1, "$$": 2, "$$$": 3, "$$$$": 4 };
     let minCost = 0, maxCost = 0;
     undeployedNeeded.forEach(cid => {
-      const ctrl = SECURITY_CONTROLS.find(c => c.id === cid);
+      const ctrl = fwConfig.securityControls.find(c => c.id === cid);
       if (ctrl) { const cv = costMap[ctrl.cost] || 0; minCost += cv; maxCost += cv * 2; }
     });
     csv += "\n--- SUMMARY ---\n";
@@ -2831,10 +3229,11 @@ function AttackPathOptimizer() {
     a.download = "gap-remediation-plan-" + new Date().toISOString().split("T")[0] + ".csv";
     a.click();
     URL.revokeObjectURL(url);
-  }, [gapAnalysis, deployedControls]);
+  }, [gapAnalysis, deployedControls, fwConfig]);
 
   // ATT&CK Navigator Layer Import
   const handleNavigatorImport = useCallback((file) => {
+    if (file.size > 100 * 1024 * 1024) { setUploadError("File too large (max 100 MB)"); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -2900,13 +3299,22 @@ function AttackPathOptimizer() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Framework selector */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            <label style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Framework</label>
+            <select value={framework} onChange={e => setFramework(e.target.value)}
+              style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 8px", fontSize: "11px", fontFamily: "inherit" }}>
+              <option value="enterprise">Enterprise ATT&CK</option>
+              <option value="ics">ICS/OT ATT&CK</option>
+            </select>
+          </div>
           {/* Phase 2: Data Source selector */}
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
             <label style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Data Source</label>
             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
               <select value={dataSource} onChange={e => setDataSource(e.target.value)}
                 style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 8px", fontSize: "11px", fontFamily: "inherit" }}>
-                <option value="builtin">Built-in (8 chains)</option>
+                {fwConfig.hasBuiltin && <option value="builtin">Built-in (8 chains)</option>}
                 <option value="stix">MITRE ATT&CK STIX (Live)</option>
                 {uploadedFileName && <option value="upload">Upload: {uploadedFileName}</option>}
               </select>
@@ -2933,19 +3341,24 @@ function AttackPathOptimizer() {
               Upload: {uploadError}
             </span>
           )}
+          {autoDetectedFw && (
+            <span style={{ fontSize: "9px", color: "#22c55e", padding: "2px 6px", background: "#22c55e15", borderRadius: "4px", alignSelf: "flex-end", marginBottom: "2px" }}>
+              Auto-detected: {autoDetectedFw === "ics" ? "ICS/OT" : "Enterprise"} framework
+            </span>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
             <label style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Environment</label>
             <select value={envPreset} onChange={e => setEnvPreset(e.target.value)}
               style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 8px", fontSize: "11px", fontFamily: "inherit" }}>
-              <option value="default">Unassessed (Worst Case)</option>
-              <option value="government">Government (Typical)</option>
-              <option value="hardened">Hardened Enterprise</option>
+              {Object.entries(fwConfig.envPresets).map(([k, v]) => (
+                <option key={k} value={k}>{v.name}</option>
+              ))}
             </select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
             <label style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Platforms</label>
             <div style={{ display: "flex", gap: "2px", flexWrap: "wrap" }}>
-              {ALL_PLATFORMS.map(p => {
+              {fwConfig.allPlatforms.map(p => {
                 const active = !selectedPlatforms || selectedPlatforms.has(p);
                 return (
                   <button key={p} onClick={() => {
@@ -2960,7 +3373,7 @@ function AttackPathOptimizer() {
                         return next.size === 0 ? null : next; // null = show all
                       }
                       next.add(p);
-                      if (next.size === ALL_PLATFORMS.length) return null; // all selected = same as null
+                      if (next.size === fwConfig.allPlatforms.length) return null; // all selected = same as null
                       return next;
                     });
                   }} style={{
@@ -3011,6 +3424,14 @@ function AttackPathOptimizer() {
         display: "flex", gap: "16px", padding: "10px 24px", borderBottom: "1px solid #1e293b",
         alignItems: "center", flexWrap: "wrap", flexShrink: 0,
       }}>
+        <span style={{
+          fontSize: "9px", fontWeight: 700, padding: "2px 8px", borderRadius: "8px",
+          background: framework === "ics" ? "#a855f720" : "#3b82f620",
+          color: framework === "ics" ? "#a855f7" : "#3b82f6",
+          border: "1px solid " + (framework === "ics" ? "#a855f740" : "#3b82f640"),
+        }}>
+          {framework === "ics" ? "ICS/OT" : "Enterprise"}
+        </span>
         <Stat label="Attack Chains" value={filteredChains.length} color="#6366f1" />
         <Stat label="Disrupted" value={totalDisrupted + "/" + filteredChains.length}
           color={totalDisrupted === filteredChains.length ? "#22c55e" : "#f59e0b"} />
@@ -3048,7 +3469,7 @@ function AttackPathOptimizer() {
         }}>
           CONTROLS
         </button>
-        {dataSource === "stix" && (
+        {dataSource === "stix" && fwConfig.hasSubTechniques && (
           <button onClick={() => setShowSubTechniques(prev => !prev)} style={{
             background: showSubTechniques ? "#8b5cf6" : "transparent", color: showSubTechniques ? "#fff" : "#8b5cf6",
             border: "1px solid #8b5cf6", borderRadius: "4px",
@@ -3085,6 +3506,13 @@ function AttackPathOptimizer() {
               borderRadius: "8px", padding: "1px 5px", minWidth: 16, textAlign: "center",
             }}>{gapAnalysis.gaps.length}</span>
           )}
+        </button>
+        <button onClick={() => setCompareMode(prev => !prev)} style={{
+          background: compareMode ? "#06b6d4" : "transparent", color: compareMode ? "#0a0f1a" : "#06b6d4",
+          border: "1px solid #06b6d4", borderRadius: "4px",
+          padding: "6px 12px", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>
+          {compareMode ? "EXIT COMPARE" : "COMPARE IT/OT"}
         </button>
         <button onClick={() => { const next = !showExecutiveSummary; setShowExecutiveSummary(next); if (!next) setPopoutExecutive(false); }} style={{
           background: showExecutiveSummary ? "#06b6d4" : "transparent", color: showExecutiveSummary ? "#fff" : "#06b6d4",
@@ -3153,6 +3581,76 @@ function AttackPathOptimizer() {
         >
           {popoutGraph ? (
             <PopoutPlaceholder label="Graph" onRestore={() => setPopoutGraph(false)} />
+          ) : compareMode ? (
+            <div style={{ display: "flex", width: "100%", height: "100%", gap: "2px" }}>
+              <div style={{ flex: 1, position: "relative", borderRight: "2px solid #1e293b" }}>
+                <div style={{ position: "absolute", top: 4, left: 8, zIndex: 10, padding: "2px 8px", background: framework === "ics" ? "#a855f730" : "#3b82f630", color: framework === "ics" ? "#a855f7" : "#3b82f6", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
+                  {framework === "ics" ? "ICS/OT" : "ENTERPRISE"} (active)
+                </div>
+                <GraphView
+                  techniques={displayTechniques} edges={displayEdges} positions={positions}
+                  exposures={effectiveExposures} betweenness={betweenness} chainCoverage={chainCoverage}
+                  selectedTech={selectedTech} onSelectTech={setSelectedTech}
+                  highlightedChains={highlightedChains}
+                  remediated={remediated}
+                  optimalSet={optimal.selected}
+                  viewHeight={viewHeight}
+                  viewWidth={viewWidth}
+                  phaseCenters={phaseCenters}
+                  onNodeDrag={handleNodeDrag}
+                  searchMatches={techSearchMatches}
+                  collapsedTactics={collapsedTactics}
+                  onToggleCollapse={(tacId) => setCollapsedTactics(prev => {
+                    const next = new Set(prev);
+                    if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
+                    try { localStorage.setItem("attackPathOptimizer_collapsed", JSON.stringify([...next])); } catch(e) {}
+                    return next;
+                  })}
+                  isolateChain={isolateChain}
+                  chainBuilderMode={chainBuilderMode}
+                  chainBuilderPath={chainBuilderPath}
+                  onChainBuilderClick={(techId) => {
+                    if (!chainBuilderPath.includes(techId)) setChainBuilderPath(prev => [...prev, techId]);
+                  }}
+                  gapNodes={gapNodeSet}
+                  techDescriptions={activeTechDescriptions}
+                  tactics={fwConfig.tactics}
+                />
+              </div>
+              <div style={{ flex: 1, position: "relative" }}>
+                <div style={{ position: "absolute", top: 4, left: 8, zIndex: 10, padding: "2px 8px", background: otherFramework === "ics" ? "#a855f730" : "#3b82f630", color: otherFramework === "ics" ? "#a855f7" : "#3b82f6", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
+                  {otherFramework === "ics" ? "ICS/OT" : "ENTERPRISE"} (read-only)
+                </div>
+                {compareLoading ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#64748b", fontSize: "12px" }}>
+                    <span style={{ animation: "stix-pulse 1.5s ease-in-out infinite" }}>Loading {otherFramework === "ics" ? "ICS/OT" : "Enterprise"} data...</span>
+                  </div>
+                ) : compareLayout ? (
+                  <GraphView
+                    techniques={compareLayout.techniques} edges={compareLayout.edges} positions={compareLayout.positions}
+                    exposures={{}} betweenness={compareLayout.betweenness} chainCoverage={compareLayout.chainCoverage}
+                    selectedTech={null} onSelectTech={() => {}}
+                    highlightedChains={[]}
+                    remediated={new Set()}
+                    optimalSet={[]}
+                    viewHeight={compareLayout.viewHeight}
+                    viewWidth={compareLayout.viewWidth}
+                    phaseCenters={compareLayout.phaseCenters}
+                    onNodeDrag={() => {}}
+                    searchMatches={null}
+                    collapsedTactics={new Set()}
+                    onToggleCollapse={() => {}}
+                    isolateChain={false}
+                    chainBuilderMode={false}
+                    chainBuilderPath={[]}
+                    onChainBuilderClick={() => {}}
+                    gapNodes={null}
+                    techDescriptions={{}}
+                    tactics={otherFwConfig.tactics}
+                  />
+                ) : null}
+              </div>
+            </div>
           ) : (
             <GraphView
               techniques={displayTechniques} edges={displayEdges} positions={positions}
@@ -3182,6 +3680,7 @@ function AttackPathOptimizer() {
               gapNodes={gapNodeSet}
               techDescriptions={activeTechDescriptions}
               onPopout={() => setPopoutGraph(true)}
+              tactics={fwConfig.tactics}
             />
           )}
           {popoutGraph && (
@@ -3214,6 +3713,7 @@ function AttackPathOptimizer() {
                   }}
                   gapNodes={gapNodeSet}
                   techDescriptions={activeTechDescriptions}
+                  tactics={fwConfig.tactics}
                 />
               </div>
             </PopoutPanel>
@@ -3304,8 +3804,8 @@ function AttackPathOptimizer() {
             alignItems: "center",
           }}>
             <span style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", marginRight: "4px" }}>Tactics:</span>
-            {TACTICS.map((tac, i) => {
-              const isNewPhase = i > 0 && tac.phase !== TACTICS[i - 1].phase;
+            {fwConfig.tactics.map((tac, i) => {
+              const isNewPhase = i > 0 && tac.phase !== fwConfig.tactics[i - 1].phase;
               return (
                 <React.Fragment key={tac.id}>
                   {i > 0 && (
@@ -3617,7 +4117,7 @@ function AttackPathOptimizer() {
 
                         {/* F1: Control Impact Breakdown */}
                         {(() => {
-                          const applied = SECURITY_CONTROLS.filter(c => deployedControls.has(c.id) && c.coverage[selectedTech]);
+                          const applied = fwConfig.securityControls.filter(c => deployedControls.has(c.id) && c.coverage[selectedTech]);
                           if (applied.length === 0) return null;
                           const baseExp = exposures[selectedTech] ?? 1;
                           const effExp = effectiveExposures[selectedTech] ?? 1;
@@ -3764,7 +4264,7 @@ function AttackPathOptimizer() {
                             <div style={{ marginTop: "16px" }}>
                               <div style={{ fontSize: "9px", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>MITRE Mitigations</div>
                               {mits.map((m, i) => {
-                                const mappedCtrl = MITIGATION_CONTROL_MAP[m.name];
+                                const mappedCtrl = fwConfig.mitigationControlMap[m.name];
                                 const isDeployed = mappedCtrl && deployedControls.has(mappedCtrl);
                                 return (
                                   <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
@@ -3818,25 +4318,25 @@ function AttackPathOptimizer() {
               <select value={controlPreset} onChange={e => {
                 const preset = e.target.value;
                 setControlPreset(preset);
-                if (preset !== "none" && CONTROL_PRESETS[preset]) {
-                  setDeployedControls(new Set(CONTROL_PRESETS[preset].controls));
+                if (preset !== "none" && fwConfig.controlPresets[preset]) {
+                  setDeployedControls(new Set(fwConfig.controlPresets[preset].controls));
                 }
               }} style={{
                 background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155",
                 borderRadius: "4px", padding: "3px 8px", fontSize: "9px", fontFamily: "inherit", marginLeft: "auto",
               }}>
-                {Object.entries(CONTROL_PRESETS).map(([k, v]) => (
+                {Object.entries(fwConfig.controlPresets).map(([k, v]) => (
                   <option key={k} value={k}>{v.name}</option>
                 ))}
               </select>
-              {controlPreset !== "none" && CONTROL_PRESETS[controlPreset] && (
+              {controlPreset !== "none" && fwConfig.controlPresets[controlPreset] && (
                 <span style={{ fontSize: "8px", color: "#14b8a6" }}>
-                  {CONTROL_PRESETS[controlPreset].controls.filter(c => deployedControls.has(c)).length}/{CONTROL_PRESETS[controlPreset].controls.length} for {CONTROL_PRESETS[controlPreset].name}
+                  {fwConfig.controlPresets[controlPreset].controls.filter(c => deployedControls.has(c)).length}/{fwConfig.controlPresets[controlPreset].controls.length} for {fwConfig.controlPresets[controlPreset].name}
                 </span>
               )}
             </h3>
             {CONTROL_CATEGORIES.map(cat => {
-              const catControls = SECURITY_CONTROLS.filter(c => c.category === cat.id);
+              const catControls = fwConfig.securityControls.filter(c => c.category === cat.id);
               const catDeployed = catControls.filter(c => deployedControls.has(c.id)).length;
               const allDeployed = catDeployed === catControls.length;
               return (
@@ -3923,7 +4423,7 @@ function AttackPathOptimizer() {
               const effAvg = activeTechniques.reduce((s, t) => s + (effectiveExposures[t.id] ?? 1), 0) / activeTechniques.length;
               const reduction = baseAvg > 0 ? ((baseAvg - effAvg) / baseAvg * 100).toFixed(1) : "0.0";
               const costTally = {};
-              SECURITY_CONTROLS.forEach(c => {
+              fwConfig.securityControls.forEach(c => {
                 if (!deployedControls.has(c.id)) return;
                 const tier = c.cost;
                 costTally[tier] = (costTally[tier] || 0) + 1;
@@ -3936,7 +4436,7 @@ function AttackPathOptimizer() {
                   </div>
                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "9px" }}>
                     {CONTROL_CATEGORIES.map(cat => {
-                      const catCtrls = SECURITY_CONTROLS.filter(c => c.category === cat.id);
+                      const catCtrls = fwConfig.securityControls.filter(c => c.category === cat.id);
                       const catDep = catCtrls.filter(c => deployedControls.has(c.id)).length;
                       return (
                         <span key={cat.id} style={{ color: catDep > 0 ? cat.color : "#475569" }}>
@@ -4038,6 +4538,36 @@ function AttackPathOptimizer() {
                   );
                 })()}
               </AnalysisCard>
+              {compareMode && compareAnalysis && (
+                <AnalysisCard title="IT/OT Convergence Analysis">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                    <div>
+                      <div style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase" }}>{framework === "ics" ? "ICS/OT" : "Enterprise"}</div>
+                      <div style={{ fontSize: "16px", fontWeight: 700, color: framework === "ics" ? "#a855f7" : "#3b82f6" }}>{compareAnalysis.currentCount}</div>
+                      <div style={{ fontSize: "8px", color: "#64748b" }}>techniques</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase" }}>{otherFramework === "ics" ? "ICS/OT" : "Enterprise"}</div>
+                      <div style={{ fontSize: "16px", fontWeight: 700, color: otherFramework === "ics" ? "#a855f7" : "#3b82f6" }}>{compareAnalysis.otherCount}</div>
+                      <div style={{ fontSize: "8px", color: "#64748b" }}>techniques</div>
+                    </div>
+                  </div>
+                  <div style={{ padding: "6px 8px", background: "#06b6d410", borderRadius: "4px", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "9px", color: "#06b6d4", fontWeight: 700 }}>{compareAnalysis.shared.size}</span>
+                    <span style={{ fontSize: "9px", color: "#94a3b8" }}> shared technique IDs (potential IT{"\u2194"}OT pivot points)</span>
+                  </div>
+                  <div style={{ fontSize: "9px", color: "#94a3b8" }}>
+                    Unique to {framework === "ics" ? "ICS" : "Enterprise"}: <strong style={{ color: "#f59e0b" }}>{compareAnalysis.uniqueCurrent.size}</strong>
+                    {" \u00B7 "}
+                    Unique to {otherFramework === "ics" ? "ICS" : "Enterprise"}: <strong style={{ color: "#f59e0b" }}>{compareAnalysis.uniqueOther.size}</strong>
+                  </div>
+                  {compareAnalysis.shared.size > 0 && (
+                    <div style={{ marginTop: "6px", fontSize: "8px", color: "#64748b" }}>
+                      Shared IDs: {[...compareAnalysis.shared].slice(0, 10).join(", ")}{compareAnalysis.shared.size > 10 ? " ..." : ""}
+                    </div>
+                  )}
+                </AnalysisCard>
+              )}
             </div>
           </>
         );
@@ -4073,6 +4603,7 @@ function AttackPathOptimizer() {
         const execProps = {
           techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
           filteredChains, chainStatus, remediated, optimal, deployedControls,
+          tactics: fwConfig.tactics, securityControls: fwConfig.securityControls,
         };
         return (
           <>
@@ -4150,7 +4681,7 @@ function AttackPathOptimizer() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "10px" }}>
               {gapAnalysis.gaps.map(gap => {
-                const tactic = TACTICS.find(ta => ta.id === gap.tactic);
+                const tactic = fwConfig.tactics.find(ta => ta.id === gap.tactic);
                 const isNoCoverage = gap.gapType === "no-coverage";
                 return (
                   <div key={gap.id} onClick={() => setSelectedTech(gap.id)} style={{
@@ -4235,7 +4766,9 @@ function AttackPathOptimizer() {
 }
 
 function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, filteredChains,
-  chainStatus, remediated, optimal, deployedControls, popout, onPopout }) {
+  chainStatus, remediated, optimal, deployedControls, popout, onPopout, tactics: tacticsProp, securityControls: secControlsProp }) {
+  const tacticsArr = tacticsProp || TACTICS;
+  const controlsArr = secControlsProp || SECURITY_CONTROLS;
   const avgExposure = techniques.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / Math.max(techniques.length, 1);
   const highExposed = techniques.filter(t => (exposures[t.id] ?? 1) > 0.7).length;
   const totalDisrupted = chainStatus.filter(c => c.broken).length;
@@ -4250,7 +4783,7 @@ function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, f
     .slice(0, 5);
 
   const tacticExposures = {};
-  TACTICS.forEach(tac => {
+  tacticsArr.forEach(tac => {
     const tacTechs = techniques.filter(t => t.tactic === tac.id);
     if (tacTechs.length === 0) return;
     const avg = tacTechs.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / tacTechs.length;
@@ -4258,7 +4791,7 @@ function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, f
   });
   const coverageGaps = Object.values(tacticExposures).sort((a, b) => b.avg - a.avg).slice(0, 5);
 
-  const topUndeployedControls = SECURITY_CONTROLS
+  const topUndeployedControls = controlsArr
     .filter(c => !deployedControls.has(c.id))
     .map(c => {
       const totalReduction = Object.values(c.coverage).reduce((s, v) => s + Math.abs(v), 0);
@@ -4310,7 +4843,7 @@ function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, f
       <div style={{ ...sectionStyle }}>
         <div style={labelStyle}>Top 5 Risks</div>
         {topRisks.map((t, i) => {
-          const tactic = TACTICS.find(ta => ta.id === t.tactic);
+          const tactic = tacticsArr.find(ta => ta.id === t.tactic);
           return (
             <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < 4 ? "1px solid #1e293b" : "none" }}>
               <span style={{ fontSize: "12px", color: "#475569", width: 20, fontWeight: 700 }}>#{i + 1}</span>
@@ -4370,7 +4903,7 @@ function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, f
       {/* Tactic Heatmap */}
       <div style={{ ...sectionStyle }}>
         <div style={labelStyle}>Tactic Exposure Heatmap</div>
-        {TACTICS.map(tac => {
+        {tacticsArr.map(tac => {
           const info = tacticExposures[tac.id];
           if (!info) return null;
           return (
