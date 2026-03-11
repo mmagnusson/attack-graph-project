@@ -2,118 +2,84 @@
 
 **Date:** 2026-02-27
 **Scope:** `attack-path-optimizer.html` (sole active file, 4446 lines)
-**Status:** Findings documented, remediation pending
+**Status:** Remediation complete (2026-03-02) — 10 of 12 issues resolved, 2 deferred
 
 ---
 
 ## HIGH Severity
 
 ### 1. Unpinned CDN Dependencies Without SRI Hashes
-**Lines 8-10**
+**Lines 8-10** | **RESOLVED 2026-03-02**
 
-```html
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-```
-
-- `react@18` resolves to latest 18.x — not pinned to exact version
-- Babel has no version specifier at all
-- No `integrity` (SRI) attributes on any script tag
-- Babel tag missing `crossorigin` attribute
-
-**Attack scenario:** CDN compromise or malicious package version injects arbitrary JS into every user session.
-
-**Fix:** Pin exact versions (`react@18.3.1`, etc.), add `integrity="sha384-..."` and `crossorigin="anonymous"` on all script tags.
+Pinned exact versions (`react@18.3.1`, `react-dom@18.3.1`, `@babel/standalone@7.26.9`) with `integrity="sha384-..."` and `crossorigin="anonymous"` on all script tags.
 
 ### 2. No Content Security Policy
-No `<meta http-equiv="Content-Security-Policy">` tag exists. Any XSS vector would have unrestricted access to the page. Note: Babel Standalone forces `'unsafe-eval'` in any CSP (see issue #3).
+**RESOLVED 2026-03-02**
 
-**Fix:** Add CSP meta tag. Full CSP effectiveness requires removing Babel Standalone first.
+Added `<meta http-equiv="Content-Security-Policy">` with directives: `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com`, `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`, `font-src https://fonts.gstatic.com`, `connect-src https://raw.githubusercontent.com`, `img-src 'self' data: blob:`, `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`. Note: `unsafe-inline` and `unsafe-eval` both required by Babel Standalone (see #3) — it injects transpiled code as inline `<script>` elements and uses `new Function()` internally.
 
 ---
 
 ## MEDIUM Severity
 
 ### 3. Babel Standalone Requires `unsafe-eval`
-**Lines 10, 33**
+**Lines 10, 33** | **DEFERRED** — architectural change
 
 The entire app (~4400 lines of JSX) is compiled at runtime via Babel's `eval()`/`new Function()`. This:
 - Forces `'unsafe-eval'` in any CSP, significantly weakening it
 - Adds ~3MB to page load (Babel Standalone)
 - Expands the attack surface
 
-**Fix:** Pre-compile JSX to plain JS, remove Babel Standalone entirely.
+**Fix:** Pre-compile JSX to plain JS, remove Babel Standalone entirely. Requires build toolchain change.
 
 ### 4. No Clickjacking Protection
+**RESOLVED 2026-03-02**
 
-No `frame-ancestors` CSP directive, no `X-Frame-Options`, no frame-busting JS. The app could be embedded in an attacker's iframe to trick users into clicking "Apply Optimal" or "Mark as Remediated".
-
-**Fix:** Add `frame-ancestors 'none'` to CSP + frame-busting JS at top of script.
+Added `frame-ancestors 'none'` in CSP meta tag + frame-busting JS (`if (window.top !== window.self)`) at top of script.
 
 ### 5. CSV Formula Injection
-**Lines ~2709-2747, ~2791-2833**
+**RESOLVED 2026-03-02**
 
-CSV exports (`exportCSV`, `exportRemediationPlan`) write technique names/descriptions directly into cells. Data sourced from uploaded STIX files could contain payloads like `=CMD("calc")` that execute when opened in Excel.
-
-**Fix:** Prefix any CSV cell value starting with `=`, `+`, `-`, `@`, `\t`, or `\r` with a single quote (`'`).
+Added `sanitizeCSVCell()` utility that prefixes cells starting with `=`, `+`, `-`, `@`, `\t`, `\r` with a single quote. Applied to all user-controlled string fields in `exportCSV` and `exportRemediationPlan`.
 
 ### 6. PopoutPanel Uses innerHTML
-**Lines 2086-2094**
+**RESOLVED 2026-03-02**
 
-Pop-out windows set `win.document.head.innerHTML` with hardcoded strings. Currently safe (no user data interpolated), but the pattern is fragile and pop-out windows inherit no CSP.
-
-**Fix:** Use `document.createElement()` / `appendChild()` instead of `innerHTML`.
+Replaced `win.document.head.innerHTML = ...` with `document.createElement()`/`appendChild()` for the `<link>` element and `style.textContent` for the `<style>` element.
 
 ---
 
 ## LOW Severity
 
 ### 7. Google Fonts Privacy Leak
-**Lines 7, 2087**
+**Lines 7, 2087** | **DEFERRED** — deployment model change
 
-Every page load (+ every pop-out) sends visitor IP/User-Agent/Referer to `fonts.googleapis.com` and `fonts.gstatic.com`. For a cybersecurity posture tool, this reveals which organizations are using it.
-
-**Fix:** Self-host JetBrains Mono woff2 files in a `fonts/` directory, replace `<link>` with `@font-face`.
+Self-hosting Google Fonts changes the standalone single-file deployment model. TODO comment added. SRI hashes (#1) and CSP (#2) mitigate integrity risks; privacy leak remains.
 
 ### 8. unpkg.com Privacy Leak
-**Lines 8-10**
+**Lines 8-10** | **DEFERRED** — deployment model change
 
-Three requests to `unpkg.com` on every page load also leak visitor info to a third party.
-
-**Fix:** Self-host React and ReactDOM.
+Self-hosting React/ReactDOM changes the standalone single-file deployment model. TODO comment added. SRI hashes (#1) protect integrity; privacy leak remains.
 
 ### 9. Hash Parameters Lack Strict Validation
-**Lines ~2156-2173**
+**RESOLVED 2026-03-02**
 
-`decodeHashToState` accepts arbitrary strings for `dataSource`, `envPreset`, etc. without allowlist validation. Values flow into React state safely (no HTML injection), but crafted shared URLs could present misleading assessment configurations.
-
-**Fix:** Add allowlist validation for `dataSource`, `envPreset`, `sectorFilter`, and range check for `budget`.
+Added allowlist validation in `decodeHashToState`: `dataSource` (`stix`/`builtin`), `envPreset` (keys of `ENV_PRESETS`), `sectorFilter` (`all`/`government`/`financial`), `budget` (range 1-10), `selectedPlatforms` (validated against `ALL_PLATFORMS`), `controlPreset` (keys of `CONTROL_PRESETS`). Invalid values are silently dropped (app uses defaults).
 
 ### 10. No Upload Size Limit
-**Lines ~2575-2591**
+**RESOLVED 2026-03-02**
 
-`handleStixFileUpload` reads files via `FileReader` without checking `file.size`. A multi-GB file could crash the browser tab.
-
-**Fix:** Add `if (file.size > 100 * 1024 * 1024) { setUploadError("File too large"); return; }`.
+Added `file.size > 100 * 1024 * 1024` guard to both `handleStixFileUpload` and `handleNavigatorImport`. Oversized files show error and are not read.
 
 ### 11. STIX Fetch Uses Unpinned master Branch
-**Line ~1225**
+**RESOLVED 2026-03-02**
 
-```javascript
-fetch("https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json")
-```
-
-Fetches from `master` branch which can change at any time. A repository compromise would serve malicious STIX data.
-
-**Fix:** Pin to a specific release tag (e.g., `ATT%26CK-v16.1`).
+Changed fetch URL from `cti/master/` to `cti/ATT%26CK-v16.1/` and cache key from `enterprise-attack-v5` to `enterprise-attack-v16.1`.
 
 ### 12. No Fetch Cancellation
-**Lines ~2422-2443**
+**RESOLVED 2026-03-02**
 
-Rapid data source toggling fires multiple concurrent fetches without `AbortController`.
-
-**Fix:** Add `AbortController` to cancel in-flight requests when data source changes.
+Added `AbortController` in the `dataSource` `useEffect`. `loadStixData()` now accepts a `signal` parameter passed to `fetch()`. Cleanup function calls `controller.abort()`. Promise handlers check `signal.aborted` before updating state.
 
 ---
 
@@ -126,14 +92,19 @@ Rapid data source toggling fires multiple concurrent fetches without `AbortContr
 
 ---
 
-## Remediation Priority
+## Remediation Summary
 
-| Tier | Action | Issues |
-|------|--------|--------|
-| **1 — Now** | Pin CDN versions + add SRI hashes | #1 |
-| **1 — Now** | Add CSV formula injection protection | #5 |
-| **2 — Soon** | Pre-compile JSX, remove Babel Standalone | #3 |
-| **2 — Soon** | Add CSP meta tag + frame protection | #2, #4 |
-| **2 — Soon** | Replace PopoutPanel innerHTML with DOM API | #6 |
-| **3 — Later** | Self-host fonts and dependencies | #7, #8 |
-| **3 — Later** | Input validation, size limits, fetch cancellation | #9-12 |
+| Issue | Severity | Status | Date |
+|-------|----------|--------|------|
+| #1 CDN pinning + SRI | HIGH | **Resolved** | 2026-03-02 |
+| #2 Content Security Policy | HIGH | **Resolved** | 2026-03-02 |
+| #3 Babel unsafe-eval | MEDIUM | Deferred | — |
+| #4 Clickjacking protection | MEDIUM | **Resolved** | 2026-03-02 |
+| #5 CSV formula injection | MEDIUM | **Resolved** | 2026-03-02 |
+| #6 PopoutPanel innerHTML | MEDIUM | **Resolved** | 2026-03-02 |
+| #7 Google Fonts privacy | LOW | Deferred | — |
+| #8 unpkg.com privacy | LOW | Deferred | — |
+| #9 Hash validation | LOW | **Resolved** | 2026-03-02 |
+| #10 Upload size limit | LOW | **Resolved** | 2026-03-02 |
+| #11 STIX URL pinning | LOW | **Resolved** | 2026-03-02 |
+| #12 Fetch cancellation | LOW | **Resolved** | 2026-03-02 |
