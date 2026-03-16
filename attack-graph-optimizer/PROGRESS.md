@@ -22,23 +22,38 @@ Decomposed `attack-path-optimizer.html` (6,253 lines) into modular Vite + React 
 
 ---
 
-## Phase B: Break Up App.tsx — TODO
+## Phase B: Break Up App.tsx — IN PROGRESS
 
-App.tsx is still 2,626 lines. Extract into custom hooks and sub-components:
+### B1: Extract UI components & export hook ✅ COMPLETE (2026-03-16)
 
-- [ ] `useAppState.ts` hook — all 38 useState declarations + localStorage init
-- [ ] `useStixLoader.ts` hook — STIX loading effect, upload handler, data source switching
+App.tsx reduced from **2,626 → 1,244 lines** (53% reduction).
+Extracted 10 focused component/hook files totaling ~1,633 lines.
+Build: `tsc -b && vite build` — zero errors, 69 modules, <1s.
+
+**Files created:**
+- `src/hooks/useExportHandlers.ts` (191 lines) — CSV, Navigator layer, remediation plan, coverage CSV exports
+- `src/components/Header/Header.tsx` (188 lines) — Framework, data source, env, platform, sector, budget, search
+- `src/components/Header/StatsBar.tsx` (181 lines) — Stat indicators + 15 action buttons
+- `src/components/Header/index.ts`
+- `src/components/Panels/ChainsPanel.tsx` (191 lines) — Attack chains list, search, profiles, chain comparison
+- `src/components/Panels/PriorityPanel.tsx` (56 lines) — Remediation priority ranking
+- `src/components/Panels/DetailPanel.tsx` (315 lines) — Node detail, exposure slider, controls, mitigations, context
+- `src/components/Panels/ControlsPanel.tsx` (166 lines) — Security controls grid with deploy/undeploy
+- `src/components/Panels/AnalysisPanel.tsx` (120 lines) — Optimization analysis cards
+- `src/components/Panels/GapAnalysisPanel.tsx` (118 lines) — Control gap analysis grid
+- `src/components/Panels/ExposureSummaryPanel.tsx` (107 lines) — Environment coverage summary
+- `src/components/Panels/index.ts`
+
+### B2: Extract custom hooks from App.tsx — TODO
+
+App.tsx still has ~1,244 lines with state + effects + computed values inline.
+Further extraction possible but has diminishing returns due to heavy state interdependencies.
+
+- [ ] `useStixLoader.ts` hook — dataSource, customData, stixLoading, file upload, STIX load effect
 - [ ] `useEnvironmentProfile.ts` hook — profile state, exposure computation, persistence
 - [ ] `usePersistence.ts` hook — localStorage autosave, URL hash restore/share
 - [ ] `useGraphLayout.ts` hook — layoutResult, positions, customPositions, node drag
 - [ ] `useAnalysis.ts` hook — betweenness, chainCoverage, gapAnalysis, optimal, chainStatus
-- [ ] Extract header toolbar into `components/Header/Header.tsx`
-- [ ] Extract stats bar into `components/Header/StatsBar.tsx`
-- [ ] Extract bottom panels (chains, priority, detail) into separate components
-- [ ] Extract controls panel into `components/Controls/ControlsPanel.tsx`
-- [ ] Extract gap analysis panel into `components/Analysis/GapAnalysisPanel.tsx`
-- [ ] Extract analysis panel into `components/Analysis/AnalysisPanel.tsx`
-- [ ] Extract exposure summary into `components/Analysis/ExposureSummary.tsx`
 
 ---
 
