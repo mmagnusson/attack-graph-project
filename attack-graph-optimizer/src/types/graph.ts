@@ -1,4 +1,4 @@
-// ─── Attack Graph Optimizer — Core Graph Types ──────────────────────────────
+// ─── AttackBreaker — Core Graph Types ──────────────────────────────
 // Extracted from attack-path-optimizer.html monolith data structures.
 
 /** MITRE ATT&CK tactic (kill chain phase) */

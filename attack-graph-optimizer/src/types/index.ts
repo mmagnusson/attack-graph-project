@@ -1,4 +1,4 @@
-// ─── Attack Graph Optimizer — Type Barrel ────────────────────────────────────
+// ─── AttackBreaker — Type Barrel ────────────────────────────────────
 // Re-exports all types from domain-specific modules.
 
 // Graph core types

@@ -86,6 +86,8 @@ export function detectFramework(bundle: StixBundle): FrameworkId | null {
 /** Parses a STIX bundle into techniques, edges, chains, platforms, mitigations, and group profiles */
 export function parseStixBundle(bundle: StixBundle, fwConfig: FrameworkConfig): ParsedStixData {
   if (!bundle || !bundle.objects) throw new Error('Invalid STIX bundle: missing objects array');
+  if (!Array.isArray(bundle.objects)) throw new Error('Invalid STIX bundle: objects is not an array');
+  if (bundle.objects.length > 200000) throw new Error('STIX bundle too large: ' + bundle.objects.length + ' objects (max 200,000)');
 
   const techniques: Technique[] = [];
   const techById: Record<string, string> = {};

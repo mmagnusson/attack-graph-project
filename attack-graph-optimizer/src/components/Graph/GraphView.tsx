@@ -63,6 +63,10 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
   const isPanning = useRef(false);
   const didDrag = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
+  const lastTouches = useRef<{ x: number; y: number }[]>([]);
+  const lastPinchDist = useRef<number | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const touchDidMove = useRef(false);
 
   const dragNodeRef = useRef<string | null>(null);
   const dragDidMove = useRef(false);
@@ -80,6 +84,8 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
   chainBuilderModeRef.current = chainBuilderMode;
   const onChainBuilderClickRef = useRef(onChainBuilderClick);
   onChainBuilderClickRef.current = onChainBuilderClick;
+  const positionsRef = useRef(positions);
+  positionsRef.current = positions;
 
   const vh = viewHeight || 420;
   const vw = viewWidth || 1000;
@@ -227,7 +233,149 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
       });
     };
     svg.addEventListener('wheel', onWheel, { passive: false });
-    return () => svg.removeEventListener('wheel', onWheel);
+
+    // ─── Touch: pan (1 finger) + pinch-to-zoom (2 fingers) ─────────────
+    const getTouchPoints = (e: TouchEvent) =>
+      Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+
+    const pinchDist = (pts: { x: number; y: number }[]) =>
+      Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const pts = getTouchPoints(e);
+      lastTouches.current = pts;
+      lastPinchDist.current = pts.length >= 2 ? pinchDist(pts) : null;
+      if (pts.length === 1) {
+        touchStartPos.current = { x: pts[0].x, y: pts[0].y };
+        touchDidMove.current = false;
+      } else {
+        touchStartPos.current = null;
+        touchDidMove.current = true;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const pts = getTouchPoints(e);
+      const prev = lastTouches.current;
+      const rect = svg.getBoundingClientRect();
+
+      // Detect if finger moved enough to count as a drag (not a tap)
+      if (touchStartPos.current && pts.length === 1) {
+        const dx = pts[0].x - touchStartPos.current.x;
+        const dy = pts[0].y - touchStartPos.current.y;
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) touchDidMove.current = true;
+      } else {
+        touchDidMove.current = true;
+      }
+
+      if (pts.length >= 2 && prev.length >= 2) {
+        // Pinch zoom
+        const curDist = pinchDist(pts);
+        const prevDist = lastPinchDist.current ?? curDist;
+        if (prevDist > 0) {
+          const factor = curDist / prevDist;
+          const midX = (pts[0].x + pts[1].x) / 2;
+          const midY = (pts[0].y + pts[1].y) / 2;
+          const mx = (midX - rect.left) / rect.width * viewWidthRef.current;
+          const my = (midY - rect.top) / rect.height * viewHeightRef.current;
+          setTransform(p => {
+            const newScale = Math.max(0.3, Math.min(8, p.scale * factor));
+            const ratio = newScale / p.scale;
+            return { x: mx - (mx - p.x) * ratio, y: my - (my - p.y) * ratio, scale: newScale };
+          });
+        }
+        // Also pan with midpoint movement
+        const prevMidX = (prev[0].x + prev[1].x) / 2;
+        const prevMidY = (prev[0].y + prev[1].y) / 2;
+        const curMidX = (pts[0].x + pts[1].x) / 2;
+        const curMidY = (pts[0].y + pts[1].y) / 2;
+        const dx = curMidX - prevMidX;
+        const dy = curMidY - prevMidY;
+        setTransform(p => ({
+          ...p,
+          x: p.x + dx / rect.width * viewWidthRef.current,
+          y: p.y + dy / rect.height * viewHeightRef.current,
+        }));
+        lastPinchDist.current = curDist;
+      } else if (pts.length === 1 && prev.length >= 1 && touchDidMove.current) {
+        // Single-finger pan (only if moved past threshold)
+        const dx = pts[0].x - prev[0].x;
+        const dy = pts[0].y - prev[0].y;
+        setTransform(p => ({
+          ...p,
+          x: p.x + dx / rect.width * viewWidthRef.current,
+          y: p.y + dy / rect.height * viewHeightRef.current,
+        }));
+      }
+      lastTouches.current = pts;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      // Tap detection: single finger, didn't move → hit-test nodes
+      if (!touchDidMove.current && touchStartPos.current && e.changedTouches.length > 0) {
+        const touch = e.changedTouches[0];
+        const t = transformRef.current;
+
+        // Use SVG's built-in matrix to correctly map screen → viewBox coords
+        // This handles aspect ratio, letterboxing, and any CSS transforms
+        const ctm = svg.getScreenCTM();
+        let nodeX: number, nodeY: number;
+        if (ctm) {
+          const pt = svg.createSVGPoint();
+          pt.x = touch.clientX;
+          pt.y = touch.clientY;
+          const svgPt = pt.matrixTransform(ctm.inverse());
+          // Untransform from viewBox coords to node-space coords
+          nodeX = (svgPt.x - t.x) / t.scale;
+          nodeY = (svgPt.y - t.y) / t.scale;
+        } else {
+          // Fallback: simple linear mapping
+          const rect = svg.getBoundingClientRect();
+          const svgX = (touch.clientX - rect.left) / rect.width * viewWidthRef.current;
+          const svgY = (touch.clientY - rect.top) / rect.height * viewHeightRef.current;
+          nodeX = (svgX - t.x) / t.scale;
+          nodeY = (svgY - t.y) / t.scale;
+        }
+
+        // Find closest node within tap radius (~25px screen → node-space)
+        const tapRadius = 25 / t.scale;
+        let closest: string | null = null;
+        let closestDist = tapRadius;
+        const curPositions = positionsRef.current;
+        const posKeys = Object.keys(curPositions);
+        for (let i = 0; i < posKeys.length; i++) {
+          const id = posKeys[i];
+          const p = curPositions[id];
+          if (!p) continue;
+          const d = Math.hypot(p.x - nodeX, p.y - nodeY);
+          if (d < closestDist) { closestDist = d; closest = id; }
+        }
+        if (closest) {
+          if (chainBuilderModeRef.current && onChainBuilderClickRef.current) {
+            onChainBuilderClickRef.current(closest);
+          } else if (onSelectTechRef.current) {
+            onSelectTechRef.current(closest);
+          }
+        }
+      }
+      touchStartPos.current = null;
+      const pts = getTouchPoints(e);
+      lastTouches.current = pts;
+      lastPinchDist.current = pts.length >= 2 ? pinchDist(pts) : null;
+    };
+
+    svg.addEventListener('touchstart', onTouchStart, { passive: false });
+    svg.addEventListener('touchmove', onTouchMove, { passive: false });
+    svg.addEventListener('touchend', onTouchEnd, { passive: false });
+
+    return () => {
+      svg.removeEventListener('wheel', onWheel);
+      svg.removeEventListener('touchstart', onTouchStart);
+      svg.removeEventListener('touchmove', onTouchMove);
+      svg.removeEventListener('touchend', onTouchEnd);
+    };
   }, []);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
@@ -351,11 +499,39 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
         <ZoomButton label="FIT" onClick={zoomToFit} />
         {onPopout && <ZoomButton label={"\u2197"} onClick={onPopout} />}
       </div>
-      <div style={{ position: "absolute", bottom: 8, right: 8, fontSize: "9px", color: "#64748b", fontFamily: "monospace", background: "rgba(10,15,26,0.7)", padding: "2px 6px", borderRadius: 3, zIndex: 10 }}>
+      {highlightedChains.length > 0 && (
+        <div style={{
+          position: "absolute", top: 8, left: 8, zIndex: 10,
+          display: "flex", flexDirection: "column", gap: 3,
+          background: "rgba(10,15,26,0.8)", backdropFilter: "blur(4px)",
+          padding: "6px 10px", borderRadius: 5, border: "1px solid #1e293b",
+        }}>
+          <span style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 600 }}>
+            Active Chains
+          </span>
+          {highlightedChains.map((chain, i) => (
+            <div key={chain.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{
+                width: 10, height: 3, borderRadius: 1,
+                background: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
+                flexShrink: 0,
+              }} />
+              <span style={{
+                fontSize: "10px", color: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
+                fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden",
+                textOverflow: "ellipsis", maxWidth: 200,
+              }}>
+                {chain.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ position: "absolute", bottom: 8, right: 8, fontSize: "9px", color: "#94a3b8", fontFamily: "monospace", background: "rgba(10,15,26,0.7)", padding: "2px 6px", borderRadius: 3, zIndex: 10 }}>
         {(transform.scale * 100).toFixed(0)}%
       </div>
       <svg ref={svgRef} viewBox={"0 0 " + vw + " " + vh}
-        style={{ width: "100%", height: "100%", background: "transparent", cursor: "grab" }}
+        style={{ width: "100%", height: "100%", background: "transparent", cursor: "grab", touchAction: "none" }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

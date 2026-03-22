@@ -1,4 +1,4 @@
-// ─── Attack Graph Optimizer — Environment Profile Types ──────────────────────
+// ─── AttackBreaker — Environment Profile Types ──────────────────────
 // Extracted from ProfileWizard and computeExposureScores() in attack-path-optimizer.html.
 
 /** Organization context collected in the ProfileWizard (step 1) */

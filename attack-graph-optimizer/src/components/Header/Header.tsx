@@ -59,10 +59,10 @@ export function Header({
     }}>
       <div>
         <h1 style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc", margin: 0, letterSpacing: "-0.5px" }}>
-          ATT&CK Path Optimizer
+          AttackBreaker
         </h1>
         <p style={{ fontSize: "10px", color: "#64748b", margin: "2px 0 0 0" }}>
-          Weighted graph analysis for optimal cybersecurity expenditure
+          Weighted graph analysis for optimal cybersecurity remediation
         </p>
       </div>
       <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>

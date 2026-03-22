@@ -1,5 +1,6 @@
-// ─── App.tsx — Attack Path Optimizer (main component) ─────────────────────────
-// State, computed values, effects, and handler functions.
+// ─── App.tsx — AttackBreaker (main component) ────────────────────────────────
+// Core state, persistence, and panel orchestration.
+// Hooks: useStixLoader, useCompareMode, useEnvironmentProfile, useGraphInteraction, useChainBuilder
 // UI panels are in components/Header, components/Panels, components/Graph, etc.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -14,22 +15,21 @@ import {
   CHAIN_PROFILES,
 } from './data/techniqueMetadata';
 import { getFrameworkConfig } from './data/frameworkConfig';
-import { loadStixData } from './data/loadAttackData';
 
-import {
-  computeExposureScores,
-  buildActorTechMap,
-} from './engine/exposureEngine';
 import {
   computeBetweenness,
   computeChainCoverage,
   findOptimalRemediation,
   layoutNodes,
 } from './engine/graphModel';
-import { detectFramework, parseStixBundle } from './engine/stixParser';
 
 import { encodeStateToHash, decodeHashToState } from './hooks/useUrlState';
 import { useExportHandlers } from './hooks/useExportHandlers';
+import { useStixLoader } from './hooks/useStixLoader';
+import { useCompareMode } from './hooks/useCompareMode';
+import { useEnvironmentProfile } from './hooks/useEnvironmentProfile';
+import { useGraphInteraction } from './hooks/useGraphInteraction';
+import { useChainBuilder } from './hooks/useChainBuilder';
 
 import { GraphView } from './components/Graph';
 import { LegendItem, PopoutPanel, PopoutPlaceholder } from './components/Analysis';
@@ -43,7 +43,7 @@ import {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AttackPathOptimizer() {
+export default function AttackBreaker() {
   // ─── Core state ──────────────────────────────────────────────────────────────
 
   const [framework, setFramework] = useState("enterprise");
@@ -59,21 +59,7 @@ export default function AttackPathOptimizer() {
   const [remediationBudget, setRemediationBudget] = useState(5);
   const [sectorFilter, setSectorFilter] = useState("all");
   const [showAnalysis, setShowAnalysis] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(300);
-  const [showBottomPanels, setShowBottomPanels] = useState(true);
-  const isDraggingDivider = useRef(false);
-
-  // ─── Data source state ───────────────────────────────────────────────────────
-
-  const [dataSource, setDataSource] = useState("stix");
-  const [customData, setCustomData] = useState<any>(null);
-  const [stixLoading, setStixLoading] = useState(false);
-  const [stixError, setStixError] = useState<string | null>(null);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [autoDetectedFw, setAutoDetectedFw] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const navFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [customPositions, setCustomPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   // ─── Security controls state ─────────────────────────────────────────────────
 
@@ -89,32 +75,6 @@ export default function AttackPathOptimizer() {
   const [popoutControls, setPopoutControls] = useState(false);
   const [showGapAnalysis, setShowGapAnalysis] = useState(false);
   const [popoutGapAnalysis, setPopoutGapAnalysis] = useState(false);
-  const [popoutGraph, setPopoutGraph] = useState(false);
-
-  // ─── Graph & interaction state ───────────────────────────────────────────────
-
-  const [customPositions, setCustomPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [techSearchQuery, setTechSearchQuery] = useState("");
-  const [chainSearchQuery, setChainSearchQuery] = useState("");
-  const [collapsedTactics, setCollapsedTactics] = useState<Set<string>>(() => {
-    try {
-      const s = localStorage.getItem("attackPathOptimizer_collapsed");
-      return s ? new Set(JSON.parse(s)) : new Set();
-    } catch { return new Set(); }
-  });
-  const [showSubTechniques, setShowSubTechniques] = useState(false);
-
-  // ─── Custom chain builder state ──────────────────────────────────────────────
-
-  const [chainBuilderMode, setChainBuilderMode] = useState(false);
-  const [chainBuilderPath, setChainBuilderPath] = useState<string[]>([]);
-  const [chainBuilderName, setChainBuilderName] = useState("");
-  const [customChains, setCustomChains] = useState<any[]>(() => {
-    try {
-      const s = localStorage.getItem("attackPathOptimizer_customChains");
-      return s ? JSON.parse(s) : [];
-    } catch { return []; }
-  });
 
   // ─── Feature toggles ────────────────────────────────────────────────────────
 
@@ -124,25 +84,9 @@ export default function AttackPathOptimizer() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string> | null>(null);
   const [controlPreset, setControlPreset] = useState("none");
   const [expandedChainProfile, setExpandedChainProfile] = useState<string | null>(null);
-
-  // ─── Environment profiling state ─────────────────────────────────────────────
-
-  const [environmentProfile, setEnvironmentProfile] = useState<any>(() => {
-    try {
-      const s = localStorage.getItem("attackPathOptimizer_envProfile");
-      return s ? JSON.parse(s) : null;
-    } catch { return null; }
-  });
-  const [showProfileWizard, setShowProfileWizard] = useState(false);
-  const [profileExposures, setProfileExposures] = useState<Record<string, any> | null>(null);
-
-  // ─── Compare mode state ──────────────────────────────────────────────────────
-
-  const [compareMode, setCompareMode] = useState(false);
-  const [compareData, setCompareData] = useState<any>(null);
-  const [compareLoading, setCompareLoading] = useState(false);
-  const otherFramework = framework === "enterprise" ? "ics" : "enterprise";
-  const otherFwConfig = useMemo(() => getFrameworkConfig(otherFramework), [otherFramework]);
+  const [showSubTechniques, setShowSubTechniques] = useState(false);
+  const [chainSearchQuery, setChainSearchQuery] = useState("");
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
   // ─── Persistence helpers ─────────────────────────────────────────────────────
 
@@ -151,6 +95,24 @@ export default function AttackPathOptimizer() {
   const mountTime = useRef(Date.now());
   const hashChainNamesRef = useRef<string[] | null>(null);
   const [shareConfirm, setShareConfirm] = useState(false);
+
+  // ─── Extracted hooks ─────────────────────────────────────────────────────────
+
+  const stixLoader = useStixLoader({ framework, fwConfig, setFramework, setCustomPositions });
+  const {
+    dataSource, setDataSource, customData, stixLoading, stixError,
+    uploadedFileName, uploadError, autoDetectedFw,
+    fileInputRef, navFileInputRef, handleStixFileUpload,
+  } = stixLoader;
+
+  const chainBuilder = useChainBuilder();
+  const {
+    chainBuilderMode, setChainBuilderMode,
+    chainBuilderPath, setChainBuilderPath,
+    chainBuilderName, setChainBuilderName,
+    customChains, setCustomChains,
+    saveChain, addTechToPath, undoStep, clearPath,
+  } = chainBuilder;
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // DERIVED DATA
@@ -168,8 +130,7 @@ export default function AttackPathOptimizer() {
   const activeMitigations = customData?.mitigations || TECHNIQUE_MITIGATIONS;
   const activeGroupProfiles = customData?.groupProfiles || CHAIN_PROFILES;
 
-  // ─── Display techniques (filtered by sub-technique toggle + platform filter) ──
-
+  // Display techniques (filtered by sub-technique toggle + platform filter)
   const displayTechniques = useMemo(() => {
     let techs: any[];
     if (showSubTechniques) {
@@ -195,18 +156,7 @@ export default function AttackPathOptimizer() {
     return techs;
   }, [activeTechniques, showSubTechniques, selectedPlatforms, activePlatforms]);
 
-  const techSearchMatches = useMemo(() => {
-    if (!techSearchQuery.trim()) return null;
-    const q = techSearchQuery.toLowerCase().trim();
-    const matches = new Set<string>();
-    displayTechniques.forEach((t: any) => {
-      if (t.id.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)) matches.add(t.id);
-    });
-    return matches;
-  }, [techSearchQuery, displayTechniques]);
-
-  // ─── Effective exposures with security control adjustments ────────────────────
-
+  // Effective exposures with security control adjustments
   const effectiveExposures = useMemo(() => {
     if (deployedControls.size === 0) return exposures;
     const result: Record<string, number> = { ...exposures };
@@ -220,43 +170,58 @@ export default function AttackPathOptimizer() {
     return result;
   }, [exposures, deployedControls, fwConfig]);
 
+  // ─── More extracted hooks (depend on derived data) ───────────────────────────
+
+  const compare = useCompareMode({ framework, activeTechniques });
+  const {
+    compareMode, setCompareMode, compareLoading,
+    otherFramework, otherFwConfig, compareLayout, compareAnalysis,
+  } = compare;
+
+  const layoutResult = useMemo(() => layoutNodes(displayTechniques, fwConfig.tactics), [displayTechniques, fwConfig]);
+  const displayEdges = useMemo(() => {
+    const techSet = new Set(displayTechniques.map((t: any) => t.id));
+    return activeEdges.filter((e: any) => techSet.has(e.from) && techSet.has(e.to));
+  }, [displayTechniques, activeEdges]);
+  const { viewHeight, viewWidth, phaseCenters } = layoutResult;
+  const positions = useMemo(() => {
+    if (Object.keys(customPositions).length === 0) return layoutResult.positions;
+    return { ...layoutResult.positions, ...customPositions };
+  }, [layoutResult.positions, customPositions]);
+  const betweenness = useMemo(() => computeBetweenness(activeTechniques, activeEdges), [activeTechniques, activeEdges]);
+
+  const graphInteraction = useGraphInteraction({ displayTechniques });
+  const {
+    panelHeight, showBottomPanels, setShowBottomPanels,
+    collapsedTactics, setCollapsedTactics,
+    techSearchQuery, setTechSearchQuery,
+    popoutGraph, setPopoutGraph,
+    startDividerDrag, startDividerDragTouch, handleToggleCollapse, techSearchMatches,
+  } = graphInteraction;
+
+  const filteredChains = useMemo(() => {
+    if (sectorFilter === "all") return activeChains;
+    return activeChains.filter((c: any) => c.sector === sectorFilter || c.sector === "all");
+  }, [sectorFilter, activeChains]);
+
+  const chainCoverage = useMemo(() => computeChainCoverage(activeTechniques, filteredChains), [activeTechniques, filteredChains]);
+
+  const envProfile = useEnvironmentProfile({
+    fwConfig, displayTechniques, activeChains,
+    betweenness, chainCoverage, setExposures,
+  });
+  const {
+    environmentProfile, setEnvironmentProfile,
+    showProfileWizard, setShowProfileWizard,
+    profileExposures, setProfileExposures,
+    exposureSummary,
+  } = envProfile;
+
   // ═══════════════════════════════════════════════════════════════════════════════
   // EFFECTS
   // ═══════════════════════════════════════════════════════════════════════════════
 
-  // ─── Draggable divider ────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!isDraggingDivider.current) return;
-      const container = document.getElementById('split-container');
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const newH = Math.max(60, Math.min(rect.height - 60, rect.bottom - e.clientY));
-      setPanelHeight(newH);
-    };
-    const onUp = () => {
-      isDraggingDivider.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, []);
-
-  const startDividerDrag = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingDivider.current = true;
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-  }, []);
-
-  // ─── Restore state from hash or localStorage on mount ─────────────────────────
-
+  // Restore state from hash or localStorage on mount
   useEffect(() => {
     const hashState = decodeHashToState(window.location.hash);
     if (hashState) {
@@ -275,7 +240,7 @@ export default function AttackPathOptimizer() {
       return;
     }
     try {
-      const raw = localStorage.getItem("attackPathOptimizer");
+      const raw = localStorage.getItem("attackBreaker");
       if (!raw) return;
       const saved = JSON.parse(raw);
       if (saved.framework) setFramework(saved.framework);
@@ -301,8 +266,7 @@ export default function AttackPathOptimizer() {
     if (matched.length > 0) setHighlightedChains(matched.slice(0, MAX_HIGHLIGHTED_CHAINS));
   }, [activeChains]);
 
-  // ─── Environment preset -> exposures ──────────────────────────────────────────
-
+  // Environment preset -> exposures
   useEffect(() => {
     if (skipEnvEffect.current) { skipEnvEffect.current = false; return; }
     const preset = fwConfig.envPresets[envPreset];
@@ -313,108 +277,7 @@ export default function AttackPathOptimizer() {
     }
   }, [envPreset, fwConfig]);
 
-  // ─── Environment profiling: compute exposure scores ──────────────────────────
-
-  const actorTechMap = useMemo(() => buildActorTechMap(activeChains), [activeChains]);
-
-  useEffect(() => {
-    if (!environmentProfile) { setProfileExposures(null); return; }
-    const hasSelections = (environmentProfile.infrastructure?.length > 0) || (environmentProfile.securityTools?.length > 0);
-    if (!hasSelections) { setProfileExposures(null); return; }
-    const scores = computeExposureScores(environmentProfile, fwConfig.coverageKB, displayTechniques, actorTechMap);
-    setProfileExposures(scores);
-    const newExposures: Record<string, number> = {};
-    for (const [tid, data] of Object.entries(scores) as [string, any][]) {
-      newExposures[tid] = data.finalExposure;
-    }
-    setExposures((prev: Record<string, number>) => {
-      const merged = { ...prev };
-      for (const [tid, val] of Object.entries(newExposures)) {
-        merged[tid] = val;
-      }
-      return merged;
-    });
-  }, [environmentProfile, fwConfig, displayTechniques, actorTechMap]);
-
-  // Persist environment profile
-  useEffect(() => {
-    if (environmentProfile) {
-      localStorage.setItem("attackPathOptimizer_envProfile", JSON.stringify(environmentProfile));
-    } else {
-      localStorage.removeItem("attackPathOptimizer_envProfile");
-    }
-  }, [environmentProfile]);
-
-  // ─── Auto-save to localStorage (debounced 500ms) ──────────────────────────────
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        localStorage.setItem("attackPathOptimizer", JSON.stringify({
-          framework, envPreset, sectorFilter, remediationBudget,
-          dataSource: dataSource === "upload" ? (fwConfig.hasBuiltin ? "builtin" : "stix") : dataSource,
-          exposures, remediated: Array.from(remediated),
-          deployedControls: Array.from(deployedControls),
-          phaseWeighting, controlPreset,
-          selectedPlatforms: selectedPlatforms ? Array.from(selectedPlatforms) : null,
-        }));
-        if (Date.now() - mountTime.current > 1000) {
-          setShowSaved(true);
-          setTimeout(() => setShowSaved(false), 1500);
-        }
-      } catch { /* ignore */ }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [framework, envPreset, sectorFilter, remediationBudget, dataSource, exposures, remediated, deployedControls, phaseWeighting, controlPreset, selectedPlatforms, fwConfig]);
-
-  // ─── STIX data loading ────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setCustomPositions({});
-    if (dataSource === "stix") {
-      setStixLoading(true);
-      setStixError(null);
-      loadStixData(controller.signal, fwConfig as any).then((data: any) => {
-        if (controller.signal.aborted) return;
-        setCustomData(data);
-        setStixLoading(false);
-      }).catch((err: any) => {
-        if (controller.signal.aborted) return;
-        setStixError(err.message);
-        setStixLoading(false);
-        if (fwConfig.hasBuiltin) setDataSource("builtin");
-      });
-    } else if (dataSource === "upload") {
-      // Data already set by handleStixFileUpload
-    } else {
-      setCustomData(null);
-      setStixError(null);
-      setUploadedFileName(null);
-      setUploadError(null);
-    }
-    return () => controller.abort();
-  }, [dataSource, framework]);
-
-  // ─── Compare mode: load other framework STIX ─────────────────────────────────
-
-  useEffect(() => {
-    if (!compareMode) { setCompareData(null); return; }
-    const controller = new AbortController();
-    setCompareLoading(true);
-    loadStixData(controller.signal, otherFwConfig as any).then((data: any) => {
-      if (controller.signal.aborted) return;
-      setCompareData(data);
-      setCompareLoading(false);
-    }).catch(() => {
-      if (controller.signal.aborted) return;
-      setCompareLoading(false);
-    });
-    return () => controller.abort();
-  }, [compareMode, otherFwConfig]);
-
-  // ─── Framework change side effect ─────────────────────────────────────────────
-
+  // Framework change side effect
   const prevFramework = useRef(framework);
   useEffect(() => {
     if (prevFramework.current === framework) return;
@@ -435,57 +298,30 @@ export default function AttackPathOptimizer() {
     if (!cfg.hasBuiltin && dataSource === "builtin") setDataSource("stix");
   }, [framework]);
 
+  // Auto-save to localStorage (debounced 500ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem("attackBreaker", JSON.stringify({
+          framework, envPreset, sectorFilter, remediationBudget,
+          dataSource: dataSource === "upload" ? (fwConfig.hasBuiltin ? "builtin" : "stix") : dataSource,
+          exposures, remediated: Array.from(remediated),
+          deployedControls: Array.from(deployedControls),
+          phaseWeighting, controlPreset,
+          selectedPlatforms: selectedPlatforms ? Array.from(selectedPlatforms) : null,
+        }));
+        if (Date.now() - mountTime.current > 1000) {
+          setShowSaved(true);
+          setTimeout(() => setShowSaved(false), 1500);
+        }
+      } catch { /* ignore */ }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [framework, envPreset, sectorFilter, remediationBudget, dataSource, exposures, remediated, deployedControls, phaseWeighting, controlPreset, selectedPlatforms, fwConfig]);
+
   // ═══════════════════════════════════════════════════════════════════════════════
   // COMPUTED VALUES
   // ═══════════════════════════════════════════════════════════════════════════════
-
-  const layoutResult = useMemo(() => layoutNodes(displayTechniques, fwConfig.tactics), [displayTechniques, fwConfig]);
-  const displayEdges = useMemo(() => {
-    const techSet = new Set(displayTechniques.map((t: any) => t.id));
-    return activeEdges.filter((e: any) => techSet.has(e.from) && techSet.has(e.to));
-  }, [displayTechniques, activeEdges]);
-  const { viewHeight, viewWidth, phaseCenters } = layoutResult;
-  const positions = useMemo(() => {
-    if (Object.keys(customPositions).length === 0) return layoutResult.positions;
-    return { ...layoutResult.positions, ...customPositions };
-  }, [layoutResult.positions, customPositions]);
-  const betweenness = useMemo(() => computeBetweenness(activeTechniques, activeEdges), [activeTechniques, activeEdges]);
-
-  // Compare mode layout
-  const compareLayout = useMemo(() => {
-    if (!compareMode || !compareData) return null;
-    const techs = compareData.techniques.filter((t: any) => !t.parentId);
-    const layout = layoutNodes(techs, otherFwConfig.tactics);
-    const edges = (() => {
-      const techSet = new Set(techs.map((t: any) => t.id));
-      return compareData.edges.filter((e: any) => techSet.has(e.from) && techSet.has(e.to));
-    })();
-    const bc = computeBetweenness(techs, edges);
-    const cc = computeChainCoverage(techs, compareData.chains || []);
-    return {
-      techniques: techs, edges, positions: layout.positions,
-      viewHeight: layout.viewHeight, viewWidth: layout.viewWidth,
-      phaseCenters: layout.phaseCenters, betweenness: bc,
-      chainCoverage: cc, chains: compareData.chains || [],
-    };
-  }, [compareMode, compareData, otherFwConfig]);
-
-  const compareAnalysis = useMemo(() => {
-    if (!compareMode || !compareData) return null;
-    const currentIds = new Set<string>(activeTechniques.filter((t: any) => !t.parentId).map((t: any) => t.id));
-    const otherIds = new Set<string>((compareData.techniques || []).filter((t: any) => !t.parentId).map((t: any) => t.id));
-    const shared = new Set<string>(Array.from(currentIds).filter((id: string) => otherIds.has(id)));
-    const uniqueCurrent = new Set<string>(Array.from(currentIds).filter((id: string) => !otherIds.has(id)));
-    const uniqueOther = new Set<string>(Array.from(otherIds).filter((id: string) => !currentIds.has(id)));
-    return { currentCount: currentIds.size, otherCount: otherIds.size, shared, uniqueCurrent, uniqueOther };
-  }, [compareMode, compareData, activeTechniques]);
-
-  const filteredChains = useMemo(() => {
-    if (sectorFilter === "all") return activeChains;
-    return activeChains.filter((c: any) => c.sector === sectorFilter || c.sector === "all");
-  }, [sectorFilter, activeChains]);
-
-  const chainCoverage = useMemo(() => computeChainCoverage(activeTechniques, filteredChains), [activeTechniques, filteredChains]);
 
   const gapAnalysis = useMemo(() => {
     const controlCoverage: Record<string, any[]> = {};
@@ -585,22 +421,6 @@ export default function AttackPathOptimizer() {
       .slice(0, 12);
   }, [displayTechniques, effectiveExposures, betweenness, chainCoverage, remediated, filteredChains, phaseWeighting, fwConfig]);
 
-  const exposureSummary = useMemo(() => {
-    if (!profileExposures) return null;
-    const entries = Object.entries(profileExposures);
-    if (entries.length === 0) return null;
-    const highExposed = entries.filter(([, pe]: [string, any]) => pe.finalExposure > 0.7);
-    const wellCovered = entries.filter(([, pe]: [string, any]) => pe.finalExposure < 0.3);
-    const totalCoverage = entries.reduce((s: number, [, pe]: [string, any]) => s + pe.coverageReduction, 0) / entries.length;
-    const avgExposure = entries.reduce((s: number, [, pe]: [string, any]) => s + pe.finalExposure, 0) / entries.length;
-    const uncoveredChokepoints = entries
-      .map(([tid, pe]: [string, any]) => ({ tid, exposure: pe.finalExposure, bc: betweenness[tid] ?? 0, cc: chainCoverage[tid] ?? 0 }))
-      .filter((x: any) => x.exposure > 0.5)
-      .sort((a: any, b: any) => (b.bc * b.exposure) - (a.bc * a.exposure))
-      .slice(0, 5);
-    return { highExposed: highExposed.length, wellCovered: wellCovered.length, totalCoverage, avgExposure, uncoveredChokepoints, totalTechniques: entries.length };
-  }, [profileExposures, betweenness, chainCoverage]);
-
   const selectedTechData = displayTechniques.find((t: any) => t.id === selectedTech);
   const selectedTactic = selectedTechData ? fwConfig.tactics.find((ta: any) => ta.id === selectedTechData.tactic) : null;
 
@@ -634,33 +454,40 @@ export default function AttackPathOptimizer() {
     });
   }, []);
 
-  const handleStixFileUpload = useCallback((file: File) => {
-    setUploadError(null);
-    setAutoDetectedFw(null);
-    if (file.size > 100 * 1024 * 1024) { setUploadError("File too large (max 100 MB)"); return; }
+  const handleNavigatorImport = useCallback((file: File) => {
+    if (file.size > 25 * 1024 * 1024) { stixLoader.setUploadError("File too large (max 25 MB)"); return; }
     const reader = new FileReader();
     reader.onload = (e: any) => {
       try {
-        const bundle = JSON.parse(e.target.result);
-        const detected = detectFramework(bundle);
-        let activeFwConfig = fwConfig;
-        if (detected && detected !== framework) {
-          setFramework(detected);
-          activeFwConfig = getFrameworkConfig(detected);
-          setAutoDetectedFw(detected);
-          setTimeout(() => setAutoDetectedFw(null), 3000);
+        const data = JSON.parse(e.target.result);
+        if (!data.techniques || !Array.isArray(data.techniques) || !data.techniques[0]?.techniqueID) {
+          stixLoader.setUploadError("Not a valid Navigator layer (missing techniques[].techniqueID)");
+          return;
         }
-        const result = parseStixBundle(bundle, activeFwConfig as any);
-        setCustomData(result);
-        setUploadedFileName(file.name);
-        setDataSource("upload");
+        const newExposures = { ...exposures };
+        const newRemediated = new Set(remediated);
+        const techIds = new Set(activeTechniques.map((t: any) => t.id));
+        data.techniques.forEach((nt: any) => {
+          if (!techIds.has(nt.techniqueID)) return;
+          if (typeof nt.score === "number") {
+            newExposures[nt.techniqueID] = Math.max(0, Math.min(1, nt.score / 100));
+          }
+          if (nt.enabled === false) {
+            newRemediated.add(nt.techniqueID);
+          }
+        });
+        setExposures(newExposures);
+        setRemediated(newRemediated);
+        stixLoader.setUploadError(null);
+        setShowSaved(true);
+        setTimeout(() => setShowSaved(false), 2000);
       } catch (err: any) {
-        setUploadError(err.message || "Failed to parse STIX file");
+        stixLoader.setUploadError("Failed to parse Navigator layer: " + (err.message || "Invalid JSON"));
       }
     };
-    reader.onerror = () => setUploadError("Failed to read file");
+    reader.onerror = () => stixLoader.setUploadError("Failed to read Navigator file");
     reader.readAsText(file);
-  }, [fwConfig, framework]);
+  }, [exposures, remediated, activeTechniques]);
 
   const handleShare = useCallback(() => {
     const state = {
@@ -694,41 +521,6 @@ export default function AttackPathOptimizer() {
     });
   }, [layoutResult.positions]);
 
-  const handleNavigatorImport = useCallback((file: File) => {
-    if (file.size > 100 * 1024 * 1024) { setUploadError("File too large (max 100 MB)"); return; }
-    const reader = new FileReader();
-    reader.onload = (e: any) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        if (!data.techniques || !Array.isArray(data.techniques) || !data.techniques[0]?.techniqueID) {
-          setUploadError("Not a valid Navigator layer (missing techniques[].techniqueID)");
-          return;
-        }
-        const newExposures = { ...exposures };
-        const newRemediated = new Set(remediated);
-        const techIds = new Set(activeTechniques.map((t: any) => t.id));
-        data.techniques.forEach((nt: any) => {
-          if (!techIds.has(nt.techniqueID)) return;
-          if (typeof nt.score === "number") {
-            newExposures[nt.techniqueID] = Math.max(0, Math.min(1, nt.score / 100));
-          }
-          if (nt.enabled === false) {
-            newRemediated.add(nt.techniqueID);
-          }
-        });
-        setExposures(newExposures);
-        setRemediated(newRemediated);
-        setUploadError(null);
-        setShowSaved(true);
-        setTimeout(() => setShowSaved(false), 2000);
-      } catch (err: any) {
-        setUploadError("Failed to parse Navigator layer: " + (err.message || "Invalid JSON"));
-      }
-    };
-    reader.onerror = () => setUploadError("Failed to read Navigator file");
-    reader.readAsText(file);
-  }, [exposures, remediated, activeTechniques]);
-
   const resetAll = () => {
     setFramework("enterprise");
     setRemediated(new Set());
@@ -746,50 +538,29 @@ export default function AttackPathOptimizer() {
     setPopoutDetail(false);
     setPopoutAnalysis(false);
     setPopoutControls(false);
-    setTechSearchQuery("");
     setChainSearchQuery("");
-    setCollapsedTactics(new Set());
     setShowSubTechniques(false);
-    setChainBuilderMode(false);
-    setChainBuilderPath([]);
-    setChainBuilderName("");
     setShowExecutiveSummary(false);
     setPopoutExecutive(false);
-    setUploadedFileName(null);
-    setUploadError(null);
     setShareConfirm(false);
-    setPanelHeight(300);
-    setShowBottomPanels(true);
     setShowGapAnalysis(false);
     setPopoutGapAnalysis(false);
-    setPopoutGraph(false);
     setPhaseWeighting(false);
     setSelectedPlatforms(null);
     setControlPreset("none");
     setExpandedChainProfile(null);
-    setCompareMode(false);
-    setCompareData(null);
-    setAutoDetectedFw(null);
-    setEnvironmentProfile(null);
-    setProfileExposures(null);
-    setShowProfileWizard(false);
+    // Reset extracted hooks
+    graphInteraction.resetGraphInteraction();
+    chainBuilder.resetBuilder();
+    compare.resetCompare();
+    envProfile.resetProfile();
+    stixLoader.resetLoader();
     try {
-      localStorage.removeItem("attackPathOptimizer");
-      localStorage.removeItem("attackPathOptimizer_collapsed");
-      localStorage.removeItem("attackPathOptimizer_envProfile");
+      localStorage.removeItem("attackBreaker");
+      localStorage.removeItem("attackBreaker_collapsed");
+      localStorage.removeItem("attackBreaker_envProfile");
     } catch { /* ignore */ }
-    setDataSource("builtin");
-    setTimeout(() => setDataSource("stix"), 0);
   };
-
-  const handleToggleCollapse = useCallback((tacId: string) => {
-    setCollapsedTactics(prev => {
-      const next = new Set(prev);
-      if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
-      try { localStorage.setItem("attackPathOptimizer_collapsed", JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  }, []);
 
   // ─── Export handlers (extracted hook) ─────────────────────────────────────────
 
@@ -812,9 +583,7 @@ export default function AttackPathOptimizer() {
     searchMatches: techSearchMatches,
     collapsedTactics, onToggleCollapse: handleToggleCollapse,
     isolateChain, chainBuilderMode, chainBuilderPath,
-    onChainBuilderClick: (techId: string) => {
-      if (!chainBuilderPath.includes(techId)) setChainBuilderPath(prev => [...prev, techId]);
-    },
+    onChainBuilderClick: addTechToPath,
     gapNodes: gapNodeSet,
     techDescriptions: activeTechDescriptions,
     tactics: fwConfig.tactics,
@@ -831,24 +600,64 @@ export default function AttackPathOptimizer() {
       fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
       display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
+      {/* Collapsed toolbar strip */}
+      {headerCollapsed && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: "12px",
+          padding: "4px 16px", background: "#0d1321", borderBottom: "1px solid #1e293b",
+          flexShrink: 0, minHeight: "28px",
+        }}>
+          <button onClick={() => setHeaderCollapsed(false)}
+            title="Expand toolbar"
+            style={{
+              background: "transparent", border: "1px solid #334155", borderRadius: 3,
+              color: "#94a3b8", cursor: "pointer", padding: "1px 6px", fontSize: "12px",
+              fontFamily: "inherit", lineHeight: 1,
+            }}>{"\u25BC"}</button>
+          <span style={{ fontSize: "10px", color: "#3b82f6", fontWeight: 700 }}>
+            {framework === "ics" ? "ICS/OT" : "ENTERPRISE"}
+          </span>
+          <span style={{ fontSize: "10px", color: "#94a3b8" }}>|</span>
+          <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+            {filteredChains.length} chains
+          </span>
+          <span style={{ fontSize: "10px", color: totalDisrupted > 0 ? "#22c55e" : "#94a3b8" }}>
+            {totalDisrupted} disrupted
+          </span>
+          <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+            {remediated.size} remediated
+          </span>
+          <span style={{ fontSize: "10px", color: "#94a3b8" }}>|</span>
+          <span style={{ fontSize: "10px", color: "#94a3b8" }}>
+            {dataSource === "stix" ? "STIX" : dataSource === "upload" ? uploadedFileName || "Uploaded" : "Built-in"}
+          </span>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: "9px", color: "#64748b" }}>
+            Press {"\u25BC"} to expand
+          </span>
+        </div>
+      )}
+
       {/* Header */}
-      <Header
-        framework={framework} setFramework={setFramework} fwConfig={fwConfig}
-        dataSource={dataSource} setDataSource={setDataSource}
-        fileInputRef={fileInputRef} navFileInputRef={navFileInputRef}
-        handleStixFileUpload={handleStixFileUpload} handleNavigatorImport={handleNavigatorImport}
-        uploadedFileName={uploadedFileName} stixError={stixError} uploadError={uploadError} autoDetectedFw={autoDetectedFw}
-        envPreset={envPreset} setEnvPreset={setEnvPreset}
-        selectedPlatforms={selectedPlatforms} setSelectedPlatforms={setSelectedPlatforms}
-        sectorFilter={sectorFilter} setSectorFilter={setSectorFilter}
-        remediationBudget={remediationBudget} setRemediationBudget={setRemediationBudget}
-        techSearchQuery={techSearchQuery} setTechSearchQuery={setTechSearchQuery}
-        displayTechniques={displayTechniques} activeTechniques={activeTechniques} activeChains={activeChains}
-        showSubTechniques={showSubTechniques}
-      />
+      {!headerCollapsed && (
+        <Header
+          framework={framework} setFramework={setFramework} fwConfig={fwConfig}
+          dataSource={dataSource} setDataSource={setDataSource}
+          fileInputRef={fileInputRef} navFileInputRef={navFileInputRef}
+          handleStixFileUpload={handleStixFileUpload} handleNavigatorImport={handleNavigatorImport}
+          uploadedFileName={uploadedFileName} stixError={stixError} uploadError={uploadError} autoDetectedFw={autoDetectedFw}
+          envPreset={envPreset} setEnvPreset={setEnvPreset}
+          selectedPlatforms={selectedPlatforms} setSelectedPlatforms={setSelectedPlatforms}
+          sectorFilter={sectorFilter} setSectorFilter={setSectorFilter}
+          remediationBudget={remediationBudget} setRemediationBudget={setRemediationBudget}
+          techSearchQuery={techSearchQuery} setTechSearchQuery={setTechSearchQuery}
+          displayTechniques={displayTechniques} activeTechniques={activeTechniques} activeChains={activeChains}
+          showSubTechniques={showSubTechniques}
+        />
+      )}
 
       {/* Stats bar */}
-      <StatsBar
+      {!headerCollapsed && <StatsBar
         framework={framework} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
         remediated={remediated} optimal={optimal} applyOptimal={applyOptimal}
         exportCSV={exportCSV} navFileInputRef={navFileInputRef} exportNavigatorLayer={exportNavigatorLayer}
@@ -868,7 +677,23 @@ export default function AttackPathOptimizer() {
         customPositions={customPositions} setCustomPositions={setCustomPositions}
         handleShare={handleShare} shareConfirm={shareConfirm} resetAll={resetAll} showSaved={showSaved}
         showAnalysis={showAnalysis} setShowAnalysis={setShowAnalysis} setPopoutAnalysis={setPopoutAnalysis}
-      />
+      />}
+
+      {/* Collapse toolbar button (shown when expanded) */}
+      {!headerCollapsed && (
+        <div style={{
+          display: "flex", justifyContent: "center", background: "#0d1321",
+          borderBottom: "1px solid #1e293b", flexShrink: 0,
+        }}>
+          <button onClick={() => setHeaderCollapsed(true)}
+            title="Collapse toolbar"
+            style={{
+              background: "transparent", border: "none", color: "#64748b",
+              cursor: "pointer", padding: "0 12px", fontSize: "10px",
+              fontFamily: "inherit", lineHeight: "14px",
+            }}>{"\u25B2"} collapse toolbar {"\u25B2"}</button>
+        </div>
+      )}
 
       {/* Split container: graph + bottom panels */}
       <div id="split-container" style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -943,22 +768,11 @@ export default function AttackPathOptimizer() {
               <input type="text" value={chainBuilderName} onChange={e => setChainBuilderName(e.target.value)}
                 placeholder="Chain name..."
                 style={{ background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", fontSize: "10px", fontFamily: "inherit", width: "120px" }} />
-              <button onClick={() => setChainBuilderPath(prev => prev.slice(0, -1))} disabled={chainBuilderPath.length === 0}
+              <button onClick={undoStep} disabled={chainBuilderPath.length === 0}
                 style={{ background: "transparent", color: "#64748b", border: "1px solid #334155", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit", opacity: chainBuilderPath.length === 0 ? 0.3 : 1 }}>UNDO</button>
-              <button onClick={() => setChainBuilderPath([])}
+              <button onClick={clearPath}
                 style={{ background: "transparent", color: "#ef4444", border: "1px solid #ef444466", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit" }}>CLEAR</button>
-              <button onClick={() => {
-                if (chainBuilderPath.length < 2) return;
-                const name = chainBuilderName.trim() || ("Custom Chain " + (customChains.length + 1));
-                const newChain = { name, description: "Custom chain", sector: "all", path: [...chainBuilderPath], severity: 0.5, custom: true };
-                setCustomChains(prev => {
-                  const next = [...prev, newChain];
-                  try { localStorage.setItem("attackPathOptimizer_customChains", JSON.stringify(next)); } catch {}
-                  return next;
-                });
-                setChainBuilderPath([]);
-                setChainBuilderName("");
-              }} disabled={chainBuilderPath.length < 2}
+              <button onClick={saveChain} disabled={chainBuilderPath.length < 2}
                 style={{
                   background: chainBuilderPath.length < 2 ? "#334155" : "#a855f7",
                   color: chainBuilderPath.length < 2 ? "#475569" : "#fff",
@@ -986,32 +800,32 @@ export default function AttackPathOptimizer() {
           position: "absolute", bottom: showBottomPanels ? panelHeight + 4 : 4, left: 0, right: 0, zIndex: 5,
           background: "#0a0f1acc", backdropFilter: "blur(4px)",
         }}>
-          <div style={{ display: "flex", gap: "16px", padding: "4px 24px 2px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Legend:</span>
+          <div style={{ display: "flex", gap: "16px", padding: "5px 24px 2px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>Legend:</span>
             <LegendItem color="#ef4444" label="High exposure ring" />
             <LegendItem color="#f59e0b" label="Medium exposure ring" />
             <LegendItem color="#22c55e" label="Low exposure / remediated" />
-            <span style={{ fontSize: "9px", color: "#64748b" }}>|</span>
-            <span style={{ fontSize: "9px", color: "#64748b" }}>Node size = betweenness x exposure</span>
-            <span style={{ fontSize: "9px", color: "#64748b" }}>|</span>
-            <span style={{ fontSize: "9px", color: "#64748b" }}>Number = chain count</span>
-            <span style={{ fontSize: "9px", color: "#64748b" }}>|</span>
-            <span style={{ fontSize: "9px", color: "#f59e0b", border: "1px dashed #f59e0b", padding: "1px 4px", borderRadius: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Node size = betweenness x exposure</span>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Number = chain count</span>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
+            <span style={{ fontSize: "11px", color: "#f59e0b", border: "1px dashed #f59e0b", padding: "1px 5px", borderRadius: "8px" }}>
               dashed ring = optimal target
             </span>
           </div>
-          <div style={{ display: "flex", gap: "4px", padding: "2px 24px 4px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", marginRight: "4px" }}>Tactics:</span>
+          <div style={{ display: "flex", gap: "5px", padding: "2px 24px 5px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", marginRight: "4px", fontWeight: 600 }}>Tactics:</span>
             {fwConfig.tactics.map((tac: any, i: number) => {
               const isNewPhase = i > 0 && tac.phase !== fwConfig.tactics[i - 1].phase;
               return (
                 <React.Fragment key={tac.id}>
                   {i > 0 && (
-                    <span style={{ fontSize: "8px", color: "#334155", margin: "0 1px" }}>{isNewPhase ? "\u2192" : "\u00b7"}</span>
+                    <span style={{ fontSize: "10px", color: "#475569", margin: "0 1px" }}>{isNewPhase ? "\u2192" : "\u00b7"}</span>
                   )}
                   <span style={{
-                    fontSize: "8px", color: tac.color, padding: "1px 5px",
-                    background: tac.color + "15", borderRadius: "3px", whiteSpace: "nowrap",
+                    fontSize: "10px", color: tac.color, padding: "1px 6px",
+                    background: tac.color + "20", borderRadius: "3px", whiteSpace: "nowrap",
                   }}>
                     {tac.name}
                   </span>
@@ -1028,9 +842,9 @@ export default function AttackPathOptimizer() {
             display: "flex", flexDirection: "column",
             background: "#0a0f1aee", backdropFilter: "blur(8px)", borderTop: "1px solid #1e293b",
           }}>
-            <div onMouseDown={startDividerDrag}
-              style={{ height: 8, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 48, height: 3, background: "#334155", borderRadius: 2 }} />
+            <div onMouseDown={startDividerDrag} onTouchStart={startDividerDragTouch}
+              style={{ height: 14, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}>
+              <div style={{ width: 48, height: 3, background: "#475569", borderRadius: 2 }} />
             </div>
             <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
               {/* Attack Chains */}

@@ -1,4 +1,4 @@
-// ─── Attack Graph Optimizer — Coverage Knowledge Base Types ──────────────────
+// ─── AttackBreaker — Coverage Knowledge Base Types ──────────────────
 // Extracted from COVERAGE_KB / ICS_COVERAGE_KB in attack-path-optimizer.html.
 
 /** Per-technique detection/prevention score for a security tool */

@@ -79,7 +79,7 @@ export function ChainsPanel({
                     e.stopPropagation();
                     setCustomChains(prev => {
                       const next = prev.filter((c: any) => c.name !== chain.name || c.path.join(",") !== chain.path.join(","));
-                      try { localStorage.setItem("attackPathOptimizer_customChains", JSON.stringify(next)); } catch(e) {}
+                      try { localStorage.setItem("attackBreaker_customChains", JSON.stringify(next)); } catch(e) {}
                       return next;
                     });
                   }} style={{
