@@ -428,6 +428,157 @@ export const COVERAGE_KB: CoverageKB = {
         "T1021": { detect: 0.68, prevent: 0.30, source: "Vendor" },
       },
     },
+    // ── NDR (Network Detection & Response) ──
+    "darktrace": {
+      display_name: "Darktrace",
+      category: "ndr",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1071": { detect: 0.78, prevent: 0.35, source: "Vendor" }, "T1572": { detect: 0.75, prevent: 0.40, source: "Vendor" },
+        "T1095": { detect: 0.72, prevent: 0.30, source: "Vendor" }, "T1570": { detect: 0.70, prevent: 0.28, source: "Vendor" },
+        "T1048": { detect: 0.74, prevent: 0.38, source: "Vendor" }, "T1041": { detect: 0.72, prevent: 0.35, source: "Vendor" },
+        "T1571": { detect: 0.68, prevent: 0.32, source: "Vendor" },
+      },
+    },
+    "vectra_ai": {
+      display_name: "Vectra AI",
+      category: "ndr",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1071": { detect: 0.76, prevent: 0.32, source: "Vendor" }, "T1572": { detect: 0.73, prevent: 0.38, source: "Vendor" },
+        "T1095": { detect: 0.70, prevent: 0.28, source: "Vendor" }, "T1570": { detect: 0.68, prevent: 0.26, source: "Vendor" },
+        "T1048": { detect: 0.72, prevent: 0.35, source: "Vendor" }, "T1041": { detect: 0.70, prevent: 0.32, source: "Vendor" },
+        "T1571": { detect: 0.66, prevent: 0.30, source: "Vendor" }, "T1021": { detect: 0.65, prevent: 0.22, source: "Vendor" },
+        "T1090": { detect: 0.68, prevent: 0.30, source: "Vendor" },
+      },
+    },
+    "extrahop": {
+      display_name: "ExtraHop Reveal(x)",
+      category: "ndr",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1071": { detect: 0.75, prevent: 0.30, source: "Vendor" }, "T1572": { detect: 0.72, prevent: 0.36, source: "Vendor" },
+        "T1095": { detect: 0.70, prevent: 0.28, source: "Vendor" }, "T1570": { detect: 0.68, prevent: 0.25, source: "Vendor" },
+        "T1048": { detect: 0.71, prevent: 0.34, source: "Vendor" }, "T1041": { detect: 0.69, prevent: 0.30, source: "Vendor" },
+        "T1571": { detect: 0.65, prevent: 0.28, source: "Vendor" },
+      },
+    },
+    // ── WAF (Web Application Firewall) ──
+    "cloudflare_waf": {
+      display_name: "Cloudflare WAF",
+      category: "waf",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1190": { detect: 0.72, prevent: 0.80, source: "Vendor" }, "T1133": { detect: 0.55, prevent: 0.50, source: "Vendor" },
+        "T1595": { detect: 0.60, prevent: 0.40, source: "Vendor" },
+      },
+    },
+    "aws_waf": {
+      display_name: "AWS WAF",
+      category: "waf",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1190": { detect: 0.70, prevent: 0.78, source: "Vendor" }, "T1133": { detect: 0.52, prevent: 0.48, source: "Vendor" },
+        "T1595": { detect: 0.58, prevent: 0.38, source: "Vendor" },
+      },
+    },
+    "imperva": {
+      display_name: "Imperva WAF",
+      category: "waf",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1190": { detect: 0.74, prevent: 0.82, source: "Vendor" }, "T1133": { detect: 0.56, prevent: 0.52, source: "Vendor" },
+        "T1595": { detect: 0.62, prevent: 0.42, source: "Vendor" },
+      },
+    },
+    // ── CASB / SSPM ──
+    "netskope": {
+      display_name: "Netskope",
+      category: "casb",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1567": { detect: 0.78, prevent: 0.65, source: "Vendor" }, "T1537": { detect: 0.72, prevent: 0.55, source: "Vendor" },
+        "T1530": { detect: 0.70, prevent: 0.50, source: "Vendor" }, "T1078": { detect: 0.65, prevent: 0.40, source: "Vendor" },
+      },
+    },
+    "microsoft_defender_cloud_apps": {
+      display_name: "Microsoft Defender for Cloud Apps",
+      category: "casb",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1567": { detect: 0.75, prevent: 0.62, source: "Vendor" }, "T1537": { detect: 0.70, prevent: 0.52, source: "Vendor" },
+        "T1530": { detect: 0.68, prevent: 0.48, source: "Vendor" }, "T1078": { detect: 0.68, prevent: 0.42, source: "Vendor" },
+      },
+    },
+    // ── DLP (Data Loss Prevention) ──
+    "symantec_dlp": {
+      display_name: "Symantec DLP",
+      category: "dlp",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1048": { detect: 0.75, prevent: 0.68, source: "Vendor" }, "T1041": { detect: 0.72, prevent: 0.65, source: "Vendor" },
+        "T1567": { detect: 0.78, prevent: 0.70, source: "Vendor" }, "T1052": { detect: 0.60, prevent: 0.55, source: "Vendor" },
+        "T1020": { detect: 0.65, prevent: 0.58, source: "Vendor" },
+      },
+    },
+    "microsoft_purview": {
+      display_name: "Microsoft Purview DLP",
+      category: "dlp",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1048": { detect: 0.72, prevent: 0.65, source: "Vendor" }, "T1041": { detect: 0.70, prevent: 0.62, source: "Vendor" },
+        "T1567": { detect: 0.76, prevent: 0.68, source: "Vendor" }, "T1052": { detect: 0.55, prevent: 0.50, source: "Vendor" },
+        "T1020": { detect: 0.62, prevent: 0.55, source: "Vendor" },
+      },
+    },
+    // ── PAM (Privileged Access Management) ──
+    "cyberark": {
+      display_name: "CyberArk",
+      category: "pam",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1078": { detect: 0.72, prevent: 0.80, source: "Vendor" }, "T1134": { detect: 0.65, prevent: 0.55, source: "Vendor" },
+        "T1098": { detect: 0.68, prevent: 0.70, source: "Vendor" }, "T1003": { detect: 0.58, prevent: 0.60, source: "Vendor" },
+      },
+    },
+    "beyondtrust": {
+      display_name: "BeyondTrust",
+      category: "pam",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1078": { detect: 0.70, prevent: 0.78, source: "Vendor" }, "T1134": { detect: 0.62, prevent: 0.52, source: "Vendor" },
+        "T1098": { detect: 0.65, prevent: 0.68, source: "Vendor" }, "T1003": { detect: 0.55, prevent: 0.58, source: "Vendor" },
+      },
+    },
+    // ── Backup & Recovery ──
+    "veeam": {
+      display_name: "Veeam",
+      category: "backup",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1490": { detect: 0.60, prevent: 0.70, source: "Vendor" }, "T1486": { detect: 0.45, prevent: 0.50, source: "Vendor" },
+        "T1561": { detect: 0.50, prevent: 0.60, source: "Vendor" },
+      },
+    },
+    "cohesity": {
+      display_name: "Cohesity DataProtect",
+      category: "backup",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1490": { detect: 0.58, prevent: 0.68, source: "Vendor" }, "T1486": { detect: 0.42, prevent: 0.48, source: "Vendor" },
+        "T1561": { detect: 0.48, prevent: 0.58, source: "Vendor" },
+      },
+    },
+    // ── Deception ──
+    "attivo": {
+      display_name: "Attivo Networks (SentinelOne)",
+      category: "deception",
+      data_source: "vendor_docs",
+      techniques: {
+        "T1021": { detect: 0.70, prevent: 0.0, source: "Vendor" }, "T1078": { detect: 0.60, prevent: 0.0, source: "Vendor" },
+        "T1570": { detect: 0.70, prevent: 0.0, source: "Vendor" }, "T1083": { detect: 0.50, prevent: 0.0, source: "Vendor" },
+      },
+    },
   },
   infrastructure: {
     "active-directory": {
@@ -559,6 +710,44 @@ export const COVERAGE_KB: CoverageKB = {
         "T1053": 0.55, "T1543": 0.6, "T1046": 0.6,
       },
     },
+    // ── Network Infrastructure ──
+    "cisco_switches": {
+      display_name: "Cisco Network Infrastructure",
+      category: "network_infra",
+      exposes: {
+        "T1557": 0.7, "T1200": 0.6, "T1599": 0.8, "T1602": 0.7,
+      },
+    },
+    "palo_alto_network": {
+      display_name: "Palo Alto Networks (Firewalls)",
+      category: "network_infra",
+      exposes: {
+        "T1590": 0.5, "T1602": 0.6,
+      },
+    },
+    // ── MDM / Endpoint Management ──
+    "intune": {
+      display_name: "Microsoft Intune",
+      category: "endpoint_mgmt",
+      exposes: {
+        "T1072": 0.7, "T1218": 0.5,
+      },
+    },
+    "jamf": {
+      display_name: "Jamf Pro (macOS)",
+      category: "endpoint_mgmt",
+      exposes: {
+        "T1072": 0.7,
+      },
+    },
+    // ── DNS ──
+    "internal_dns": {
+      display_name: "Internal DNS (AD-Integrated)",
+      category: "dns",
+      exposes: {
+        "T1071": 0.6, "T1568": 0.7,
+      },
+    },
   },
   // Category metadata for UI grouping
   toolCategories: [
@@ -569,6 +758,13 @@ export const COVERAGE_KB: CoverageKB = {
     { id: "hardening", name: "Endpoint Hardening", icon: "\u2B22" },
     { id: "vuln_mgmt", name: "Vulnerability Management", icon: "\u2690" },
     { id: "identity_security", name: "Identity Security", icon: "\u26BF" },
+    { id: "ndr", name: "NDR (Network Detection & Response)", icon: "\u25C9" },
+    { id: "waf", name: "WAF (Web Application Firewall)", icon: "\u2B21" },
+    { id: "casb", name: "CASB / SSPM", icon: "\u2601" },
+    { id: "dlp", name: "Data Loss Prevention", icon: "\u2B19" },
+    { id: "pam", name: "Privileged Access Management", icon: "\u26BF" },
+    { id: "backup", name: "Backup & Recovery", icon: "\u21BB" },
+    { id: "deception", name: "Deception", icon: "\u2666" },
   ],
   infraCategories: [
     { id: "identity", name: "Identity & Access", icon: "\u26BF" },
@@ -576,6 +772,9 @@ export const COVERAGE_KB: CoverageKB = {
     { id: "os", name: "Operating Systems", icon: "\u2395" },
     { id: "email_platform", name: "Email Platform", icon: "\u2709" },
     { id: "virtualization", name: "Virtualization / Containers", icon: "\u2B22" },
+    { id: "network_infra", name: "Network Infrastructure", icon: "\u26E9" },
+    { id: "endpoint_mgmt", name: "MDM / Endpoint Management", icon: "\u2316" },
+    { id: "dns", name: "DNS", icon: "\u25CE" },
   ],
 };
 
@@ -629,6 +828,49 @@ export const ICS_COVERAGE_KB: CoverageKB = {
         "T0821": { detect: 0.70, prevent: 0.28, source: "Vendor" },
       },
     },
+    "fortinet_ot": {
+      display_name: "Fortinet OT Security",
+      category: "ot_monitoring",
+      data_source: "vendor_docs",
+      techniques: {
+        "T0846": { detect: 0.80, prevent: 0.0, source: "Vendor" },
+        "T0842": { detect: 0.70, prevent: 0.30, source: "Vendor" },
+        "T0855": { detect: 0.72, prevent: 0.32, source: "Vendor" },
+        "T0860": { detect: 0.50, prevent: 0.0, source: "Vendor" },
+      },
+    },
+    "cisco_cyber_vision": {
+      display_name: "Cisco Cyber Vision",
+      category: "ot_monitoring",
+      data_source: "vendor_docs",
+      techniques: {
+        "T0846": { detect: 0.78, prevent: 0.0, source: "Vendor" },
+        "T0842": { detect: 0.72, prevent: 0.28, source: "Vendor" },
+        "T0855": { detect: 0.68, prevent: 0.28, source: "Vendor" },
+      },
+    },
+    "tenable_ot": {
+      display_name: "Tenable OT Security",
+      category: "ot_monitoring",
+      data_source: "vendor_docs",
+      techniques: {
+        "T0846": { detect: 0.75, prevent: 0.0, source: "Vendor" },
+        "T0842": { detect: 0.65, prevent: 0.25, source: "Vendor" },
+        "T0855": { detect: 0.70, prevent: 0.30, source: "Vendor" },
+        "T0843": { detect: 0.60, prevent: 0.0, source: "Vendor" },
+        "T0836": { detect: 0.55, prevent: 0.0, source: "Vendor" },
+      },
+    },
+    "opswat": {
+      display_name: "OPSWAT MetaDefender OT",
+      category: "ot_monitoring",
+      data_source: "vendor_docs",
+      techniques: {
+        "T0843": { detect: 0.70, prevent: 0.65, source: "Vendor" },
+        "T0821": { detect: 0.60, prevent: 0.55, source: "Vendor" },
+        "T0836": { detect: 0.55, prevent: 0.50, source: "Vendor" },
+      },
+    },
   },
   infrastructure: {
     "rockwell": {
@@ -655,11 +897,93 @@ export const ICS_COVERAGE_KB: CoverageKB = {
         "T0886": 0.78, "T0846": 0.72, "T0842": 0.68,
       },
     },
+    "honeywell": {
+      display_name: "Honeywell",
+      category: "plc",
+      exposes: {
+        "T0843": 0.88, "T0821": 0.82, "T0836": 0.78, "T0886": 0.75,
+        "T0855": 0.70, "T0846": 0.60, "T0842": 0.55,
+      },
+    },
+    "abb": {
+      display_name: "ABB",
+      category: "plc",
+      exposes: {
+        "T0843": 0.87, "T0821": 0.83, "T0836": 0.79, "T0886": 0.74,
+        "T0855": 0.68, "T0846": 0.58, "T0842": 0.53,
+      },
+    },
+    "emerson": {
+      display_name: "Emerson (DeltaV)",
+      category: "plc",
+      exposes: {
+        "T0843": 0.86, "T0821": 0.80, "T0836": 0.77, "T0886": 0.73,
+        "T0855": 0.69, "T0846": 0.59, "T0842": 0.54,
+      },
+    },
+    "ge_vernova": {
+      display_name: "GE Vernova",
+      category: "plc",
+      exposes: {
+        "T0843": 0.85, "T0821": 0.81, "T0836": 0.76, "T0886": 0.72,
+        "T0855": 0.67, "T0846": 0.57, "T0842": 0.52,
+      },
+    },
+    "yokogawa": {
+      display_name: "Yokogawa",
+      category: "plc",
+      exposes: {
+        "T0843": 0.87, "T0821": 0.82, "T0836": 0.78, "T0886": 0.74,
+        "T0855": 0.69, "T0846": 0.58, "T0842": 0.53,
+      },
+    },
+    "mitsubishi_electric": {
+      display_name: "Mitsubishi Electric",
+      category: "plc",
+      exposes: {
+        "T0843": 0.86, "T0821": 0.80, "T0836": 0.77, "T0886": 0.73,
+        "T0855": 0.68, "T0846": 0.57, "T0842": 0.52,
+      },
+    },
+    // ── SCADA Software ──
+    "wonderware": {
+      display_name: "AVEVA (Wonderware)",
+      category: "scada",
+      exposes: {
+        "T0843": 0.75, "T0821": 0.70, "T0836": 0.72, "T0855": 0.80,
+        "T0846": 0.65,
+      },
+    },
+    "ignition": {
+      display_name: "Inductive Automation Ignition",
+      category: "scada",
+      exposes: {
+        "T0843": 0.73, "T0821": 0.68, "T0836": 0.70, "T0855": 0.78,
+        "T0846": 0.63,
+      },
+    },
+    // ── Safety Systems ──
+    "triconex": {
+      display_name: "Schneider Triconex (SIS)",
+      category: "safety",
+      exposes: {
+        "T0843": 0.90, "T0821": 0.88, "T0836": 0.85, "T0855": 0.82,
+      },
+    },
+    "hima": {
+      display_name: "HIMA Safety Systems",
+      category: "safety",
+      exposes: {
+        "T0843": 0.88, "T0821": 0.86, "T0836": 0.83, "T0855": 0.80,
+      },
+    },
   },
   toolCategories: [
     { id: "ot_monitoring", name: "OT Network Monitoring", icon: "\u25CE" },
   ],
   infraCategories: [
     { id: "plc", name: "PLC / DCS Vendors", icon: "\u2699" },
+    { id: "scada", name: "SCADA Software", icon: "\u2395" },
+    { id: "safety", name: "Safety Systems (SIS)", icon: "\u26A0" },
   ],
 };
