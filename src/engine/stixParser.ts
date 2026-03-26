@@ -181,9 +181,16 @@ export function parseStixBundle(bundle: StixBundle, fwConfig: FrameworkConfig): 
     const coaRefs = coaObj.external_references || [];
     const coaMitre = coaRefs.find(r => r.source_name === fwConfig.stixSourceName);
     if (!mitigationMap[techStixId]) mitigationMap[techStixId] = [];
+    const relDesc = o.description
+      ? o.description.replace(/\(Citation:[^)]+\)/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim()
+      : null;
+    const coaDesc = coaObj.description
+      ? coaObj.description.replace(/\(Citation:[^)]+\)/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim()
+      : null;
     mitigationMap[techStixId].push({
       mitreId: coaMitre?.external_id || coaObj.id,
       name: coaObj.name || coaObj.id,
+      description: relDesc || coaDesc || undefined,
     });
   });
 

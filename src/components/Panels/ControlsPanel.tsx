@@ -112,16 +112,20 @@ export function ControlsPanel({
                       </button>
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
-                      {Object.entries(ctrl.coverage).map(([tid, red]: [string, any]) => (
-                        <span key={tid} style={{
-                          fontSize: theme.fontSizes.micro, padding: "2px 5px", borderRadius: theme.radii.sm,
-                          background: deployed ? cat.color + "15" : theme.colors.borderSubtle,
-                          color: deployed ? cat.color : theme.colors.textFaint,
-                          fontFamily: '"JetBrains Mono", monospace',
-                        }}>
-                          {tid} ({(red * 100).toFixed(0)}%)
-                        </span>
-                      ))}
+                      {Object.entries(ctrl.coverage).map(([tid, red]: [string, any]) => {
+                        const tech = activeTechniques.find((t: any) => t.id === tid);
+                        return (
+                          <span key={tid} title={tech ? tech.name : tid} style={{
+                            fontSize: theme.fontSizes.micro, padding: "2px 5px", borderRadius: theme.radii.sm,
+                            background: deployed ? cat.color + "15" : theme.colors.borderSubtle,
+                            color: deployed ? cat.color : theme.colors.textFaint,
+                            fontFamily: '"JetBrains Mono", monospace',
+                            cursor: "default",
+                          }}>
+                            {tid} ({(red * 100).toFixed(0)}%)
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 );

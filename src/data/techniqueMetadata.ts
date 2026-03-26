@@ -8,6 +8,7 @@ export interface TechniqueExample {
 export interface Mitigation {
   mitreId: string;
   name: string;
+  description?: string;
 }
 
 export interface ChainProfile {
@@ -591,6 +592,40 @@ export const TECHNIQUE_MITIGATIONS: Record<string, Mitigation[]> = {
   "T1489": [{ mitreId: "M1030", name: "Network Segmentation" }, { mitreId: "M1022", name: "Restrict File and Directory Permissions" }],
   "T1529": [],
   "T1485": [{ mitreId: "M1053", name: "Data Backup" }],
+};
+
+// F3: MITRE Mitigation descriptions (by mitreId)
+export const MITIGATION_DESCRIPTIONS: Record<string, string> = {
+  M1036: "Configure features related to account use like login attempt lockouts, specific login times, and password strength requirements for user accounts.",
+  M1015: "Use multi-factor authentication for user and privileged accounts. Enforce strong password requirements and account lockout policies.",
+  M1047: "Perform audits or scans of systems, permissions, insecure software, insecure configurations, etc. to identify potential weaknesses.",
+  M1040: "Use capabilities to prevent suspicious behavior patterns from occurring on endpoint systems, such as process injection or credential dumping.",
+  M1038: "Block execution of code on a system through application control, and/or script blocking.",
+  M1048: "Restrict execution of code to a virtual environment on or in transit to an endpoint system.",
+  M1049: "Use signatures or heuristics to detect malicious software installed on systems.",
+  M1043: "Use capabilities to detect and block conditions that may lead to credential access, such as LSASS driver protections.",
+  M1053: "Take and store data backups from end user systems and critical servers. Ensure backup and storage systems are hardened and not connected to the corporate network.",
+  M1057: "Use a data loss prevention (DLP) strategy to categorize sensitive data, identify data formats indicative of PII, and restrict exfiltration.",
+  M1041: "Protect sensitive information with strong encryption. Use TLS for data in transit and AES-256 for data at rest.",
+  M1050: "Use exploit protection features such as ASLR, DEP, CFG, and similar technologies to harden endpoints against exploitation.",
+  M1037: "Use network appliances to filter ingress or egress traffic and perform protocol-based filtering.",
+  M1035: "Prevent access to file shares, remote access to systems, unnecessary services. Limit the use of protocols/services that traverse network boundaries.",
+  M1033: "Block users or groups from installing unapproved software, and use application allowlisting to control which programs can execute.",
+  M1032: "Use multi-factor authentication for remote access, privileged accounts, and high-value systems. Hardware tokens or push notifications preferred.",
+  M1031: "Use intrusion detection signatures and deep packet inspection to identify and block anomalous network traffic patterns at network boundaries.",
+  M1030: "Architect sections of the network to isolate critical systems, functions, or resources. Use physical and logical segmentation to prevent lateral movement.",
+  M1028: "Manage the creation, modification, use, and permissions associated to operating system configuration to harden the OS.",
+  M1027: "Set and enforce secure password policies for accounts. Require strong, unique passwords and implement rotation policies.",
+  M1056: "This mitigation cannot be addressed with preventive controls since it is based on activity performed outside the scope of enterprise defenses.",
+  M1026: "Manage the creation, modification, use, and permissions associated to privileged accounts, including SYSTEM and root.",
+  M1029: "Send logs to a remote data store to preserve evidence and prevent log tampering.",
+  M1022: "Restrict access by setting directory and file permissions that are not specific to users or privileged accounts.",
+  M1024: "Restrict the ability to modify certain hives or keys in the Windows Registry to prevent abuse.",
+  M1054: "Manage the configuration of enterprise-level software, such as email clients, web browsers, and office suites to mitigate common attack vectors.",
+  M1051: "Perform regular software updates to mitigate exploitation risk. Use automatic updates where possible.",
+  M1018: "Manage the creation, modification, use, and permissions associated to user accounts to limit attack surface.",
+  M1017: "Train users to be aware of access or manipulation attempts by an adversary to reduce the risk of social engineering.",
+  M1016: "Scan systems for known vulnerabilities and missing patches. Prioritize remediation based on CVSS scores and active exploitation.",
 };
 
 // F3: Maps MITRE mitigation names → our SECURITY_CONTROLS IDs

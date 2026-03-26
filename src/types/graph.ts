@@ -107,6 +107,7 @@ export type ChainTechniqueContext = Record<string, Record<string, string>>;
 export interface Mitigation {
   mitreId: string;
   name: string;
+  description?: string;
 }
 
 /** Enterprise platform IDs */

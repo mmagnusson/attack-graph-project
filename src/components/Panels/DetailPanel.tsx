@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useCallback } from 'react';
 import { CHAIN_COLORS, CONTROL_CATEGORIES } from '../../data/constants';
+import { MITIGATION_DESCRIPTIONS } from '../../data/techniqueMetadata';
 import { MetricBox, PopoutButton } from '../Analysis';
 import { theme } from '../../theme';
 
@@ -41,12 +42,14 @@ export function DetailPanel({
   popoutDetail, setPopoutDetail,
 }: DetailPanelProps) {
   const [expandedExamples, setExpandedExamples] = useState(false);
+  const [expandedMitigation, setExpandedMitigation] = useState<string | null>(null);
 
   // Reset expanded state when selected tech changes
   const prevTechRef = React.useRef(selectedTech);
   if (prevTechRef.current !== selectedTech) {
     prevTechRef.current = selectedTech;
     if (expandedExamples) setExpandedExamples(false);
+    if (expandedMitigation) setExpandedMitigation(null);
   }
 
   const techExamples = useMemo(() => {
@@ -311,15 +314,40 @@ export function DetailPanel({
             {mits.map((m: any, i: number) => {
               const mappedCtrl = fwConfig.mitigationControlMap[m.name];
               const isDeployed = mappedCtrl && deployedControls.has(mappedCtrl);
+              const desc = m.description || MITIGATION_DESCRIPTIONS[m.mitreId];
+              const isExpanded = expandedMitigation === m.mitreId;
               return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: theme.spacing.md, marginBottom: theme.spacing.xs }}>
-                  <span style={{ fontSize: theme.fontSizes.base, color: isDeployed ? theme.colors.green : theme.colors.textMuted }}>{isDeployed ? "\u2713" : "\u25CB"}</span>
-                  <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint, minWidth: "42px", fontFamily: '"JetBrains Mono", monospace' }}>{m.mitreId}</span>
-                  <span style={{ fontSize: theme.fontSizes.small, color: isDeployed ? theme.colors.green : theme.colors.textBody }}>{m.name}</span>
-                  {mappedCtrl && (
-                    <span style={{ fontSize: theme.fontSizes.micro, color: isDeployed ? theme.colors.green : theme.colors.orange, marginLeft: "auto" }}>
-                      {isDeployed ? "deployed" : "available"}
-                    </span>
+                <div key={i} style={{ marginBottom: theme.spacing.sm }}>
+                  <div
+                    onClick={() => desc && setExpandedMitigation(isExpanded ? null : m.mitreId)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: theme.spacing.md,
+                      cursor: desc ? "pointer" : "default",
+                      padding: "4px 0",
+                    }}>
+                    <span style={{ fontSize: theme.fontSizes.base, color: isDeployed ? theme.colors.green : theme.colors.textMuted }}>{isDeployed ? "\u2713" : "\u25CB"}</span>
+                    <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint, minWidth: "42px", fontFamily: '"JetBrains Mono", monospace' }}>{m.mitreId}</span>
+                    <span style={{ fontSize: theme.fontSizes.small, color: isDeployed ? theme.colors.green : theme.colors.textBody }}>{m.name}</span>
+                    {desc && (
+                      <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, marginLeft: 4 }}>
+                        {isExpanded ? "\u25B2" : "\u25BC"}
+                      </span>
+                    )}
+                    {mappedCtrl && (
+                      <span style={{ fontSize: theme.fontSizes.micro, color: isDeployed ? theme.colors.green : theme.colors.orange, marginLeft: "auto" }}>
+                        {isDeployed ? "deployed" : "available"}
+                      </span>
+                    )}
+                  </div>
+                  {isExpanded && desc && (
+                    <div style={{
+                      marginLeft: "34px", marginTop: theme.spacing.xs, padding: theme.spacing.lg,
+                      background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle,
+                      borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small,
+                      color: theme.colors.textSecondary, lineHeight: "1.6",
+                    }}>
+                      {desc}
+                    </div>
                   )}
                 </div>
               );

@@ -948,6 +948,7 @@ export default function AttackBreaker() {
                         <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
                           highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
                           remediated={remediated} effectiveExposures={effectiveExposures}
+                          activeTechniques={activeTechniques}
                           chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
                           popoutChains={popoutChains} setPopoutChains={setPopoutChains}
                           setCustomChains={setCustomChains}
@@ -960,6 +961,7 @@ export default function AttackBreaker() {
                     <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
                       highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
                       remediated={remediated} effectiveExposures={effectiveExposures}
+                      activeTechniques={activeTechniques}
                       chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
                       popoutChains={popoutChains} setPopoutChains={setPopoutChains}
                       setCustomChains={setCustomChains}

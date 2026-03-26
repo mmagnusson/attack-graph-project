@@ -11,6 +11,7 @@ interface ChainsPanelProps {
   toggleHighlightedChain: (chain: any) => void;
   remediated: Set<string>;
   effectiveExposures: Record<string, number>;
+  activeTechniques: any[];
   chainSearchQuery: string;
   setChainSearchQuery: (v: string) => void;
   popoutChains: boolean;
@@ -24,7 +25,7 @@ interface ChainsPanelProps {
 
 export function ChainsPanel({
   filteredChains, displayedChainStatus, highlightedChains, toggleHighlightedChain,
-  remediated, effectiveExposures,
+  remediated, effectiveExposures, activeTechniques,
   chainSearchQuery, setChainSearchQuery,
   popoutChains, setPopoutChains,
   setCustomChains,
@@ -92,17 +93,21 @@ export function ChainsPanel({
             </div>
             <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted, marginTop: theme.spacing.xs }}>{chain.description}</div>
             <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint, marginTop: theme.spacing.sm, display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
-              {chain.path.map((tid: string, j: number) => (
-                <span key={j} style={{
-                  padding: "2px 5px", borderRadius: theme.radii.sm,
-                  background: remediated.has(tid) ? theme.colors.green + "20" : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red + "20" : theme.colors.bgSurface,
-                  color: remediated.has(tid) ? theme.colors.green : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red : theme.colors.textSecondary,
-                  textDecoration: remediated.has(tid) ? "line-through" : "none",
-                  fontFamily: '"JetBrains Mono", monospace',
-                }}>
-                  {tid}{j < chain.path.length - 1 ? " \u2192" : ""}
-                </span>
-              ))}
+              {chain.path.map((tid: string, j: number) => {
+                const tech = activeTechniques.find((t: any) => t.id === tid);
+                return (
+                  <span key={j} title={tech ? tech.name : tid} style={{
+                    padding: "2px 5px", borderRadius: theme.radii.sm,
+                    background: remediated.has(tid) ? theme.colors.green + "20" : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red + "20" : theme.colors.bgSurface,
+                    color: remediated.has(tid) ? theme.colors.green : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red : theme.colors.textSecondary,
+                    textDecoration: remediated.has(tid) ? "line-through" : "none",
+                    fontFamily: '"JetBrains Mono", monospace',
+                    cursor: "default",
+                  }}>
+                    {tid}{j < chain.path.length - 1 ? " \u2192" : ""}
+                  </span>
+                );
+              })}
             </div>
             {chain.broken && chain.breakpoints.length > 0 && (
               <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.green, marginTop: theme.spacing.xs }}>
