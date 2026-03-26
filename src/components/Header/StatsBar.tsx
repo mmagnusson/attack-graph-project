@@ -52,6 +52,8 @@ interface StatsBarProps {
   showAnalysis: boolean;
   setShowAnalysis: (fn: (prev: boolean) => boolean) => void;
   setPopoutAnalysis: (v: boolean) => void;
+  sidebarPanel: "controls" | "analysis" | "gap" | "executive" | null;
+  setSidebarPanel: (v: "controls" | "analysis" | "gap" | "executive" | null) => void;
 }
 
 export function StatsBar(props: StatsBarProps) {
@@ -72,6 +74,7 @@ export function StatsBar(props: StatsBarProps) {
     customPositions, setCustomPositions,
     handleShare, shareConfirm, resetAll, showSaved,
     showAnalysis, setShowAnalysis, setPopoutAnalysis,
+    sidebarPanel, setSidebarPanel,
   } = props;
 
   // "More" dropdown state
@@ -110,7 +113,7 @@ export function StatsBar(props: StatsBarProps) {
     width: 8, height: 8, borderRadius: theme.radii.round, background: active ? color : theme.colors.border, flexShrink: 0 as const,
   });
 
-  const anyAdvancedActive = showGapAnalysis || phaseWeighting || compareMode || environmentProfile || showExecutiveSummary || chainBuilderMode || showSubTechniques;
+  const anyAdvancedActive = phaseWeighting || compareMode || environmentProfile || chainBuilderMode || showSubTechniques;
 
   return (
     <div style={{
@@ -131,14 +134,35 @@ export function StatsBar(props: StatsBarProps) {
       <Stat label="Remediated Nodes" value={remediated.size} color="#22c55e" />
       <Stat label="Optimal Covers" value={optimal.chainsDisrupted + " chains in " + optimal.selected.length + " nodes"} color="#f59e0b" />
 
-      {/* Primary buttons */}
+      {/* Action buttons */}
       <button onClick={applyOptimal} style={{
         background: theme.colors.orange, color: theme.colors.bg, border: "none", borderRadius: theme.radii.sm,
         padding: "8px 14px", fontSize: theme.fontSizes.small, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
         letterSpacing: "0.5px",
       }}>APPLY OPTIMAL</button>
-      <button onClick={() => { const next = !showControls; setShowControls(next); if (!next) setPopoutControls(false); }}
-        style={btnStyle(showControls, "#14b8a6")}>CONTROLS</button>
+
+      {/* Sidebar panel quick-launch buttons */}
+      <div style={{ display: "flex", gap: 4, background: theme.colors.bgCard, borderRadius: theme.radii.md, padding: 3, border: "1px solid " + theme.colors.borderSubtle }}>
+        {([
+          { id: "controls" as const, label: "Controls", key: "S", color: theme.colors.teal },
+          { id: "analysis" as const, label: "Analysis", key: "A", color: theme.colors.blue },
+          { id: "gap" as const, label: "Gaps", key: "G", color: theme.colors.red },
+          { id: "executive" as const, label: "Executive", key: "X", color: theme.colors.cyan },
+        ]).map(tab => (
+          <button key={tab.id}
+            onClick={() => setSidebarPanel(sidebarPanel === tab.id ? null : tab.id)}
+            title={tab.label + " (" + tab.key + ")"}
+            style={{
+              background: sidebarPanel === tab.id ? tab.color + "22" : "transparent",
+              color: sidebarPanel === tab.id ? tab.color : theme.colors.textMuted,
+              border: sidebarPanel === tab.id ? "1px solid " + tab.color + "44" : "1px solid transparent",
+              borderRadius: theme.radii.sm,
+              padding: "5px 10px", fontSize: theme.fontSizes.small, fontWeight: 600,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>{tab.label}</button>
+        ))}
+      </div>
+
       <button onClick={handleShare} style={btnStyle(false, "#06b6d4")}>SHARE</button>
       {shareConfirm && (
         <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.cyan, opacity: 0.9 }}>URL copied!</span>
@@ -150,14 +174,6 @@ export function StatsBar(props: StatsBarProps) {
       {showSaved && (
         <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.green, opacity: 0.8, transition: "opacity 0.3s" }}>Saved</span>
       )}
-      <button onClick={() => { const next = !showAnalysis; setShowAnalysis(() => next); if (!next) setPopoutAnalysis(false); }}
-        style={{
-          background: showAnalysis ? theme.colors.blue : "transparent", color: showAnalysis ? "#fff" : theme.colors.textMuted,
-          border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
-          padding: "8px 14px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit",
-        }}>
-        {showAnalysis ? "HIDE" : "SHOW"} ANALYSIS
-      </button>
 
       {/* ── More dropdown menu ── */}
       <div ref={moreMenuRef} style={{ position: "relative" }}>
@@ -210,28 +226,12 @@ export function StatsBar(props: StatsBarProps) {
               </button>
             )}
 
-            {/* ── Analysis ── */}
+            {/* ── Tools ── */}
             <div style={{ borderTop: "1px solid " + theme.colors.border, margin: "6px 0" }} />
-            <div style={{ padding: "6px 14px 4px", ...theme.sectionLabel, fontSize: theme.fontSizes.tiny }}>Analysis</div>
-            <button onClick={() => { const next = !showGapAnalysis; setShowGapAnalysis(() => next); if (!next) setPopoutGapAnalysis(false); }}
-              style={menuItemStyle(showGapAnalysis, "#ef4444")}>
-              <span style={dot(showGapAnalysis, "#ef4444")} />
-              GAP ANALYSIS
-              {gapAnalysis.gaps.length > 0 && (
-                <span style={{
-                  background: theme.colors.red, color: "#fff", fontSize: theme.fontSizes.tiny, fontWeight: 700,
-                  borderRadius: theme.radii.pill, padding: "2px 7px", minWidth: 18, textAlign: "center", marginLeft: "auto",
-                }}>{gapAnalysis.gaps.length}</span>
-              )}
-            </button>
+            <div style={{ padding: "6px 14px 4px", ...theme.sectionLabel, fontSize: theme.fontSizes.tiny }}>Tools</div>
             <button onClick={() => setShowProfileWizard(true)} style={menuItemStyle(!!environmentProfile, "#8b5cf6")}>
               <span style={dot(!!environmentProfile, "#8b5cf6")} />
               {environmentProfile ? "EDIT PROFILE" : "ENV PROFILE"}
-            </button>
-            <button onClick={() => { const next = !showExecutiveSummary; setShowExecutiveSummary(() => next); if (!next) setPopoutExecutive(false); }}
-              style={menuItemStyle(showExecutiveSummary, "#06b6d4")}>
-              <span style={dot(showExecutiveSummary, "#06b6d4")} />
-              EXECUTIVE
             </button>
             <button onClick={() => setCompareMode(prev => !prev)} style={menuItemStyle(compareMode, "#06b6d4")}>
               <span style={dot(compareMode, "#06b6d4")} />

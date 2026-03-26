@@ -87,6 +87,11 @@ export default function AttackBreaker() {
   const [expandedChainProfile, setExpandedChainProfile] = useState<string | null>(null);
   const [showSubTechniques, setShowSubTechniques] = useState(false);
   const [chainSearchQuery, setChainSearchQuery] = useState("");
+
+  // ─── Right sidebar drawer ──────────────────────────────────────────────────
+  type SidebarPanel = "controls" | "analysis" | "gap" | "executive" | null;
+  const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>(null);
+  const sidebarOpen = sidebarPanel !== null;
   const [headerCollapsed, setHeaderCollapsed] = useState(() => {
     const saved = localStorage.getItem('ab_headerCollapsed');
     return saved !== null ? saved === 'true' : true; // collapsed by default for more space
@@ -107,6 +112,36 @@ export default function AttackBreaker() {
   useEffect(() => {
     if (selectedTech) setBottomTab("detail");
   }, [selectedTech]);
+
+  // ─── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+
+      // Bottom tab shortcuts: 1/2/3
+      if (e.key === "1" && !e.ctrlKey && !e.metaKey && !e.altKey) { setBottomTab("chains"); return; }
+      if (e.key === "2" && !e.ctrlKey && !e.metaKey && !e.altKey) { setBottomTab("priority"); return; }
+      if (e.key === "3" && !e.ctrlKey && !e.metaKey && !e.altKey) { setBottomTab("detail"); return; }
+
+      // Toggle bottom panels: b
+      if (e.key === "b" && !e.ctrlKey && !e.metaKey && !e.altKey) { setShowBottomPanels((prev: boolean) => !prev); return; }
+
+      // Toggle header: h
+      if (e.key === "h" && !e.ctrlKey && !e.metaKey && !e.altKey) { setHeaderCollapsed(prev => !prev); return; }
+
+      // Sidebar panels: s (controls), a (analysis), g (gap), x (executive)
+      if (e.key === "s" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "controls" ? null : "controls"); return; }
+      if (e.key === "a" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "analysis" ? null : "analysis"); return; }
+      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "gap" ? null : "gap"); return; }
+      if (e.key === "x" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "executive" ? null : "executive"); return; }
+
+      // Escape closes sidebar
+      if (e.key === "Escape" && sidebarOpen) { setSidebarPanel(null); return; }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [sidebarOpen]);
 
   // ─── Persistence helpers ─────────────────────────────────────────────────────
 
@@ -653,7 +688,7 @@ export default function AttackBreaker() {
           </span>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>
-            Press {"\u25BC"} to expand
+            H expand toolbar &middot; B toggle panels &middot; 1/2/3 tabs
           </span>
         </div>
       )}
@@ -697,6 +732,7 @@ export default function AttackBreaker() {
         customPositions={customPositions} setCustomPositions={setCustomPositions}
         handleShare={handleShare} shareConfirm={shareConfirm} resetAll={resetAll} showSaved={showSaved}
         showAnalysis={showAnalysis} setShowAnalysis={setShowAnalysis} setPopoutAnalysis={setPopoutAnalysis}
+        sidebarPanel={sidebarPanel} setSidebarPanel={setSidebarPanel}
       />}
 
       {/* Collapse toolbar button (shown when expanded) */}
@@ -875,9 +911,9 @@ export default function AttackBreaker() {
               padding: "0 12px",
             }}>
               {([
-                { id: "chains" as BottomTab, label: "Attack Chains", count: filteredChains.length, color: theme.colors.violet, popped: popoutChains },
-                { id: "priority" as BottomTab, label: "Priority", count: priorityRanking.length, color: theme.colors.orange, popped: popoutPriority },
-                { id: "detail" as BottomTab, label: "Detail" + (selectedTechData ? ": " + selectedTechData.id : ""), count: null, color: theme.colors.cyan, popped: popoutDetail },
+                { id: "chains" as BottomTab, label: "Attack Chains", shortcut: "1", count: filteredChains.length, color: theme.colors.violet, popped: popoutChains },
+                { id: "priority" as BottomTab, label: "Priority", shortcut: "2", count: priorityRanking.length, color: theme.colors.orange, popped: popoutPriority },
+                { id: "detail" as BottomTab, label: "Detail" + (selectedTechData ? ": " + selectedTechData.id : ""), shortcut: "3", count: null, color: theme.colors.cyan, popped: popoutDetail },
               ]).map(tab => (
                 <button key={tab.id} onClick={() => setBottomTab(tab.id)}
                   style={{
@@ -895,6 +931,7 @@ export default function AttackBreaker() {
                     position: "relative",
                   }}>
                   {tab.label}
+                  <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, marginLeft: 2 }}>{tab.shortcut}</span>
                   {tab.count !== null && (
                     <span style={{
                       fontSize: theme.fontSizes.tiny,
@@ -1003,20 +1040,104 @@ export default function AttackBreaker() {
         )}
       </div>
 
-      {/* Security Controls Panel */}
-      {showControls && !popoutControls && (
-        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "18px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
-          <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
-            controlPreset={controlPreset} setControlPreset={setControlPreset}
-            activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
-            popoutControls={popoutControls} setPopoutControls={setPopoutControls} />
+      {/* ═══ Right Sidebar Drawer ═══ */}
+      {sidebarOpen && (
+        <div style={{
+          position: "fixed", top: 0, right: 0, bottom: 0, width: "min(480px, 90vw)", zIndex: 100,
+          display: "flex", flexDirection: "column",
+          background: theme.colors.bgPanel, borderLeft: "1px solid " + theme.colors.border,
+          boxShadow: "-8px 0 32px rgba(0,0,0,0.5)",
+          transition: "transform 0.2s ease-out",
+        }}>
+          {/* Sidebar header */}
+          <div style={{
+            display: "flex", alignItems: "center", padding: "12px 16px",
+            borderBottom: "1px solid " + theme.colors.borderSubtle,
+            background: theme.colors.bgCard, flexShrink: 0,
+          }}>
+            {/* Sidebar tab buttons */}
+            {([
+              { id: "controls" as SidebarPanel, label: "Controls", shortcut: "S", color: theme.colors.teal },
+              { id: "analysis" as SidebarPanel, label: "Analysis", shortcut: "A", color: theme.colors.blue },
+              { id: "gap" as SidebarPanel, label: "Gaps", shortcut: "G", color: theme.colors.red },
+              { id: "executive" as SidebarPanel, label: "Executive", shortcut: "X", color: theme.colors.cyan },
+            ]).map(tab => (
+              <button key={tab.id} onClick={() => setSidebarPanel(tab.id)}
+                style={{
+                  background: sidebarPanel === tab.id ? tab.color + "18" : "transparent",
+                  border: "none",
+                  borderBottom: sidebarPanel === tab.id ? "2px solid " + tab.color : "2px solid transparent",
+                  color: sidebarPanel === tab.id ? tab.color : theme.colors.textMuted,
+                  padding: "6px 12px", fontSize: theme.fontSizes.small, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}>
+                {tab.label}
+                <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, marginLeft: 4 }}>{tab.shortcut}</span>
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setSidebarPanel(null)}
+              title="Close (Esc)"
+              style={{
+                background: "transparent", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
+                color: theme.colors.textMuted, cursor: "pointer", padding: "4px 10px",
+                fontSize: theme.fontSizes.base, fontFamily: "inherit",
+              }}>{"\u2715"}</button>
+          </div>
+          {/* Sidebar content */}
+          <div style={{ flex: 1, overflow: "auto", padding: "18px 20px" }}>
+            {sidebarPanel === "controls" && (
+              <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
+                controlPreset={controlPreset} setControlPreset={setControlPreset}
+                activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
+                popoutControls={popoutControls} setPopoutControls={setPopoutControls} />
+            )}
+            {sidebarPanel === "analysis" && (
+              <AnalysisPanel remediationBudget={remediationBudget} optimal={optimal}
+                activeTechniques={activeTechniques} betweenness={betweenness} remediated={remediated}
+                effectiveExposures={effectiveExposures} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
+                compareMode={compareMode} compareAnalysis={compareAnalysis}
+                framework={framework} otherFramework={otherFramework}
+                popoutAnalysis={popoutAnalysis} setPopoutAnalysis={setPopoutAnalysis} />
+            )}
+            {sidebarPanel === "gap" && (
+              <GapAnalysisPanel gapAnalysis={gapAnalysis} fwConfig={fwConfig} setSelectedTech={setSelectedTech}
+                exportRemediationPlan={exportRemediationPlan}
+                popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
+            )}
+            {sidebarPanel === "executive" && (() => {
+              const execProps = {
+                techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
+                filteredChains, chainStatus, remediated, optimal, deployedControls,
+                tactics: fwConfig.tactics, securityControls: fwConfig.securityControls as any,
+              };
+              return <ExecutiveSummary {...execProps} popout={false} onPopout={() => setPopoutExecutive(true)} />;
+            })()}
+          </div>
+          {/* Keyboard hint */}
+          <div style={{
+            padding: "8px 16px", borderTop: "1px solid " + theme.colors.borderSubtle,
+            display: "flex", gap: 12, flexShrink: 0,
+          }}>
+            <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
+              Esc close
+            </span>
+            <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
+              S controls  A analysis  G gaps  X executive
+            </span>
+          </div>
         </div>
       )}
-      {showControls && popoutControls && (
-        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
-          <PopoutPlaceholder label="Security Controls" onRestore={() => setPopoutControls(false)} />
-        </div>
+      {/* Backdrop overlay when sidebar is open */}
+      {sidebarOpen && (
+        <div onClick={() => setSidebarPanel(null)}
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99,
+            background: "rgba(0,0,0,0.3)",
+          }} />
       )}
+
+      {/* Popout panels still work independently */}
       {popoutControls && (
         <PopoutPanel title="Security Controls" width={900} height={600} onClose={() => setPopoutControls(false)}>
           <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
@@ -1024,23 +1145,6 @@ export default function AttackBreaker() {
             activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
             popoutControls={popoutControls} setPopoutControls={setPopoutControls} />
         </PopoutPanel>
-      )}
-
-      {/* Analysis Panel */}
-      {showAnalysis && !popoutAnalysis && (
-        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "16px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "40vh", overflow: "auto" }}>
-          <AnalysisPanel remediationBudget={remediationBudget} optimal={optimal}
-            activeTechniques={activeTechniques} betweenness={betweenness} remediated={remediated}
-            effectiveExposures={effectiveExposures} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
-            compareMode={compareMode} compareAnalysis={compareAnalysis}
-            framework={framework} otherFramework={otherFramework}
-            popoutAnalysis={popoutAnalysis} setPopoutAnalysis={setPopoutAnalysis} />
-        </div>
-      )}
-      {showAnalysis && popoutAnalysis && (
-        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
-          <PopoutPlaceholder label="Analysis" onRestore={() => setPopoutAnalysis(false)} />
-        </div>
       )}
       {popoutAnalysis && (
         <PopoutPanel title="Optimization Analysis" width={900} height={500} onClose={() => setPopoutAnalysis(false)}>
@@ -1052,57 +1156,17 @@ export default function AttackBreaker() {
             popoutAnalysis={popoutAnalysis} setPopoutAnalysis={setPopoutAnalysis} />
         </PopoutPanel>
       )}
-
-      {/* Executive Summary Panel */}
-      {(() => {
-        const execProps = {
-          techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
-          filteredChains, chainStatus, remediated, optimal, deployedControls,
-          tactics: fwConfig.tactics, securityControls: fwConfig.securityControls as any,
-        };
-        return (
-          <>
-            {showExecutiveSummary && !popoutExecutive && (
-              <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "18px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "50vh", overflow: "auto" }}>
-                <ExecutiveSummary {...execProps} popout={false} onPopout={() => setPopoutExecutive(true)} />
-              </div>
-            )}
-            {showExecutiveSummary && popoutExecutive && (
-              <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
-                <PopoutPlaceholder label="Executive Summary" onRestore={() => setPopoutExecutive(false)} />
-              </div>
-            )}
-            {popoutExecutive && (
-              <PopoutPanel title="Executive Summary" width={600} height={800} onClose={() => setPopoutExecutive(false)}>
-                <ExecutiveSummary {...execProps} popout={true} />
-              </PopoutPanel>
-            )}
-          </>
-        );
-      })()}
-
-      {/* Exposure Summary Panel */}
-      {exposureSummary && environmentProfile && (
-        <ExposureSummaryPanel
-          exposureSummary={exposureSummary} environmentProfile={environmentProfile}
-          displayTechniques={displayTechniques} setSelectedTech={setSelectedTech}
-          exportCoverageCSV={exportCoverageCSV}
-          setEnvironmentProfile={setEnvironmentProfile} setProfileExposures={setProfileExposures}
-        />
-      )}
-
-      {/* Gap Analysis Panel */}
-      {showGapAnalysis && !popoutGapAnalysis && (
-        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "18px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
-          <GapAnalysisPanel gapAnalysis={gapAnalysis} fwConfig={fwConfig} setSelectedTech={setSelectedTech}
-            exportRemediationPlan={exportRemediationPlan}
-            popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
-        </div>
-      )}
-      {showGapAnalysis && popoutGapAnalysis && (
-        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
-          <PopoutPlaceholder label="Gap Analysis" onRestore={() => setPopoutGapAnalysis(false)} />
-        </div>
+      {popoutExecutive && (
+        <PopoutPanel title="Executive Summary" width={600} height={800} onClose={() => setPopoutExecutive(false)}>
+          {(() => {
+            const execProps = {
+              techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
+              filteredChains, chainStatus, remediated, optimal, deployedControls,
+              tactics: fwConfig.tactics, securityControls: fwConfig.securityControls as any,
+            };
+            return <ExecutiveSummary {...execProps} popout={true} />;
+          })()}
+        </PopoutPanel>
       )}
       {popoutGapAnalysis && (
         <PopoutPanel title="Control Gap Analysis" width={900} height={600} onClose={() => setPopoutGapAnalysis(false)}>
@@ -1110,6 +1174,16 @@ export default function AttackBreaker() {
             exportRemediationPlan={exportRemediationPlan}
             popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
         </PopoutPanel>
+      )}
+
+      {/* Exposure Summary Panel — shown inline when environment profile is active */}
+      {exposureSummary && environmentProfile && (
+        <ExposureSummaryPanel
+          exposureSummary={exposureSummary} environmentProfile={environmentProfile}
+          displayTechniques={displayTechniques} setSelectedTech={setSelectedTech}
+          exportCoverageCSV={exportCoverageCSV}
+          setEnvironmentProfile={setEnvironmentProfile} setProfileExposures={setProfileExposures}
+        />
       )}
 
       {/* Environment Profile Wizard */}

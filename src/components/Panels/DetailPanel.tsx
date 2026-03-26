@@ -68,8 +68,24 @@ export function DetailPanel({
 
   if (!selectedTechData) {
     return (
-      <div style={{ color: theme.colors.textFaint, fontSize: theme.fontSizes.body, paddingTop: "40px", textAlign: "center" }}>
-        Click a node to inspect
+      <div style={{ paddingTop: "48px", textAlign: "center" }}>
+        <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.3 }}>⬡</div>
+        <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.body, fontWeight: 500, marginBottom: "6px" }}>
+          No node selected
+        </div>
+        <div style={{ color: theme.colors.textFaint, fontSize: theme.fontSizes.small, lineHeight: 1.6 }}>
+          Click a technique node in the graph to view<br />
+          exposure, mitigations, and attack chain context
+        </div>
+        <div style={{
+          marginTop: "20px", padding: "8px 14px", display: "inline-block",
+          background: theme.colors.bgSurface, borderRadius: theme.radii.md,
+          border: "1px solid " + theme.colors.borderSubtle,
+        }}>
+          <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
+            Tip: Press <kbd style={{ background: theme.colors.bgCard, padding: "1px 5px", borderRadius: 3, border: "1px solid " + theme.colors.border, fontSize: theme.fontSizes.tiny }}>3</kbd> to switch to this tab
+          </span>
+        </div>
       </div>
     );
   }
