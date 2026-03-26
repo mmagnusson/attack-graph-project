@@ -4,6 +4,7 @@
 // UI panels are in components/Header, components/Panels, components/Graph, etc.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { theme } from './theme';
 
 import { TECHNIQUES, EDGES, ATTACK_CHAINS } from './data/techniques';
 import { MAX_HIGHLIGHTED_CHAINS } from './data/constants';
@@ -596,43 +597,43 @@ export default function AttackBreaker() {
 
   return (
     <div style={{
-      background: "#0a0f1a", color: "#e2e8f0", height: "100vh",
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
+      background: theme.colors.bg, color: theme.colors.textBody, height: "100vh",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
       {/* Collapsed toolbar strip */}
       {headerCollapsed && (
         <div style={{
-          display: "flex", alignItems: "center", gap: "12px",
-          padding: "4px 16px", background: "#0d1321", borderBottom: "1px solid #1e293b",
-          flexShrink: 0, minHeight: "28px",
+          display: "flex", alignItems: "center", gap: theme.spacing.xl,
+          padding: "6px 20px", background: theme.colors.bgPanel, borderBottom: "1px solid " + theme.colors.borderSubtle,
+          flexShrink: 0, minHeight: "32px",
         }}>
           <button onClick={() => setHeaderCollapsed(false)}
             title="Expand toolbar"
             style={{
-              background: "transparent", border: "1px solid #334155", borderRadius: 3,
-              color: "#94a3b8", cursor: "pointer", padding: "1px 6px", fontSize: "12px",
+              background: "transparent", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
+              color: theme.colors.textSecondary, cursor: "pointer", padding: "2px 8px", fontSize: theme.fontSizes.body,
               fontFamily: "inherit", lineHeight: 1,
             }}>{"\u25BC"}</button>
-          <span style={{ fontSize: "10px", color: "#3b82f6", fontWeight: 700 }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.blue, fontWeight: 700 }}>
             {framework === "ics" ? "ICS/OT" : "ENTERPRISE"}
           </span>
-          <span style={{ fontSize: "10px", color: "#94a3b8" }}>|</span>
-          <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
+          <span style={{ fontSize: theme.fontSizes.base, color: "#cbd5e1" }}>
             {filteredChains.length} chains
           </span>
-          <span style={{ fontSize: "10px", color: totalDisrupted > 0 ? "#22c55e" : "#94a3b8" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: totalDisrupted > 0 ? theme.colors.green : theme.colors.textSecondary }}>
             {totalDisrupted} disrupted
           </span>
-          <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: "#cbd5e1" }}>
             {remediated.size} remediated
           </span>
-          <span style={{ fontSize: "10px", color: "#94a3b8" }}>|</span>
-          <span style={{ fontSize: "10px", color: "#94a3b8" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>
             {dataSource === "stix" ? "STIX" : dataSource === "upload" ? uploadedFileName || "Uploaded" : "Built-in"}
           </span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: "9px", color: "#64748b" }}>
+          <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>
             Press {"\u25BC"} to expand
           </span>
         </div>
@@ -682,15 +683,15 @@ export default function AttackBreaker() {
       {/* Collapse toolbar button (shown when expanded) */}
       {!headerCollapsed && (
         <div style={{
-          display: "flex", justifyContent: "center", background: "#0d1321",
-          borderBottom: "1px solid #1e293b", flexShrink: 0,
+          display: "flex", justifyContent: "center", background: theme.colors.bgPanel,
+          borderBottom: "1px solid " + theme.colors.borderSubtle, flexShrink: 0,
         }}>
           <button onClick={() => setHeaderCollapsed(true)}
             title="Collapse toolbar"
             style={{
-              background: "transparent", border: "none", color: "#64748b",
-              cursor: "pointer", padding: "0 12px", fontSize: "10px",
-              fontFamily: "inherit", lineHeight: "14px",
+              background: "transparent", border: "none", color: theme.colors.textMuted,
+              cursor: "pointer", padding: "2px 14px", fontSize: theme.fontSizes.small,
+              fontFamily: "inherit", lineHeight: "18px",
             }}>{"\u25B2"} collapse toolbar {"\u25B2"}</button>
         </div>
       )}
@@ -707,17 +708,17 @@ export default function AttackBreaker() {
           ) : compareMode ? (
             <div style={{ display: "flex", width: "100%", height: "100%", gap: "2px" }}>
               <div style={{ flex: 1, position: "relative", borderRight: "2px solid #1e293b" }}>
-                <div style={{ position: "absolute", top: 4, left: 8, zIndex: 10, padding: "2px 8px", background: framework === "ics" ? "#a855f730" : "#3b82f630", color: framework === "ics" ? "#a855f7" : "#3b82f6", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
+                <div style={{ position: "absolute", top: 6, left: 10, zIndex: 10, padding: "4px 10px", background: framework === "ics" ? "#a855f730" : "#3b82f630", color: framework === "ics" ? theme.colors.purple : theme.colors.blue, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small, fontWeight: 700 }}>
                   {framework === "ics" ? "ICS/OT" : "ENTERPRISE"} (active)
                 </div>
                 <GraphView {...graphViewProps} />
               </div>
               <div style={{ flex: 1, position: "relative" }}>
-                <div style={{ position: "absolute", top: 4, left: 8, zIndex: 10, padding: "2px 8px", background: otherFramework === "ics" ? "#a855f730" : "#3b82f630", color: otherFramework === "ics" ? "#a855f7" : "#3b82f6", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
+                <div style={{ position: "absolute", top: 6, left: 10, zIndex: 10, padding: "4px 10px", background: otherFramework === "ics" ? "#a855f730" : "#3b82f630", color: otherFramework === "ics" ? theme.colors.purple : theme.colors.blue, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small, fontWeight: 700 }}>
                   {otherFramework === "ics" ? "ICS/OT" : "ENTERPRISE"} (read-only)
                 </div>
                 {compareLoading ? (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#64748b", fontSize: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.colors.textMuted, fontSize: theme.fontSizes.body }}>
                     <span style={{ animation: "stix-pulse 1.5s ease-in-out infinite" }}>Loading {otherFramework === "ics" ? "ICS/OT" : "Enterprise"} data...</span>
                   </div>
                 ) : compareLayout ? (
@@ -749,34 +750,34 @@ export default function AttackBreaker() {
           )}
           {chainBuilderMode && (
             <div style={{
-              position: "absolute", top: 8, left: 16, right: 16,
-              background: "#1e293bee", border: "1px solid #a855f7", borderRadius: 6,
-              padding: "10px 14px", zIndex: 15,
-              display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
+              position: "absolute", top: 10, left: 16, right: 16,
+              background: "#1e293bee", border: "1px solid " + theme.colors.purple, borderRadius: theme.radii.md,
+              padding: "12px 16px", zIndex: 15,
+              display: "flex", alignItems: "center", gap: theme.spacing.lg, flexWrap: "wrap",
             }}>
-              <span style={{ fontSize: "10px", color: "#a855f7", fontWeight: 700 }}>CHAIN BUILDER</span>
-              <div style={{ flex: 1, display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
+              <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.purple, fontWeight: 700 }}>CHAIN BUILDER</span>
+              <div style={{ flex: 1, display: "flex", gap: theme.spacing.sm, flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
                 {chainBuilderPath.length === 0 ? (
-                  <span style={{ fontSize: "9px", color: "#64748b" }}>Click nodes to build a path...</span>
+                  <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>Click nodes to build a path...</span>
                 ) : chainBuilderPath.map((tid: string, i: number) => (
                   <React.Fragment key={i}>
-                    {i > 0 && <span style={{ fontSize: "9px", color: "#a855f7" }}>{"\u2192"}</span>}
-                    <span style={{ fontSize: "9px", color: "#e2e8f0", background: "#a855f720", padding: "2px 5px", borderRadius: 3 }}>{tid}</span>
+                    {i > 0 && <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.purple }}>{"\u2192"}</span>}
+                    <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody, background: "#a855f720", padding: "3px 7px", borderRadius: theme.radii.sm, fontFamily: '"JetBrains Mono", monospace' }}>{tid}</span>
                   </React.Fragment>
                 ))}
               </div>
               <input type="text" value={chainBuilderName} onChange={e => setChainBuilderName(e.target.value)}
                 placeholder="Chain name..."
-                style={{ background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", fontSize: "10px", fontFamily: "inherit", width: "120px" }} />
+                style={{ ...theme.inputBase, padding: "5px 10px", width: "140px" }} />
               <button onClick={undoStep} disabled={chainBuilderPath.length === 0}
-                style={{ background: "transparent", color: "#64748b", border: "1px solid #334155", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit", opacity: chainBuilderPath.length === 0 ? 0.3 : 1 }}>UNDO</button>
+                style={{ background: "transparent", color: theme.colors.textMuted, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm, padding: "5px 10px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit", opacity: chainBuilderPath.length === 0 ? 0.3 : 1 }}>UNDO</button>
               <button onClick={clearPath}
-                style={{ background: "transparent", color: "#ef4444", border: "1px solid #ef444466", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit" }}>CLEAR</button>
+                style={{ background: "transparent", color: theme.colors.red, border: "1px solid #ef444466", borderRadius: theme.radii.sm, padding: "5px 10px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit" }}>CLEAR</button>
               <button onClick={saveChain} disabled={chainBuilderPath.length < 2}
                 style={{
-                  background: chainBuilderPath.length < 2 ? "#334155" : "#a855f7",
-                  color: chainBuilderPath.length < 2 ? "#475569" : "#fff",
-                  border: "none", borderRadius: 3, padding: "3px 10px", fontSize: "9px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  background: chainBuilderPath.length < 2 ? theme.colors.border : theme.colors.purple,
+                  color: chainBuilderPath.length < 2 ? theme.colors.textFaint : "#fff",
+                  border: "none", borderRadius: theme.radii.sm, padding: "5px 12px", fontSize: theme.fontSizes.small, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
                 }}>SAVE</button>
             </div>
           )}
@@ -786,10 +787,10 @@ export default function AttackBreaker() {
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20,
             }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "14px", color: "#f59e0b", marginBottom: "8px", animation: "stix-pulse 1.5s ease-in-out infinite" }}>
+                <div style={{ fontSize: theme.fontSizes.stat, color: theme.colors.orange, marginBottom: theme.spacing.lg, animation: "stix-pulse 1.5s ease-in-out infinite" }}>
                   Fetching STIX data...
                 </div>
-                <div style={{ fontSize: "10px", color: "#64748b" }}>Downloading from MITRE ATT&CK GitHub (~25MB)</div>
+                <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textMuted }}>Downloading from MITRE ATT&CK GitHub (~25MB)</div>
               </div>
             </div>
           )}
@@ -800,32 +801,32 @@ export default function AttackBreaker() {
           position: "absolute", bottom: showBottomPanels ? panelHeight + 4 : 4, left: 0, right: 0, zIndex: 5,
           background: "#0a0f1acc", backdropFilter: "blur(4px)",
         }}>
-          <div style={{ display: "flex", gap: "16px", padding: "5px 24px 2px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>Legend:</span>
+          <div style={{ display: "flex", gap: theme.spacing.xl, padding: "6px 24px 3px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>Legend:</span>
             <LegendItem color="#ef4444" label="High exposure ring" />
             <LegendItem color="#f59e0b" label="Medium exposure ring" />
             <LegendItem color="#22c55e" label="Low exposure / remediated" />
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Node size = betweenness x exposure</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Number = chain count</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
-            <span style={{ fontSize: "11px", color: "#f59e0b", border: "1px dashed #f59e0b", padding: "1px 5px", borderRadius: "8px" }}>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>|</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>Node size = betweenness x exposure</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>|</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>Number = chain count</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>|</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.orange, border: "1px dashed " + theme.colors.orange, padding: "2px 7px", borderRadius: theme.radii.pill }}>
               dashed ring = optimal target
             </span>
           </div>
-          <div style={{ display: "flex", gap: "5px", padding: "2px 24px 5px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", marginRight: "4px", fontWeight: 600 }}>Tactics:</span>
+          <div style={{ display: "flex", gap: theme.spacing.sm, padding: "3px 24px 6px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, textTransform: "uppercase", letterSpacing: "1px", marginRight: theme.spacing.sm, fontWeight: 600 }}>Tactics:</span>
             {fwConfig.tactics.map((tac: any, i: number) => {
               const isNewPhase = i > 0 && tac.phase !== fwConfig.tactics[i - 1].phase;
               return (
                 <React.Fragment key={tac.id}>
                   {i > 0 && (
-                    <span style={{ fontSize: "10px", color: "#475569", margin: "0 1px" }}>{isNewPhase ? "\u2192" : "\u00b7"}</span>
+                    <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textFaint, margin: "0 2px" }}>{isNewPhase ? "\u2192" : "\u00b7"}</span>
                   )}
                   <span style={{
-                    fontSize: "10px", color: tac.color, padding: "1px 6px",
-                    background: tac.color + "20", borderRadius: "3px", whiteSpace: "nowrap",
+                    fontSize: theme.fontSizes.small, color: tac.color, padding: "2px 8px",
+                    background: tac.color + "20", borderRadius: theme.radii.sm, whiteSpace: "nowrap",
                   }}>
                     {tac.name}
                   </span>
@@ -843,12 +844,12 @@ export default function AttackBreaker() {
             background: "#0a0f1aee", backdropFilter: "blur(8px)", borderTop: "1px solid #1e293b",
           }}>
             <div onMouseDown={startDividerDrag} onTouchStart={startDividerDragTouch}
-              style={{ height: 14, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}>
-              <div style={{ width: 48, height: 3, background: "#475569", borderRadius: 2 }} />
+              style={{ height: 16, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}>
+              <div style={{ width: 48, height: 4, background: theme.colors.textFaint, borderRadius: 2 }} />
             </div>
             <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
               {/* Attack Chains */}
-              <div style={{ flex: "1 1 280px", borderRight: "1px solid #1e293b", padding: popoutChains ? 0 : "12px 16px", overflow: "auto" }}>
+              <div style={{ flex: "1 1 300px", borderRight: "1px solid " + theme.colors.borderSubtle, padding: popoutChains ? 0 : "14px 18px", overflow: "auto" }}>
                 {popoutChains ? (
                   <>
                     <PopoutPlaceholder label="Attack Chains" onRestore={() => setPopoutChains(false)} />
@@ -877,7 +878,7 @@ export default function AttackBreaker() {
                 )}
               </div>
               {/* Priority Ranking */}
-              <div style={{ flex: "1 1 240px", borderRight: "1px solid #1e293b", padding: popoutPriority ? 0 : "12px 16px", overflow: "auto" }}>
+              <div style={{ flex: "1 1 260px", borderRight: "1px solid " + theme.colors.borderSubtle, padding: popoutPriority ? 0 : "14px 18px", overflow: "auto" }}>
                 {popoutPriority ? (
                   <>
                     <PopoutPlaceholder label="Remediation Priority" onRestore={() => setPopoutPriority(false)} />
@@ -894,7 +895,7 @@ export default function AttackBreaker() {
                 )}
               </div>
               {/* Detail Panel */}
-              <div style={{ flex: "1 1 240px", padding: popoutDetail ? 0 : "12px 16px", overflow: "auto" }}>
+              <div style={{ flex: "1 1 260px", padding: popoutDetail ? 0 : "14px 18px", overflow: "auto" }}>
                 {popoutDetail ? (
                   <>
                     <PopoutPlaceholder label="Node Detail" onRestore={() => setPopoutDetail(false)} />
@@ -933,7 +934,7 @@ export default function AttackBreaker() {
 
       {/* Security Controls Panel */}
       {showControls && !popoutControls && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
+        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "18px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
           <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
             controlPreset={controlPreset} setControlPreset={setControlPreset}
             activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
@@ -941,7 +942,7 @@ export default function AttackBreaker() {
         </div>
       )}
       {showControls && popoutControls && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
+        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
           <PopoutPlaceholder label="Security Controls" onRestore={() => setPopoutControls(false)} />
         </div>
       )}
@@ -966,7 +967,7 @@ export default function AttackBreaker() {
         </div>
       )}
       {showAnalysis && popoutAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
+        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
           <PopoutPlaceholder label="Analysis" onRestore={() => setPopoutAnalysis(false)} />
         </div>
       )}
@@ -991,12 +992,12 @@ export default function AttackBreaker() {
         return (
           <>
             {showExecutiveSummary && !popoutExecutive && (
-              <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "50vh", overflow: "auto" }}>
+              <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "18px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "50vh", overflow: "auto" }}>
                 <ExecutiveSummary {...execProps} popout={false} onPopout={() => setPopoutExecutive(true)} />
               </div>
             )}
             {showExecutiveSummary && popoutExecutive && (
-              <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
+              <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
                 <PopoutPlaceholder label="Executive Summary" onRestore={() => setPopoutExecutive(false)} />
               </div>
             )}
@@ -1021,14 +1022,14 @@ export default function AttackBreaker() {
 
       {/* Gap Analysis Panel */}
       {showGapAnalysis && !popoutGapAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
+        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "18px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
           <GapAnalysisPanel gapAnalysis={gapAnalysis} fwConfig={fwConfig} setSelectedTech={setSelectedTech}
             exportRemediationPlan={exportRemediationPlan}
             popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
         </div>
       )}
       {showGapAnalysis && popoutGapAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
+        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: 0, background: theme.colors.bgPanel, flexShrink: 0 }}>
           <PopoutPlaceholder label="Gap Analysis" onRestore={() => setPopoutGapAnalysis(false)} />
         </div>
       )}

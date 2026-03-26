@@ -2,6 +2,7 @@
 
 import { CONTROL_CATEGORIES } from '../../data/constants';
 import { PopoutButton } from '../Analysis';
+import { theme } from '../../theme';
 
 interface ControlsPanelProps {
   fwConfig: any;
@@ -24,7 +25,7 @@ export function ControlsPanel({
 }: ControlsPanelProps) {
   return (
     <>
-      <h3 style={{ fontSize: "11px", color: "#14b8a6", margin: "0 0 12px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "10px" }}>
+      <h3 style={{ fontSize: theme.fontSizes.body, color: theme.colors.teal, margin: "0 0 14px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: theme.spacing.lg }}>
         SECURITY CONTROLS
         {!popoutControls && <PopoutButton onClick={() => setPopoutControls(true)} title="Pop out Controls" />}
         <select value={controlPreset} onChange={e => {
@@ -34,15 +35,14 @@ export function ControlsPanel({
             setDeployedControls(() => new Set(fwConfig.controlPresets[preset].controls));
           }
         }} style={{
-          background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155",
-          borderRadius: "4px", padding: "3px 8px", fontSize: "9px", fontFamily: "inherit", marginLeft: "auto",
+          ...theme.inputBase, padding: "5px 10px", fontSize: theme.fontSizes.small, marginLeft: "auto",
         }}>
           {Object.entries(fwConfig.controlPresets).map(([k, v]: [string, any]) => (
             <option key={k} value={k}>{v.name}</option>
           ))}
         </select>
         {controlPreset !== "none" && fwConfig.controlPresets[controlPreset] && (
-          <span style={{ fontSize: "8px", color: "#14b8a6" }}>
+          <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.teal }}>
             {fwConfig.controlPresets[controlPreset].controls.filter((c: string) => deployedControls.has(c)).length}/{fwConfig.controlPresets[controlPreset].controls.length} for {fwConfig.controlPresets[controlPreset].name}
           </span>
         )}
@@ -52,13 +52,13 @@ export function ControlsPanel({
         const catDeployed = catControls.filter((c: any) => deployedControls.has(c.id)).length;
         const allDeployed = catDeployed === catControls.length;
         return (
-          <div key={cat.id} style={{ marginBottom: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <span style={{ fontSize: "13px" }}>{cat.icon}</span>
-              <span style={{ fontSize: "10px", fontWeight: 700, color: cat.color, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          <div key={cat.id} style={{ marginBottom: theme.spacing.xxl }}>
+            <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.lg, marginBottom: theme.spacing.lg }}>
+              <span style={{ fontSize: theme.fontSizes.large }}>{cat.icon}</span>
+              <span style={{ fontSize: theme.fontSizes.base, fontWeight: 700, color: cat.color, textTransform: "uppercase", letterSpacing: "0.5px" }}>
                 {cat.name}
               </span>
-              <span style={{ fontSize: "9px", color: "#64748b" }}>
+              <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>
                 {catDeployed}/{catControls.length} deployed
               </span>
               <button onClick={() => {
@@ -72,28 +72,28 @@ export function ControlsPanel({
                   return next;
                 });
               }} style={{
-                background: "transparent", color: allDeployed ? "#ef4444" : cat.color,
+                background: "transparent", color: allDeployed ? theme.colors.red : cat.color,
                 border: "1px solid " + (allDeployed ? "#ef444466" : cat.color + "66"),
-                borderRadius: "3px", padding: "2px 8px", fontSize: "8px", fontWeight: 700,
+                borderRadius: theme.radii.sm, padding: "4px 10px", fontSize: theme.fontSizes.tiny, fontWeight: 700,
                 cursor: "pointer", fontFamily: "inherit", marginLeft: "auto",
               }}>
                 {allDeployed ? "CLEAR" : "DEPLOY ALL"}
               </button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: theme.spacing.lg }}>
               {catControls.map((ctrl: any) => {
                 const deployed = deployedControls.has(ctrl.id);
                 const techCount = Object.keys(ctrl.coverage).filter((tid: string) => activeTechniques.some((t: any) => t.id === tid)).length;
                 return (
                   <div key={ctrl.id} style={{
-                    background: "#0a0f1a", border: "1px solid " + (deployed ? cat.color + "30" : "#1e293b"),
-                    borderRadius: "6px", padding: "10px",
-                    borderLeft: "3px solid " + (deployed ? cat.color : "#1e293b"),
+                    background: theme.colors.bg, border: "1px solid " + (deployed ? cat.color + "30" : theme.colors.borderSubtle),
+                    borderRadius: theme.radii.md, padding: theme.spacing.lg,
+                    borderLeft: "3px solid " + (deployed ? cat.color : theme.colors.borderSubtle),
                   }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: theme.spacing.sm }}>
                       <div>
-                        <div style={{ fontSize: "10px", fontWeight: 600, color: deployed ? cat.color : "#f8fafc" }}>{ctrl.name}</div>
-                        <div style={{ fontSize: "8px", color: "#64748b" }}>{ctrl.cost} · {techCount} techniques</div>
+                        <div style={{ fontSize: theme.fontSizes.base, fontWeight: 600, color: deployed ? cat.color : theme.colors.textPrimary }}>{ctrl.name}</div>
+                        <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>{ctrl.cost} · {techCount} techniques</div>
                       </div>
                       <button onClick={() => {
                         setDeployedControls(prev => {
@@ -103,20 +103,21 @@ export function ControlsPanel({
                           return next;
                         });
                       }} style={{
-                        background: deployed ? cat.color : "#334155",
-                        color: deployed ? "#0a0f1a" : "#94a3b8",
-                        border: "none", borderRadius: "4px", padding: "3px 8px",
-                        fontSize: "8px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                        background: deployed ? cat.color : theme.colors.border,
+                        color: deployed ? theme.colors.bg : theme.colors.textSecondary,
+                        border: "none", borderRadius: theme.radii.sm, padding: "5px 10px",
+                        fontSize: theme.fontSizes.tiny, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
                       }}>
                         {deployed ? "DEPLOYED" : "DEPLOY"}
                       </button>
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "3px" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
                       {Object.entries(ctrl.coverage).map(([tid, red]: [string, any]) => (
                         <span key={tid} style={{
-                          fontSize: "7px", padding: "1px 3px", borderRadius: "2px",
-                          background: deployed ? cat.color + "15" : "#1e293b",
-                          color: deployed ? cat.color : "#475569",
+                          fontSize: theme.fontSizes.micro, padding: "2px 5px", borderRadius: theme.radii.sm,
+                          background: deployed ? cat.color + "15" : theme.colors.borderSubtle,
+                          color: deployed ? cat.color : theme.colors.textFaint,
+                          fontFamily: '"JetBrains Mono", monospace',
                         }}>
                           {tid} ({(red * 100).toFixed(0)}%)
                         </span>
@@ -142,21 +143,21 @@ export function ControlsPanel({
         });
         const costSummary = Object.entries(costTally).sort((a, b) => b[0].length - a[0].length).map(([t, n]) => n + "x" + t).join("  ");
         return (
-          <div style={{ marginTop: "8px", padding: "10px 12px", background: "#14b8a610", borderRadius: "4px" }}>
-            <div style={{ fontSize: "10px", color: "#14b8a6", marginBottom: "6px" }}>
+          <div style={{ marginTop: theme.spacing.lg, padding: "12px 14px", background: "#14b8a610", borderRadius: theme.radii.sm }}>
+            <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.teal, marginBottom: theme.spacing.md }}>
               {deployedControls.size} control{deployedControls.size === 1 ? "" : "s"} deployed — average exposure reduced by {reduction}%
             </div>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "9px" }}>
+            <div style={{ display: "flex", gap: theme.spacing.xl, flexWrap: "wrap", fontSize: theme.fontSizes.small }}>
               {CONTROL_CATEGORIES.map((cat: any) => {
                 const catCtrls = fwConfig.securityControls.filter((c: any) => c.category === cat.id);
                 const catDep = catCtrls.filter((c: any) => deployedControls.has(c.id)).length;
                 return (
-                  <span key={cat.id} style={{ color: catDep > 0 ? cat.color : "#475569" }}>
+                  <span key={cat.id} style={{ color: catDep > 0 ? cat.color : theme.colors.textFaint }}>
                     {cat.icon} {cat.name.split(" / ")[0]}: {catDep}/{catCtrls.length}
                   </span>
                 );
               })}
-              <span style={{ color: "#64748b", marginLeft: "auto" }}>Cost: {costSummary}</span>
+              <span style={{ color: theme.colors.textMuted, marginLeft: "auto" }}>Cost: {costSummary}</span>
             </div>
           </div>
         );

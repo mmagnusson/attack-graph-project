@@ -1,3 +1,5 @@
+import { theme } from '../../theme';
+
 interface StatProps {
   label: string;
   value: string | number;
@@ -6,9 +8,9 @@ interface StatProps {
 
 export function Stat({ label, value, color }: StatProps) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-      <span style={{ fontSize: "14px", fontWeight: 700, color: color }}>{value}</span>
-      <span style={{ fontSize: "9px", color: "#64748b" }}>{label}</span>
+    <div style={{ display: "flex", alignItems: "baseline", gap: theme.spacing.md }}>
+      <span style={{ fontSize: theme.fontSizes.stat, fontWeight: 700, color: color }}>{value}</span>
+      <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>{label}</span>
     </div>
   );
 }

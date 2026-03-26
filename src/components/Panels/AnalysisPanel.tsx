@@ -2,6 +2,7 @@
 
 // AnalysisPanel
 import { AnalysisCard, PopoutButton } from '../Analysis';
+import { theme } from '../../theme';
 
 interface AnalysisPanelProps {
   remediationBudget: number;
@@ -28,19 +29,19 @@ export function AnalysisPanel({
 }: AnalysisPanelProps) {
   return (
     <>
-      <h3 style={{ fontSize: "11px", color: "#f59e0b", margin: "0 0 12px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
+      <h3 style={{ fontSize: theme.fontSizes.body, color: theme.colors.orange, margin: "0 0 14px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
         OPTIMIZATION ANALYSIS
         {!popoutAnalysis && <PopoutButton onClick={() => setPopoutAnalysis(true)} title="Pop out Analysis" />}
       </h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: theme.spacing.xl }}>
         <AnalysisCard title="Greedy Set Cover Result">
-          <p>With a budget of <strong style={{ color: "#f59e0b" }}>{remediationBudget}</strong> remediations,
-          the optimal selection disrupts <strong style={{ color: "#22c55e" }}>{optimal.chainsDisrupted}/{optimal.chainsTotal}</strong> attack chains.</p>
-          <p style={{ marginTop: "6px" }}>Optimal targets: {optimal.selected.map((id: string) => {
+          <p>With a budget of <strong style={{ color: theme.colors.orange }}>{remediationBudget}</strong> remediations,
+          the optimal selection disrupts <strong style={{ color: theme.colors.green }}>{optimal.chainsDisrupted}/{optimal.chainsTotal}</strong> attack chains.</p>
+          <p style={{ marginTop: theme.spacing.md }}>Optimal targets: {optimal.selected.map((id: string) => {
             const t = activeTechniques.find((t: any) => t.id === id);
             return t ? id + " (" + t.name + ")" : id;
           }).join(", ")}</p>
-          <p style={{ marginTop: "6px", color: "#64748b" }}>
+          <p style={{ marginTop: theme.spacing.md, color: theme.colors.textMuted }}>
             Algorithm: Greedy weighted maximum coverage. Each iteration selects the technique
             that covers the most remaining unchained paths, weighted by severity x exposure.
             Guaranteed {"\u2265"}63% of optimal (1 - 1/e approximation bound).
@@ -53,9 +54,9 @@ export function AnalysisPanel({
             .sort((a: any, b: any) => b.bc - a.bc)
             .slice(0, 5)
             .map((t: any, i: number) => (
-              <div key={i} style={{ fontSize: "10px", marginTop: "4px" }}>
-                <span style={{ color: "#f59e0b" }}>{t.id}</span> {t.name} — centrality: {(t.bc * 100).toFixed(1)}%
-                {remediated.has(t.id) && <span style={{ color: "#22c55e" }}> {"\u2713"}</span>}
+              <div key={i} style={{ fontSize: theme.fontSizes.base, marginTop: theme.spacing.sm }}>
+                <span style={{ color: theme.colors.orange }}>{t.id}</span> {t.name} — centrality: {(t.bc * 100).toFixed(1)}%
+                {remediated.has(t.id) && <span style={{ color: theme.colors.green }}> {"\u2713"}</span>}
               </div>
             ))
           }
@@ -68,13 +69,13 @@ export function AnalysisPanel({
             return (
               <>
                 <p>Average node exposure: <strong style={{
-                  color: avgExposure > 0.6 ? "#ef4444" : avgExposure > 0.3 ? "#f59e0b" : "#22c55e"
+                  color: avgExposure > 0.6 ? theme.colors.red : avgExposure > 0.3 ? theme.colors.orange : theme.colors.green
                 }}>{(avgExposure * 100).toFixed(0)}%</strong></p>
-                <p>High-exposure nodes ({">"}70%): <strong style={{ color: "#ef4444" }}>{highExposed}</strong> of {activeTechniques.length}</p>
+                <p>High-exposure nodes ({">"}70%): <strong style={{ color: theme.colors.red }}>{highExposed}</strong> of {activeTechniques.length}</p>
                 <p>Chain disruption rate: <strong style={{
-                  color: disruptionRate > 0.8 ? "#22c55e" : disruptionRate > 0.5 ? "#f59e0b" : "#ef4444"
+                  color: disruptionRate > 0.8 ? theme.colors.green : disruptionRate > 0.5 ? theme.colors.orange : theme.colors.red
                 }}>{(disruptionRate * 100).toFixed(0)}%</strong></p>
-                <p style={{ marginTop: "6px", color: "#64748b" }}>
+                <p style={{ marginTop: theme.spacing.md, color: theme.colors.textMuted }}>
                   {disruptionRate === 1 ? "All known attack chains have at least one broken link." :
                     disruptionRate > 0.7 ? "Good coverage but some chains remain viable." :
                       disruptionRate > 0.4 ? "Moderate risk \u2014 several attack paths remain open." :
@@ -86,29 +87,29 @@ export function AnalysisPanel({
         </AnalysisCard>
         {compareMode && compareAnalysis && (
           <AnalysisCard title="IT/OT Convergence Analysis">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.spacing.lg, marginBottom: theme.spacing.lg }}>
               <div>
-                <div style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase" }}>{framework === "ics" ? "ICS/OT" : "Enterprise"}</div>
-                <div style={{ fontSize: "16px", fontWeight: 700, color: framework === "ics" ? "#a855f7" : "#3b82f6" }}>{compareAnalysis.currentCount}</div>
-                <div style={{ fontSize: "8px", color: "#64748b" }}>techniques</div>
+                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, textTransform: "uppercase" }}>{framework === "ics" ? "ICS/OT" : "Enterprise"}</div>
+                <div style={{ fontSize: theme.fontSizes.heading, fontWeight: 700, color: framework === "ics" ? theme.colors.purple : theme.colors.blue }}>{compareAnalysis.currentCount}</div>
+                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>techniques</div>
               </div>
               <div>
-                <div style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase" }}>{otherFramework === "ics" ? "ICS/OT" : "Enterprise"}</div>
-                <div style={{ fontSize: "16px", fontWeight: 700, color: otherFramework === "ics" ? "#a855f7" : "#3b82f6" }}>{compareAnalysis.otherCount}</div>
-                <div style={{ fontSize: "8px", color: "#64748b" }}>techniques</div>
+                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, textTransform: "uppercase" }}>{otherFramework === "ics" ? "ICS/OT" : "Enterprise"}</div>
+                <div style={{ fontSize: theme.fontSizes.heading, fontWeight: 700, color: otherFramework === "ics" ? theme.colors.purple : theme.colors.blue }}>{compareAnalysis.otherCount}</div>
+                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>techniques</div>
               </div>
             </div>
-            <div style={{ padding: "6px 8px", background: "#06b6d410", borderRadius: "4px", marginBottom: "6px" }}>
-              <span style={{ fontSize: "9px", color: "#06b6d4", fontWeight: 700 }}>{compareAnalysis.shared.size}</span>
-              <span style={{ fontSize: "9px", color: "#94a3b8" }}> shared technique IDs (potential IT{"\u2194"}OT pivot points)</span>
+            <div style={{ padding: "8px 10px", background: "#06b6d410", borderRadius: theme.radii.sm, marginBottom: theme.spacing.md }}>
+              <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.cyan, fontWeight: 700 }}>{compareAnalysis.shared.size}</span>
+              <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary }}> shared technique IDs (potential IT{"\u2194"}OT pivot points)</span>
             </div>
-            <div style={{ fontSize: "9px", color: "#94a3b8" }}>
-              Unique to {framework === "ics" ? "ICS" : "Enterprise"}: <strong style={{ color: "#f59e0b" }}>{compareAnalysis.uniqueCurrent.size}</strong>
+            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary }}>
+              Unique to {framework === "ics" ? "ICS" : "Enterprise"}: <strong style={{ color: theme.colors.orange }}>{compareAnalysis.uniqueCurrent.size}</strong>
               {" \u00B7 "}
-              Unique to {otherFramework === "ics" ? "ICS" : "Enterprise"}: <strong style={{ color: "#f59e0b" }}>{compareAnalysis.uniqueOther.size}</strong>
+              Unique to {otherFramework === "ics" ? "ICS" : "Enterprise"}: <strong style={{ color: theme.colors.orange }}>{compareAnalysis.uniqueOther.size}</strong>
             </div>
             {compareAnalysis.shared.size > 0 && (
-              <div style={{ marginTop: "6px", fontSize: "8px", color: "#64748b" }}>
+              <div style={{ marginTop: theme.spacing.md, fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>
                 Shared IDs: {[...compareAnalysis.shared].slice(0, 10).join(", ")}{compareAnalysis.shared.size > 10 ? " ..." : ""}
               </div>
             )}

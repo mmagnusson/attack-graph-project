@@ -1,6 +1,7 @@
 import React from 'react';
 import { TACTICS } from '../../data/constants';
 import { PopoutButton } from '../Analysis/PopoutButton';
+import { theme } from '../../theme';
 import type { Technique, Tactic, SecurityControl } from '../../types';
 
 interface ChainStatus {
@@ -36,7 +37,7 @@ export function ExecutiveSummary({ techniques, exposures, betweenness, chainCove
   const totalDisrupted = chainStatus.filter(c => c.broken).length;
   const disruptionRate = totalDisrupted / Math.max(filteredChains.length, 1);
   const riskScore = Math.round(Math.min(100, (avgExposure * 40 + (1 - disruptionRate) * 35 + (highExposed / Math.max(techniques.length, 1)) * 25)));
-  const riskColor = riskScore > 70 ? "#ef4444" : riskScore > 40 ? "#f59e0b" : "#22c55e";
+  const riskColor = riskScore > 70 ? theme.colors.red : riskScore > 40 ? theme.colors.orange : theme.colors.green;
 
   const topRisks = techniques
     .map(t => ({ ...t, exposure: exposures[t.id] ?? 1, bc: betweenness[t.id] ?? 0, cc: chainCoverage[t.id] ?? 0 }))
@@ -62,38 +63,38 @@ export function ExecutiveSummary({ techniques, exposures, betweenness, chainCove
     .sort((a, b) => b.impact - a.impact)
     .slice(0, 3);
 
-  const sectionStyle = { background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: "16px 20px", marginBottom: 12 };
-  const labelStyle: React.CSSProperties = { fontSize: "9px", color: "#64748b", textTransform: "uppercase" as const, letterSpacing: "1px", marginBottom: 8 };
+  const sectionStyle = { background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle, borderRadius: 8, padding: "18px 22px", marginBottom: 14 };
+  const labelStyle: React.CSSProperties = { ...theme.sectionLabel, marginBottom: 10 };
 
   return (
     <>
-      <h3 style={{ fontSize: "12px", color: "#06b6d4", margin: "0 0 14px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
+      <h3 style={{ fontSize: theme.fontSizes.medium, color: theme.colors.cyan, margin: "0 0 16px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
         EXECUTIVE SUMMARY
         {!popout && onPopout && <PopoutButton onClick={onPopout} title="Pop out Executive Summary" />}
       </h3>
 
       <div style={{ ...sectionStyle, textAlign: "center" }}>
         <div style={labelStyle}>Overall Risk Score</div>
-        <div style={{ fontSize: "48px", fontWeight: 700, color: riskColor, lineHeight: 1.1 }}>{riskScore}</div>
-        <div style={{ fontSize: "10px", color: "#64748b", marginTop: 4 }}>
+        <div style={{ fontSize: theme.fontSizes.hero, fontWeight: 700, color: riskColor, lineHeight: 1.1 }}>{riskScore}</div>
+        <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textMuted, marginTop: 6 }}>
           {riskScore > 70 ? "Critical — Immediate action required" : riskScore > 40 ? "Moderate — Improvements recommended" : "Good — Maintain current posture"}
         </div>
       </div>
 
       <div style={{ ...sectionStyle }}>
         <div style={labelStyle}>Key Metrics</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: theme.spacing.xl }}>
           {[
-            { label: "Techniques", value: techniques.length, color: "#6366f1" },
-            { label: "Attack Chains", value: filteredChains.length, color: "#8b5cf6" },
-            { label: "Disruption Rate", value: (disruptionRate * 100).toFixed(0) + "%", color: disruptionRate > 0.7 ? "#22c55e" : "#f59e0b" },
-            { label: "Avg Exposure", value: (avgExposure * 100).toFixed(0) + "%", color: avgExposure > 0.6 ? "#ef4444" : "#f59e0b" },
-            { label: "Remediated", value: remediated.size, color: "#22c55e" },
-            { label: "Controls Deployed", value: deployedControls.size, color: "#14b8a6" },
+            { label: "Techniques", value: techniques.length, color: theme.colors.indigo },
+            { label: "Attack Chains", value: filteredChains.length, color: theme.colors.violet },
+            { label: "Disruption Rate", value: (disruptionRate * 100).toFixed(0) + "%", color: disruptionRate > 0.7 ? theme.colors.green : theme.colors.orange },
+            { label: "Avg Exposure", value: (avgExposure * 100).toFixed(0) + "%", color: avgExposure > 0.6 ? theme.colors.red : theme.colors.orange },
+            { label: "Remediated", value: remediated.size, color: theme.colors.green },
+            { label: "Controls Deployed", value: deployedControls.size, color: theme.colors.teal },
           ].map((m, i) => (
             <div key={i} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "20px", fontWeight: 700, color: m.color }}>{m.value}</div>
-              <div style={{ fontSize: "8px", color: "#64748b" }}>{m.label}</div>
+              <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: m.color }}>{m.value}</div>
+              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>{m.label}</div>
             </div>
           ))}
         </div>
@@ -104,15 +105,15 @@ export function ExecutiveSummary({ techniques, exposures, betweenness, chainCove
         {topRisks.map((t, i) => {
           const tactic = tacticsArr.find(ta => ta.id === t.tactic);
           return (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < 4 ? "1px solid #1e293b" : "none" }}>
-              <span style={{ fontSize: "12px", color: "#475569", width: 20, fontWeight: 700 }}>#{i + 1}</span>
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: i < 4 ? "1px solid " + theme.colors.borderSubtle : "none" }}>
+              <span style={{ fontSize: theme.fontSizes.medium, color: theme.colors.textFaint, width: 24, fontWeight: 700 }}>#{i + 1}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "11px", fontWeight: 600, color: "#f8fafc" }}>{t.id} — {t.name}</div>
-                <div style={{ fontSize: "9px", color: tactic?.color }}>{tactic?.name}</div>
+                <div style={{ fontSize: theme.fontSizes.body, fontWeight: 600, color: theme.colors.textPrimary }}>{t.id} — {t.name}</div>
+                <div style={{ fontSize: theme.fontSizes.small, color: tactic?.color }}>{tactic?.name}</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: t.exposure > 0.7 ? "#ef4444" : "#f59e0b" }}>{(t.exposure * 100).toFixed(0)}%</div>
-                <div style={{ fontSize: "8px", color: "#475569" }}>exposure</div>
+                <div style={{ fontSize: theme.fontSizes.medium, fontWeight: 700, color: t.exposure > 0.7 ? theme.colors.red : theme.colors.orange }}>{(t.exposure * 100).toFixed(0)}%</div>
+                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>exposure</div>
               </div>
             </div>
           );
@@ -122,13 +123,13 @@ export function ExecutiveSummary({ techniques, exposures, betweenness, chainCove
       <div style={{ ...sectionStyle }}>
         <div style={labelStyle}>Coverage Gaps (Highest Exposure Tactics)</div>
         {coverageGaps.map((tac, i) => (
-          <div key={i} style={{ marginBottom: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: 2 }}>
+          <div key={i} style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.fontSizes.base, marginBottom: 3 }}>
               <span style={{ color: tac.color }}>{tac.name}</span>
-              <span style={{ color: tac.avg > 0.7 ? "#ef4444" : "#f59e0b" }}>{(tac.avg * 100).toFixed(0)}%</span>
+              <span style={{ color: tac.avg > 0.7 ? theme.colors.red : theme.colors.orange }}>{(tac.avg * 100).toFixed(0)}%</span>
             </div>
-            <div style={{ height: 6, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: (tac.avg * 100) + "%", background: tac.color, borderRadius: 3, opacity: 0.7 }} />
+            <div style={{ height: 8, background: theme.colors.bgSurface, borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: (tac.avg * 100) + "%", background: tac.color, borderRadius: 4, opacity: 0.7 }} />
             </div>
           </div>
         ))}
@@ -136,20 +137,20 @@ export function ExecutiveSummary({ techniques, exposures, betweenness, chainCove
 
       <div style={{ ...sectionStyle }}>
         <div style={labelStyle}>Recommended Actions</div>
-        <div style={{ fontSize: "9px", color: "#94a3b8", marginBottom: 8 }}>Top remediation targets:</div>
+        <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, marginBottom: 10 }}>Top remediation targets:</div>
         {optimal.selected.slice(0, 3).map((id, i) => {
           const t = techniques.find(t => t.id === id);
           return (
-            <div key={id} style={{ fontSize: "10px", color: "#f59e0b", padding: "3px 0" }}>
+            <div key={id} style={{ fontSize: theme.fontSizes.base, color: theme.colors.orange, padding: "4px 0" }}>
               {i + 1}. Remediate <strong>{id}</strong>{t ? " (" + t.name + ")" : ""}
             </div>
           );
         })}
         {topUndeployedControls.length > 0 && (
           <>
-            <div style={{ fontSize: "9px", color: "#94a3b8", marginTop: 10, marginBottom: 4 }}>Top undeployed controls:</div>
+            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 }}>Top undeployed controls:</div>
             {topUndeployedControls.map((c, i) => (
-              <div key={c.id} style={{ fontSize: "10px", color: "#14b8a6", padding: "3px 0" }}>
+              <div key={c.id} style={{ fontSize: theme.fontSizes.base, color: theme.colors.teal, padding: "4px 0" }}>
                 {i + 1}. Deploy <strong>{c.name}</strong> ({c.cost})
               </div>
             ))}
@@ -163,15 +164,15 @@ export function ExecutiveSummary({ techniques, exposures, betweenness, chainCove
           const info = tacticExposures[tac.id];
           if (!info) return null;
           return (
-            <div key={tac.id} style={{ marginBottom: 4 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8px", marginBottom: 1 }}>
+            <div key={tac.id} style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.fontSizes.tiny, marginBottom: 2 }}>
                 <span style={{ color: tac.color }}>{tac.name}</span>
-                <span style={{ color: "#64748b" }}>{(info.avg * 100).toFixed(0)}% ({info.count})</span>
+                <span style={{ color: theme.colors.textMuted }}>{(info.avg * 100).toFixed(0)}% ({info.count})</span>
               </div>
-              <div style={{ height: 8, background: "#1e293b", borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ height: 10, background: theme.colors.bgSurface, borderRadius: 5, overflow: "hidden" }}>
                 <div style={{
-                  height: "100%", width: (info.avg * 100) + "%", borderRadius: 4,
-                  background: info.avg > 0.7 ? "#ef4444" : info.avg > 0.4 ? "#f59e0b" : "#22c55e",
+                  height: "100%", width: (info.avg * 100) + "%", borderRadius: 5,
+                  background: info.avg > 0.7 ? theme.colors.red : info.avg > 0.4 ? theme.colors.orange : theme.colors.green,
                   opacity: 0.8,
                 }} />
               </div>
