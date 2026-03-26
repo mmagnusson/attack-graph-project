@@ -4,6 +4,7 @@
 // UI panels are in components/Header, components/Panels, components/Graph, etc.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { theme } from './theme';
 
 import { TECHNIQUES, EDGES, ATTACK_CHAINS } from './data/techniques';
 import { MAX_HIGHLIGHTED_CHAINS } from './data/constants';
@@ -86,7 +87,61 @@ export default function AttackBreaker() {
   const [expandedChainProfile, setExpandedChainProfile] = useState<string | null>(null);
   const [showSubTechniques, setShowSubTechniques] = useState(false);
   const [chainSearchQuery, setChainSearchQuery] = useState("");
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+
+  // ─── Right sidebar drawer ──────────────────────────────────────────────────
+  type SidebarPanel = "controls" | "analysis" | "gap" | "executive" | null;
+  const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>(null);
+  const sidebarOpen = sidebarPanel !== null;
+  const [headerCollapsed, setHeaderCollapsed] = useState(() => {
+    const saved = localStorage.getItem('ab_headerCollapsed');
+    return saved !== null ? saved === 'true' : true; // collapsed by default for more space
+  });
+
+  // ─── Bottom panel tab state ────────────────────────────────────────────────
+  type BottomTab = "chains" | "priority" | "detail";
+  const [bottomTab, setBottomTab] = useState<BottomTab>(() => {
+    const saved = localStorage.getItem('ab_bottomTab');
+    return (saved === "chains" || saved === "priority" || saved === "detail") ? saved : "chains";
+  });
+
+  // Persist layout preferences
+  useEffect(() => { localStorage.setItem('ab_bottomTab', bottomTab); }, [bottomTab]);
+  useEffect(() => { localStorage.setItem('ab_headerCollapsed', String(headerCollapsed)); }, [headerCollapsed]);
+
+  // Auto-switch to detail tab when a technique is selected
+  useEffect(() => {
+    if (selectedTech) setBottomTab("detail");
+  }, [selectedTech]);
+
+  // ─── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+
+      // Bottom tab shortcuts: 1/2/3
+      if (e.key === "1" && !e.ctrlKey && !e.metaKey && !e.altKey) { setBottomTab("chains"); return; }
+      if (e.key === "2" && !e.ctrlKey && !e.metaKey && !e.altKey) { setBottomTab("priority"); return; }
+      if (e.key === "3" && !e.ctrlKey && !e.metaKey && !e.altKey) { setBottomTab("detail"); return; }
+
+      // Toggle bottom panels: b
+      if (e.key === "b" && !e.ctrlKey && !e.metaKey && !e.altKey) { setShowBottomPanels((prev: boolean) => !prev); return; }
+
+      // Toggle header: h
+      if (e.key === "h" && !e.ctrlKey && !e.metaKey && !e.altKey) { setHeaderCollapsed(prev => !prev); return; }
+
+      // Sidebar panels: s (controls), a (analysis), g (gap), x (executive)
+      if (e.key === "s" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "controls" ? null : "controls"); return; }
+      if (e.key === "a" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "analysis" ? null : "analysis"); return; }
+      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "gap" ? null : "gap"); return; }
+      if (e.key === "x" && !e.ctrlKey && !e.metaKey && !e.altKey) { setSidebarPanel(prev => prev === "executive" ? null : "executive"); return; }
+
+      // Escape closes sidebar
+      if (e.key === "Escape" && sidebarOpen) { setSidebarPanel(null); return; }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [sidebarOpen]);
 
   // ─── Persistence helpers ─────────────────────────────────────────────────────
 
@@ -596,44 +651,44 @@ export default function AttackBreaker() {
 
   return (
     <div style={{
-      background: "#0a0f1a", color: "#e2e8f0", height: "100vh",
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
+      background: theme.colors.bg, color: theme.colors.textBody, height: "100vh",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
       {/* Collapsed toolbar strip */}
       {headerCollapsed && (
         <div style={{
-          display: "flex", alignItems: "center", gap: "12px",
-          padding: "4px 16px", background: "#0d1321", borderBottom: "1px solid #1e293b",
-          flexShrink: 0, minHeight: "28px",
+          display: "flex", alignItems: "center", gap: theme.spacing.xl,
+          padding: "6px 20px", background: theme.colors.bgPanel, borderBottom: "1px solid " + theme.colors.borderSubtle,
+          flexShrink: 0, minHeight: "32px",
         }}>
           <button onClick={() => setHeaderCollapsed(false)}
             title="Expand toolbar"
             style={{
-              background: "transparent", border: "1px solid #334155", borderRadius: 3,
-              color: "#94a3b8", cursor: "pointer", padding: "1px 6px", fontSize: "12px",
+              background: "transparent", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
+              color: theme.colors.textSecondary, cursor: "pointer", padding: "2px 8px", fontSize: theme.fontSizes.body,
               fontFamily: "inherit", lineHeight: 1,
             }}>{"\u25BC"}</button>
-          <span style={{ fontSize: "10px", color: "#3b82f6", fontWeight: 700 }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.blue, fontWeight: 700 }}>
             {framework === "ics" ? "ICS/OT" : "ENTERPRISE"}
           </span>
-          <span style={{ fontSize: "10px", color: "#94a3b8" }}>|</span>
-          <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textBody }}>
             {filteredChains.length} chains
           </span>
-          <span style={{ fontSize: "10px", color: totalDisrupted > 0 ? "#22c55e" : "#94a3b8" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: totalDisrupted > 0 ? theme.colors.green : theme.colors.textSecondary }}>
             {totalDisrupted} disrupted
           </span>
-          <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textBody }}>
             {remediated.size} remediated
           </span>
-          <span style={{ fontSize: "10px", color: "#94a3b8" }}>|</span>
-          <span style={{ fontSize: "10px", color: "#94a3b8" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>
             {dataSource === "stix" ? "STIX" : dataSource === "upload" ? uploadedFileName || "Uploaded" : "Built-in"}
           </span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: "9px", color: "#64748b" }}>
-            Press {"\u25BC"} to expand
+          <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>
+            H expand toolbar &middot; B toggle panels &middot; 1/2/3 tabs
           </span>
         </div>
       )}
@@ -677,20 +732,21 @@ export default function AttackBreaker() {
         customPositions={customPositions} setCustomPositions={setCustomPositions}
         handleShare={handleShare} shareConfirm={shareConfirm} resetAll={resetAll} showSaved={showSaved}
         showAnalysis={showAnalysis} setShowAnalysis={setShowAnalysis} setPopoutAnalysis={setPopoutAnalysis}
+        sidebarPanel={sidebarPanel} setSidebarPanel={setSidebarPanel}
       />}
 
       {/* Collapse toolbar button (shown when expanded) */}
       {!headerCollapsed && (
         <div style={{
-          display: "flex", justifyContent: "center", background: "#0d1321",
-          borderBottom: "1px solid #1e293b", flexShrink: 0,
+          display: "flex", justifyContent: "center", background: theme.colors.bgPanel,
+          borderBottom: "1px solid " + theme.colors.borderSubtle, flexShrink: 0,
         }}>
           <button onClick={() => setHeaderCollapsed(true)}
             title="Collapse toolbar"
             style={{
-              background: "transparent", border: "none", color: "#64748b",
-              cursor: "pointer", padding: "0 12px", fontSize: "10px",
-              fontFamily: "inherit", lineHeight: "14px",
+              background: "transparent", border: "none", color: theme.colors.textMuted,
+              cursor: "pointer", padding: "2px 14px", fontSize: theme.fontSizes.small,
+              fontFamily: "inherit", lineHeight: "18px",
             }}>{"\u25B2"} collapse toolbar {"\u25B2"}</button>
         </div>
       )}
@@ -707,17 +763,17 @@ export default function AttackBreaker() {
           ) : compareMode ? (
             <div style={{ display: "flex", width: "100%", height: "100%", gap: "2px" }}>
               <div style={{ flex: 1, position: "relative", borderRight: "2px solid #1e293b" }}>
-                <div style={{ position: "absolute", top: 4, left: 8, zIndex: 10, padding: "2px 8px", background: framework === "ics" ? "#a855f730" : "#3b82f630", color: framework === "ics" ? "#a855f7" : "#3b82f6", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
+                <div style={{ position: "absolute", top: 6, left: 10, zIndex: 10, padding: "4px 10px", background: framework === "ics" ? "#a855f730" : "#3b82f630", color: framework === "ics" ? theme.colors.purple : theme.colors.blue, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small, fontWeight: 700 }}>
                   {framework === "ics" ? "ICS/OT" : "ENTERPRISE"} (active)
                 </div>
                 <GraphView {...graphViewProps} />
               </div>
               <div style={{ flex: 1, position: "relative" }}>
-                <div style={{ position: "absolute", top: 4, left: 8, zIndex: 10, padding: "2px 8px", background: otherFramework === "ics" ? "#a855f730" : "#3b82f630", color: otherFramework === "ics" ? "#a855f7" : "#3b82f6", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
+                <div style={{ position: "absolute", top: 6, left: 10, zIndex: 10, padding: "4px 10px", background: otherFramework === "ics" ? "#a855f730" : "#3b82f630", color: otherFramework === "ics" ? theme.colors.purple : theme.colors.blue, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small, fontWeight: 700 }}>
                   {otherFramework === "ics" ? "ICS/OT" : "ENTERPRISE"} (read-only)
                 </div>
                 {compareLoading ? (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#64748b", fontSize: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.colors.textMuted, fontSize: theme.fontSizes.body }}>
                     <span style={{ animation: "stix-pulse 1.5s ease-in-out infinite" }}>Loading {otherFramework === "ics" ? "ICS/OT" : "Enterprise"} data...</span>
                   </div>
                 ) : compareLayout ? (
@@ -749,34 +805,34 @@ export default function AttackBreaker() {
           )}
           {chainBuilderMode && (
             <div style={{
-              position: "absolute", top: 8, left: 16, right: 16,
-              background: "#1e293bee", border: "1px solid #a855f7", borderRadius: 6,
-              padding: "10px 14px", zIndex: 15,
-              display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
+              position: "absolute", top: 10, left: 16, right: 16,
+              background: "#1e293bee", border: "1px solid " + theme.colors.purple, borderRadius: theme.radii.md,
+              padding: "12px 16px", zIndex: 15,
+              display: "flex", alignItems: "center", gap: theme.spacing.lg, flexWrap: "wrap",
             }}>
-              <span style={{ fontSize: "10px", color: "#a855f7", fontWeight: 700 }}>CHAIN BUILDER</span>
-              <div style={{ flex: 1, display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
+              <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.purple, fontWeight: 700 }}>CHAIN BUILDER</span>
+              <div style={{ flex: 1, display: "flex", gap: theme.spacing.sm, flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
                 {chainBuilderPath.length === 0 ? (
-                  <span style={{ fontSize: "9px", color: "#64748b" }}>Click nodes to build a path...</span>
+                  <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>Click nodes to build a path...</span>
                 ) : chainBuilderPath.map((tid: string, i: number) => (
                   <React.Fragment key={i}>
-                    {i > 0 && <span style={{ fontSize: "9px", color: "#a855f7" }}>{"\u2192"}</span>}
-                    <span style={{ fontSize: "9px", color: "#e2e8f0", background: "#a855f720", padding: "2px 5px", borderRadius: 3 }}>{tid}</span>
+                    {i > 0 && <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.purple }}>{"\u2192"}</span>}
+                    <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody, background: "#a855f720", padding: "3px 7px", borderRadius: theme.radii.sm, fontFamily: '"JetBrains Mono", monospace' }}>{tid}</span>
                   </React.Fragment>
                 ))}
               </div>
               <input type="text" value={chainBuilderName} onChange={e => setChainBuilderName(e.target.value)}
                 placeholder="Chain name..."
-                style={{ background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", fontSize: "10px", fontFamily: "inherit", width: "120px" }} />
+                style={{ ...theme.inputBase, padding: "5px 10px", width: "140px" }} />
               <button onClick={undoStep} disabled={chainBuilderPath.length === 0}
-                style={{ background: "transparent", color: "#64748b", border: "1px solid #334155", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit", opacity: chainBuilderPath.length === 0 ? 0.3 : 1 }}>UNDO</button>
+                style={{ background: "transparent", color: theme.colors.textMuted, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm, padding: "5px 10px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit", opacity: chainBuilderPath.length === 0 ? 0.3 : 1 }}>UNDO</button>
               <button onClick={clearPath}
-                style={{ background: "transparent", color: "#ef4444", border: "1px solid #ef444466", borderRadius: 3, padding: "3px 8px", fontSize: "9px", cursor: "pointer", fontFamily: "inherit" }}>CLEAR</button>
+                style={{ background: "transparent", color: theme.colors.red, border: "1px solid #ef444466", borderRadius: theme.radii.sm, padding: "5px 10px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit" }}>CLEAR</button>
               <button onClick={saveChain} disabled={chainBuilderPath.length < 2}
                 style={{
-                  background: chainBuilderPath.length < 2 ? "#334155" : "#a855f7",
-                  color: chainBuilderPath.length < 2 ? "#475569" : "#fff",
-                  border: "none", borderRadius: 3, padding: "3px 10px", fontSize: "9px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  background: chainBuilderPath.length < 2 ? theme.colors.border : theme.colors.purple,
+                  color: chainBuilderPath.length < 2 ? theme.colors.textFaint : "#fff",
+                  border: "none", borderRadius: theme.radii.sm, padding: "5px 12px", fontSize: theme.fontSizes.small, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
                 }}>SAVE</button>
             </div>
           )}
@@ -786,10 +842,10 @@ export default function AttackBreaker() {
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20,
             }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "14px", color: "#f59e0b", marginBottom: "8px", animation: "stix-pulse 1.5s ease-in-out infinite" }}>
+                <div style={{ fontSize: theme.fontSizes.stat, color: theme.colors.orange, marginBottom: theme.spacing.lg, animation: "stix-pulse 1.5s ease-in-out infinite" }}>
                   Fetching STIX data...
                 </div>
-                <div style={{ fontSize: "10px", color: "#64748b" }}>Downloading from MITRE ATT&CK GitHub (~25MB)</div>
+                <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textMuted }}>Downloading from MITRE ATT&CK GitHub (~25MB)</div>
               </div>
             </div>
           )}
@@ -800,32 +856,32 @@ export default function AttackBreaker() {
           position: "absolute", bottom: showBottomPanels ? panelHeight + 4 : 4, left: 0, right: 0, zIndex: 5,
           background: "#0a0f1acc", backdropFilter: "blur(4px)",
         }}>
-          <div style={{ display: "flex", gap: "16px", padding: "5px 24px 2px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>Legend:</span>
+          <div style={{ display: "flex", gap: theme.spacing.xl, padding: "6px 24px 3px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>Legend:</span>
             <LegendItem color="#ef4444" label="High exposure ring" />
             <LegendItem color="#f59e0b" label="Medium exposure ring" />
             <LegendItem color="#22c55e" label="Low exposure / remediated" />
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Node size = betweenness x exposure</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Number = chain count</span>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>|</span>
-            <span style={{ fontSize: "11px", color: "#f59e0b", border: "1px dashed #f59e0b", padding: "1px 5px", borderRadius: "8px" }}>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>|</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>Node size = betweenness x exposure</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>|</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>Number = chain count</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.textSecondary }}>|</span>
+            <span style={{ fontSize: theme.fontSizes.body, color: theme.colors.orange, border: "1px dashed " + theme.colors.orange, padding: "2px 7px", borderRadius: theme.radii.pill }}>
               dashed ring = optimal target
             </span>
           </div>
-          <div style={{ display: "flex", gap: "5px", padding: "2px 24px 5px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", marginRight: "4px", fontWeight: 600 }}>Tactics:</span>
+          <div style={{ display: "flex", gap: theme.spacing.sm, padding: "3px 24px 6px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, textTransform: "uppercase", letterSpacing: "1px", marginRight: theme.spacing.sm, fontWeight: 600 }}>Tactics:</span>
             {fwConfig.tactics.map((tac: any, i: number) => {
               const isNewPhase = i > 0 && tac.phase !== fwConfig.tactics[i - 1].phase;
               return (
                 <React.Fragment key={tac.id}>
                   {i > 0 && (
-                    <span style={{ fontSize: "10px", color: "#475569", margin: "0 1px" }}>{isNewPhase ? "\u2192" : "\u00b7"}</span>
+                    <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textFaint, margin: "0 2px" }}>{isNewPhase ? "\u2192" : "\u00b7"}</span>
                   )}
                   <span style={{
-                    fontSize: "10px", color: tac.color, padding: "1px 6px",
-                    background: tac.color + "20", borderRadius: "3px", whiteSpace: "nowrap",
+                    fontSize: theme.fontSizes.small, color: tac.color, padding: "2px 8px",
+                    background: tac.color + "20", borderRadius: theme.radii.sm, whiteSpace: "nowrap",
                   }}>
                     {tac.name}
                   </span>
@@ -835,116 +891,252 @@ export default function AttackBreaker() {
           </div>
         </div>
 
-        {/* Bottom panels */}
+        {/* Bottom panels — tabbed interface */}
         {showBottomPanels && (
           <div style={{
             position: "absolute", bottom: 0, left: 0, right: 0, height: panelHeight, zIndex: 10,
             display: "flex", flexDirection: "column",
             background: "#0a0f1aee", backdropFilter: "blur(8px)", borderTop: "1px solid #1e293b",
           }}>
+            {/* Resize handle */}
             <div onMouseDown={startDividerDrag} onTouchStart={startDividerDragTouch}
-              style={{ height: 14, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}>
-              <div style={{ width: 48, height: 3, background: "#475569", borderRadius: 2 }} />
+              style={{ height: 16, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}>
+              <div style={{ width: 48, height: 4, background: theme.colors.textFaint, borderRadius: 2 }} />
             </div>
-            <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
-              {/* Attack Chains */}
-              <div style={{ flex: "1 1 280px", borderRight: "1px solid #1e293b", padding: popoutChains ? 0 : "12px 16px", overflow: "auto" }}>
-                {popoutChains ? (
-                  <>
-                    <PopoutPlaceholder label="Attack Chains" onRestore={() => setPopoutChains(false)} />
-                    <PopoutPanel title={"Attack Chains (" + filteredChains.length + ")"} width={500} height={700} onClose={() => setPopoutChains(false)}>
-                      <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
-                        highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                        remediated={remediated} effectiveExposures={effectiveExposures}
-                        chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
-                        popoutChains={popoutChains} setPopoutChains={setPopoutChains}
-                        setCustomChains={setCustomChains}
-                        expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
-                        activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
-                      />
-                    </PopoutPanel>
-                  </>
-                ) : (
-                  <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
-                    highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                    remediated={remediated} effectiveExposures={effectiveExposures}
-                    chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
-                    popoutChains={popoutChains} setPopoutChains={setPopoutChains}
-                    setCustomChains={setCustomChains}
-                    expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
-                    activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
-                  />
-                )}
-              </div>
-              {/* Priority Ranking */}
-              <div style={{ flex: "1 1 240px", borderRight: "1px solid #1e293b", padding: popoutPriority ? 0 : "12px 16px", overflow: "auto" }}>
-                {popoutPriority ? (
-                  <>
-                    <PopoutPlaceholder label="Remediation Priority" onRestore={() => setPopoutPriority(false)} />
-                    <PopoutPanel title="Remediation Priority" width={400} height={600} onClose={() => setPopoutPriority(false)}>
-                      <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
-                        setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
-                        optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
-                    </PopoutPanel>
-                  </>
-                ) : (
-                  <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
-                    setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
-                    optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
-                )}
-              </div>
-              {/* Detail Panel */}
-              <div style={{ flex: "1 1 240px", padding: popoutDetail ? 0 : "12px 16px", overflow: "auto" }}>
-                {popoutDetail ? (
-                  <>
-                    <PopoutPlaceholder label="Node Detail" onRestore={() => setPopoutDetail(false)} />
-                    <PopoutPanel title={"Node Detail" + (selectedTechData ? ": " + selectedTechData.id : "")} width={400} height={700} onClose={() => setPopoutDetail(false)}>
-                      <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
-                        betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
-                        exposures={exposures} handleExposureChange={handleExposureChange}
-                        remediated={remediated} toggleRemediate={toggleRemediate}
-                        deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
-                        highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                        fwConfig={fwConfig} profileExposures={profileExposures}
-                        activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
-                        activeMitigations={activeMitigations}
-                        popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
-                      />
-                    </PopoutPanel>
-                  </>
-                ) : (
-                  <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
-                    betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
-                    exposures={exposures} handleExposureChange={handleExposureChange}
-                    remediated={remediated} toggleRemediate={toggleRemediate}
-                    deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
-                    highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                    fwConfig={fwConfig} profileExposures={profileExposures}
-                    activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
-                    activeMitigations={activeMitigations}
-                    popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
-                  />
-                )}
-              </div>
+            {/* Tab bar */}
+            <div style={{
+              display: "flex", gap: 0, flexShrink: 0,
+              borderBottom: "1px solid " + theme.colors.borderSubtle,
+              background: theme.colors.bgPanel,
+              padding: "0 12px",
+            }}>
+              {([
+                { id: "chains" as BottomTab, label: "Attack Chains", shortcut: "1", count: filteredChains.length, color: theme.colors.violet, popped: popoutChains },
+                { id: "priority" as BottomTab, label: "Priority", shortcut: "2", count: priorityRanking.length, color: theme.colors.orange, popped: popoutPriority },
+                { id: "detail" as BottomTab, label: "Detail" + (selectedTechData ? ": " + selectedTechData.id : ""), shortcut: "3", count: null, color: theme.colors.cyan, popped: popoutDetail },
+              ]).map(tab => (
+                <button key={tab.id} onClick={() => setBottomTab(tab.id)}
+                  style={{
+                    background: bottomTab === tab.id ? theme.colors.bgCard : "transparent",
+                    border: "none",
+                    borderBottom: bottomTab === tab.id ? "2px solid " + tab.color : "2px solid transparent",
+                    color: bottomTab === tab.id ? tab.color : theme.colors.textMuted,
+                    padding: "8px 18px",
+                    fontSize: theme.fontSizes.base,
+                    fontWeight: bottomTab === tab.id ? 600 : 400,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "color 0.15s, border-color 0.15s",
+                    display: "flex", alignItems: "center", gap: 8,
+                    position: "relative",
+                  }}>
+                  {tab.label}
+                  <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, marginLeft: 2 }}>{tab.shortcut}</span>
+                  {tab.count !== null && (
+                    <span style={{
+                      fontSize: theme.fontSizes.tiny,
+                      background: bottomTab === tab.id ? tab.color + "22" : theme.colors.bgSurface,
+                      color: bottomTab === tab.id ? tab.color : theme.colors.textFaint,
+                      padding: "1px 7px",
+                      borderRadius: theme.radii.pill,
+                      fontWeight: 600,
+                    }}>{tab.count}</span>
+                  )}
+                  {tab.popped && (
+                    <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint }}>⧉</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {/* Tab content — full width */}
+            <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+              {/* Attack Chains tab */}
+              {bottomTab === "chains" && (
+                <div style={{ padding: popoutChains ? 0 : "14px 20px", height: "100%" }}>
+                  {popoutChains ? (
+                    <>
+                      <PopoutPlaceholder label="Attack Chains" onRestore={() => setPopoutChains(false)} />
+                      <PopoutPanel title={"Attack Chains (" + filteredChains.length + ")"} width={500} height={700} onClose={() => setPopoutChains(false)}>
+                        <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
+                          highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                          remediated={remediated} effectiveExposures={effectiveExposures}
+                          chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
+                          popoutChains={popoutChains} setPopoutChains={setPopoutChains}
+                          setCustomChains={setCustomChains}
+                          expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
+                          activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
+                        />
+                      </PopoutPanel>
+                    </>
+                  ) : (
+                    <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
+                      highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                      remediated={remediated} effectiveExposures={effectiveExposures}
+                      chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
+                      popoutChains={popoutChains} setPopoutChains={setPopoutChains}
+                      setCustomChains={setCustomChains}
+                      expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
+                      activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
+                    />
+                  )}
+                </div>
+              )}
+              {/* Priority tab */}
+              {bottomTab === "priority" && (
+                <div style={{ padding: popoutPriority ? 0 : "14px 20px", height: "100%" }}>
+                  {popoutPriority ? (
+                    <>
+                      <PopoutPlaceholder label="Remediation Priority" onRestore={() => setPopoutPriority(false)} />
+                      <PopoutPanel title="Remediation Priority" width={400} height={600} onClose={() => setPopoutPriority(false)}>
+                        <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
+                          setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
+                          optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
+                      </PopoutPanel>
+                    </>
+                  ) : (
+                    <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
+                      setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
+                      optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
+                  )}
+                </div>
+              )}
+              {/* Detail tab */}
+              {bottomTab === "detail" && (
+                <div style={{ padding: popoutDetail ? 0 : "14px 20px", height: "100%" }}>
+                  {popoutDetail ? (
+                    <>
+                      <PopoutPlaceholder label="Node Detail" onRestore={() => setPopoutDetail(false)} />
+                      <PopoutPanel title={"Node Detail" + (selectedTechData ? ": " + selectedTechData.id : "")} width={400} height={700} onClose={() => setPopoutDetail(false)}>
+                        <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
+                          betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
+                          exposures={exposures} handleExposureChange={handleExposureChange}
+                          remediated={remediated} toggleRemediate={toggleRemediate}
+                          deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
+                          highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                          fwConfig={fwConfig} profileExposures={profileExposures}
+                          activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
+                          activeMitigations={activeMitigations}
+                          popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
+                        />
+                      </PopoutPanel>
+                    </>
+                  ) : (
+                    <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
+                      betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
+                      exposures={exposures} handleExposureChange={handleExposureChange}
+                      remediated={remediated} toggleRemediate={toggleRemediate}
+                      deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
+                      highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                      fwConfig={fwConfig} profileExposures={profileExposures}
+                      activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
+                      activeMitigations={activeMitigations}
+                      popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Security Controls Panel */}
-      {showControls && !popoutControls && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
-          <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
-            controlPreset={controlPreset} setControlPreset={setControlPreset}
-            activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
-            popoutControls={popoutControls} setPopoutControls={setPopoutControls} />
+      {/* ═══ Right Sidebar Drawer ═══ */}
+      {sidebarOpen && (
+        <div className="sidebar-enter" style={{
+          position: "fixed", top: 0, right: 0, bottom: 0, width: "min(480px, 90vw)", zIndex: 100,
+          display: "flex", flexDirection: "column",
+          background: theme.colors.bgPanel, borderLeft: "1px solid " + theme.colors.border,
+          boxShadow: "-8px 0 32px rgba(0,0,0,0.5)",
+        }}>
+          {/* Sidebar header */}
+          <div style={{
+            display: "flex", alignItems: "center", padding: "12px 16px",
+            borderBottom: "1px solid " + theme.colors.borderSubtle,
+            background: theme.colors.bgCard, flexShrink: 0,
+          }}>
+            {/* Sidebar tab buttons */}
+            {([
+              { id: "controls" as SidebarPanel, label: "Controls", shortcut: "S", color: theme.colors.teal },
+              { id: "analysis" as SidebarPanel, label: "Analysis", shortcut: "A", color: theme.colors.blue },
+              { id: "gap" as SidebarPanel, label: "Gaps", shortcut: "G", color: theme.colors.red },
+              { id: "executive" as SidebarPanel, label: "Executive", shortcut: "X", color: theme.colors.cyan },
+            ]).map(tab => (
+              <button key={tab.id} onClick={() => setSidebarPanel(tab.id)}
+                style={{
+                  background: sidebarPanel === tab.id ? tab.color + "18" : "transparent",
+                  border: "none",
+                  borderBottom: sidebarPanel === tab.id ? "2px solid " + tab.color : "2px solid transparent",
+                  color: sidebarPanel === tab.id ? tab.color : theme.colors.textMuted,
+                  padding: "6px 12px", fontSize: theme.fontSizes.small, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}>
+                {tab.label}
+                <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, marginLeft: 4 }}>{tab.shortcut}</span>
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setSidebarPanel(null)}
+              title="Close (Esc)"
+              style={{
+                background: "transparent", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
+                color: theme.colors.textMuted, cursor: "pointer", padding: "4px 10px",
+                fontSize: theme.fontSizes.base, fontFamily: "inherit",
+              }}>{"\u2715"}</button>
+          </div>
+          {/* Sidebar content */}
+          <div style={{ flex: 1, overflow: "auto", padding: "18px 20px" }}>
+            {sidebarPanel === "controls" && (
+              <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
+                controlPreset={controlPreset} setControlPreset={setControlPreset}
+                activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
+                popoutControls={popoutControls} setPopoutControls={setPopoutControls} />
+            )}
+            {sidebarPanel === "analysis" && (
+              <AnalysisPanel remediationBudget={remediationBudget} optimal={optimal}
+                activeTechniques={activeTechniques} betweenness={betweenness} remediated={remediated}
+                effectiveExposures={effectiveExposures} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
+                compareMode={compareMode} compareAnalysis={compareAnalysis}
+                framework={framework} otherFramework={otherFramework}
+                popoutAnalysis={popoutAnalysis} setPopoutAnalysis={setPopoutAnalysis} />
+            )}
+            {sidebarPanel === "gap" && (
+              <GapAnalysisPanel gapAnalysis={gapAnalysis} fwConfig={fwConfig} setSelectedTech={setSelectedTech}
+                exportRemediationPlan={exportRemediationPlan}
+                popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
+            )}
+            {sidebarPanel === "executive" && (() => {
+              const execProps = {
+                techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
+                filteredChains, chainStatus, remediated, optimal, deployedControls,
+                tactics: fwConfig.tactics, securityControls: fwConfig.securityControls as any,
+              };
+              return <ExecutiveSummary {...execProps} popout={false} onPopout={() => setPopoutExecutive(true)} />;
+            })()}
+          </div>
+          {/* Keyboard hint */}
+          <div style={{
+            padding: "8px 16px", borderTop: "1px solid " + theme.colors.borderSubtle,
+            display: "flex", gap: 12, flexShrink: 0,
+          }}>
+            <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
+              Esc close
+            </span>
+            <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
+              S controls  A analysis  G gaps  X executive
+            </span>
+          </div>
         </div>
       )}
-      {showControls && popoutControls && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
-          <PopoutPlaceholder label="Security Controls" onRestore={() => setPopoutControls(false)} />
-        </div>
+      {/* Backdrop overlay when sidebar is open */}
+      {sidebarOpen && (
+        <div className="backdrop-fade" onClick={() => setSidebarPanel(null)}
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99,
+            background: "rgba(0,0,0,0.3)",
+          }} />
       )}
+
+      {/* Popout panels still work independently */}
       {popoutControls && (
         <PopoutPanel title="Security Controls" width={900} height={600} onClose={() => setPopoutControls(false)}>
           <ControlsPanel fwConfig={fwConfig} deployedControls={deployedControls} setDeployedControls={setDeployedControls}
@@ -952,23 +1144,6 @@ export default function AttackBreaker() {
             activeTechniques={activeTechniques} exposures={exposures} effectiveExposures={effectiveExposures}
             popoutControls={popoutControls} setPopoutControls={setPopoutControls} />
         </PopoutPanel>
-      )}
-
-      {/* Analysis Panel */}
-      {showAnalysis && !popoutAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "40vh", overflow: "auto" }}>
-          <AnalysisPanel remediationBudget={remediationBudget} optimal={optimal}
-            activeTechniques={activeTechniques} betweenness={betweenness} remediated={remediated}
-            effectiveExposures={effectiveExposures} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
-            compareMode={compareMode} compareAnalysis={compareAnalysis}
-            framework={framework} otherFramework={otherFramework}
-            popoutAnalysis={popoutAnalysis} setPopoutAnalysis={setPopoutAnalysis} />
-        </div>
-      )}
-      {showAnalysis && popoutAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
-          <PopoutPlaceholder label="Analysis" onRestore={() => setPopoutAnalysis(false)} />
-        </div>
       )}
       {popoutAnalysis && (
         <PopoutPanel title="Optimization Analysis" width={900} height={500} onClose={() => setPopoutAnalysis(false)}>
@@ -980,57 +1155,17 @@ export default function AttackBreaker() {
             popoutAnalysis={popoutAnalysis} setPopoutAnalysis={setPopoutAnalysis} />
         </PopoutPanel>
       )}
-
-      {/* Executive Summary Panel */}
-      {(() => {
-        const execProps = {
-          techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
-          filteredChains, chainStatus, remediated, optimal, deployedControls,
-          tactics: fwConfig.tactics, securityControls: fwConfig.securityControls as any,
-        };
-        return (
-          <>
-            {showExecutiveSummary && !popoutExecutive && (
-              <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "50vh", overflow: "auto" }}>
-                <ExecutiveSummary {...execProps} popout={false} onPopout={() => setPopoutExecutive(true)} />
-              </div>
-            )}
-            {showExecutiveSummary && popoutExecutive && (
-              <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
-                <PopoutPlaceholder label="Executive Summary" onRestore={() => setPopoutExecutive(false)} />
-              </div>
-            )}
-            {popoutExecutive && (
-              <PopoutPanel title="Executive Summary" width={600} height={800} onClose={() => setPopoutExecutive(false)}>
-                <ExecutiveSummary {...execProps} popout={true} />
-              </PopoutPanel>
-            )}
-          </>
-        );
-      })()}
-
-      {/* Exposure Summary Panel */}
-      {exposureSummary && environmentProfile && (
-        <ExposureSummaryPanel
-          exposureSummary={exposureSummary} environmentProfile={environmentProfile}
-          displayTechniques={displayTechniques} setSelectedTech={setSelectedTech}
-          exportCoverageCSV={exportCoverageCSV}
-          setEnvironmentProfile={setEnvironmentProfile} setProfileExposures={setProfileExposures}
-        />
-      )}
-
-      {/* Gap Analysis Panel */}
-      {showGapAnalysis && !popoutGapAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "45vh", overflow: "auto" }}>
-          <GapAnalysisPanel gapAnalysis={gapAnalysis} fwConfig={fwConfig} setSelectedTech={setSelectedTech}
-            exportRemediationPlan={exportRemediationPlan}
-            popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
-        </div>
-      )}
-      {showGapAnalysis && popoutGapAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: 0, background: "#0d1321", flexShrink: 0 }}>
-          <PopoutPlaceholder label="Gap Analysis" onRestore={() => setPopoutGapAnalysis(false)} />
-        </div>
+      {popoutExecutive && (
+        <PopoutPanel title="Executive Summary" width={600} height={800} onClose={() => setPopoutExecutive(false)}>
+          {(() => {
+            const execProps = {
+              techniques: displayTechniques, exposures: effectiveExposures, betweenness, chainCoverage,
+              filteredChains, chainStatus, remediated, optimal, deployedControls,
+              tactics: fwConfig.tactics, securityControls: fwConfig.securityControls as any,
+            };
+            return <ExecutiveSummary {...execProps} popout={true} />;
+          })()}
+        </PopoutPanel>
       )}
       {popoutGapAnalysis && (
         <PopoutPanel title="Control Gap Analysis" width={900} height={600} onClose={() => setPopoutGapAnalysis(false)}>
@@ -1038,6 +1173,16 @@ export default function AttackBreaker() {
             exportRemediationPlan={exportRemediationPlan}
             popoutGapAnalysis={popoutGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis} />
         </PopoutPanel>
+      )}
+
+      {/* Exposure Summary Panel — shown inline when environment profile is active */}
+      {exposureSummary && environmentProfile && (
+        <ExposureSummaryPanel
+          exposureSummary={exposureSummary} environmentProfile={environmentProfile}
+          displayTechniques={displayTechniques} setSelectedTech={setSelectedTech}
+          exportCoverageCSV={exportCoverageCSV}
+          setEnvironmentProfile={setEnvironmentProfile} setProfileExposures={setProfileExposures}
+        />
       )}
 
       {/* Environment Profile Wizard */}

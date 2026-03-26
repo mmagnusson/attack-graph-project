@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
 
 * {
   margin: 0;
@@ -15,12 +15,19 @@ html, body, #root {
 body {
   background: #0a0f1a;
   color: #e2e8f0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Monospace for data/IDs */
+code, .mono {
   font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — wider for easier trackpad grab */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -28,18 +35,82 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 3px;
+  background: #334155;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #475569;
 }
 
 /* Pulse animation for notifications */
 @keyframes pulse-green {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
+}
+
+/* ─── Button & interactive hover/focus states ─────────────────────────────── */
+button {
+  transition: filter 0.12s ease, opacity 0.12s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+button:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Menu / dropdown items */
+button[style*="menuItem"]:hover,
+.menu-item:hover {
+  background: #1e293b !important;
+}
+
+/* Sidebar panel transitions */
+.sidebar-drawer {
+  transition: transform 0.2s ease-out;
+}
+
+/* Tab transitions */
+.tab-btn {
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+/* Smooth panel transitions */
+.panel-fade {
+  animation: panelFadeIn 0.15s ease-out;
+}
+
+@keyframes panelFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar slide-in */
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.sidebar-enter {
+  animation: slideInRight 0.2s ease-out;
+}
+
+/* Backdrop fade */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.backdrop-fade {
+  animation: fadeIn 0.15s ease-out;
 }
 
 /* Selection styling */

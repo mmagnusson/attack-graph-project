@@ -1,3 +1,5 @@
+import { theme } from '../../theme';
+
 interface MetricBoxProps {
   label: string;
   value: string | number;
@@ -8,12 +10,12 @@ interface MetricBoxProps {
 export function MetricBox({ label, value, unit, color }: MetricBoxProps) {
   return (
     <div style={{
-      background: "#1e293b", borderRadius: "4px", padding: "8px",
+      background: theme.colors.bgSurface, borderRadius: theme.radii.sm, padding: theme.spacing.lg,
       border: "1px solid " + color + "22",
     }}>
-      <div style={{ fontSize: "8px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-      <div style={{ fontSize: "16px", fontWeight: 700, color: color }}>
-        {value}<span style={{ fontSize: "9px", color: "#475569" }}>{unit}</span>
+      <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+      <div style={{ fontSize: theme.fontSizes.heading, fontWeight: 700, color: color }}>
+        {value}<span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textFaint }}>{unit}</span>
       </div>
     </div>
   );

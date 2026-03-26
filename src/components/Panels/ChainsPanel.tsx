@@ -2,6 +2,7 @@
 
 import { CHAIN_COLORS } from '../../data/constants';
 import { PopoutButton } from '../Analysis';
+import { theme } from '../../theme';
 
 interface ChainsPanelProps {
   filteredChains: any[];
@@ -32,18 +33,18 @@ export function ChainsPanel({
 }: ChainsPanelProps) {
   return (
     <>
-      <h3 style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 8px 0", display: "flex", alignItems: "center" }}>
+      <h3 style={{ ...theme.panelHeading }}>
         Attack Chains ({filteredChains.length})
         {!popoutChains && <PopoutButton onClick={() => setPopoutChains(true)} title="Pop out Attack Chains" />}
       </h3>
-      <div style={{ position: "relative", marginBottom: "8px" }}>
+      <div style={{ position: "relative", marginBottom: theme.spacing.lg }}>
         <input type="text" value={chainSearchQuery} onChange={e => setChainSearchQuery(e.target.value)}
           placeholder="Search chains..."
-          style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "4px", padding: "4px 24px 4px 8px", fontSize: "10px", fontFamily: "inherit", width: "100%" }} />
+          style={{ ...theme.inputBase, padding: "6px 28px 6px 10px", width: "100%" }} />
         {chainSearchQuery && (
           <button onClick={() => setChainSearchQuery("")} style={{
-            position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: "#64748b",
-            cursor: "pointer", fontSize: "11px", lineHeight: 1, padding: "2px",
+            position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: theme.colors.textMuted,
+            cursor: "pointer", fontSize: "14px", lineHeight: 1, padding: "4px",
           }}>{"\u2715"}</button>
         )}
       </div>
@@ -55,22 +56,22 @@ export function ChainsPanel({
           <div key={i}
             onClick={() => toggleHighlightedChain(chain)}
             style={{
-              padding: "8px 10px", marginBottom: "4px", borderRadius: "4px", cursor: "pointer",
-              background: isActive ? "#1e293b" : "transparent",
-              border: "1px solid " + (isActive ? activeColor + "66" : chain.broken ? "#22c55e33" : "#ef444433"),
+              padding: "10px 12px", marginBottom: theme.spacing.sm, borderRadius: theme.radii.sm, cursor: "pointer",
+              background: isActive ? theme.colors.bgSurface : "transparent",
+              border: "1px solid " + (isActive ? activeColor + "66" : chain.broken ? theme.colors.green + "33" : theme.colors.red + "33"),
               opacity: chain.broken ? 0.6 : 1,
             }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "11px", fontWeight: 600, color: chain.broken ? "#22c55e" : "#f8fafc", display: "flex", alignItems: "center", gap: "6px" }}>
-                {isActive && <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: activeColor as any, flexShrink: 0 }} />}
+              <span style={{ fontSize: theme.fontSizes.body, fontWeight: 600, color: chain.broken ? theme.colors.green : theme.colors.textPrimary, display: "flex", alignItems: "center", gap: theme.spacing.md }}>
+                {isActive && <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: theme.radii.round, background: activeColor as any, flexShrink: 0 }} />}
                 {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
-                {chain.custom && <span style={{ fontSize: "7px", color: "#a855f7", background: "#a855f715", padding: "1px 4px", borderRadius: 3, marginLeft: 6, fontWeight: 700 }}>CUSTOM</span>}
+                {chain.custom && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.purple, background: theme.colors.purple + "15", padding: "2px 6px", borderRadius: theme.radii.sm, marginLeft: 8, fontWeight: 700 }}>CUSTOM</span>}
               </span>
-              <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: theme.spacing.sm, alignItems: "center" }}>
                 <span style={{
-                  fontSize: "9px", padding: "1px 6px", borderRadius: "8px",
-                  background: chain.severity > 0.85 ? "#ef444430" : "#f59e0b30",
-                  color: chain.severity > 0.85 ? "#ef4444" : "#f59e0b",
+                  fontSize: theme.fontSizes.small, padding: "3px 8px", borderRadius: theme.radii.pill,
+                  background: chain.severity > 0.85 ? theme.colors.red + "30" : theme.colors.orange + "30",
+                  color: chain.severity > 0.85 ? theme.colors.red : theme.colors.orange,
                 }}>
                   {(chain.severity * 100).toFixed(0)}%
                 </span>
@@ -83,36 +84,37 @@ export function ChainsPanel({
                       return next;
                     });
                   }} style={{
-                    background: "transparent", color: "#ef4444", border: "none", fontSize: "10px",
-                    cursor: "pointer", padding: "0 2px", lineHeight: 1,
+                    background: "transparent", color: theme.colors.red, border: "none", fontSize: theme.fontSizes.base,
+                    cursor: "pointer", padding: "0 4px", lineHeight: 1,
                   }}>{"\u2715"}</button>
                 )}
               </div>
             </div>
-            <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>{chain.description}</div>
-            <div style={{ fontSize: "8px", color: "#475569", marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "2px" }}>
+            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted, marginTop: theme.spacing.xs }}>{chain.description}</div>
+            <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint, marginTop: theme.spacing.sm, display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
               {chain.path.map((tid: string, j: number) => (
                 <span key={j} style={{
-                  padding: "1px 3px", borderRadius: "2px",
-                  background: remediated.has(tid) ? "#22c55e20" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef444420" : "#1e293b",
-                  color: remediated.has(tid) ? "#22c55e" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef4444" : "#94a3b8",
+                  padding: "2px 5px", borderRadius: theme.radii.sm,
+                  background: remediated.has(tid) ? theme.colors.green + "20" : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red + "20" : theme.colors.bgSurface,
+                  color: remediated.has(tid) ? theme.colors.green : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red : theme.colors.textSecondary,
                   textDecoration: remediated.has(tid) ? "line-through" : "none",
+                  fontFamily: '"JetBrains Mono", monospace',
                 }}>
                   {tid}{j < chain.path.length - 1 ? " \u2192" : ""}
                 </span>
               ))}
             </div>
             {chain.broken && chain.breakpoints.length > 0 && (
-              <div style={{ fontSize: "8px", color: "#22c55e", marginTop: "3px" }}>
+              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.green, marginTop: theme.spacing.xs }}>
                 Broken at: {chain.breakpoints.join(", ")}
               </div>
             )}
             {/* Threat Actor Profile toggle */}
             {activeGroupProfiles[chain.name] && (
               <>
-                <div style={{ marginTop: "4px" }}>
+                <div style={{ marginTop: theme.spacing.sm }}>
                   <span onClick={(e) => { e.stopPropagation(); setExpandedChainProfile(prev => prev === chain.name ? null : chain.name); }}
-                    style={{ fontSize: "7px", color: "#64748b", cursor: "pointer", userSelect: "none", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, cursor: "pointer", userSelect: "none", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     {expandedChainProfile === chain.name ? "\u25B2 HIDE PROFILE" : "\u25BC SHOW PROFILE"}
                   </span>
                 </div>
@@ -120,16 +122,16 @@ export function ChainsPanel({
                   const prof = activeGroupProfiles[chain.name];
                   return (
                     <div style={{
-                      marginTop: "6px", padding: "8px", background: "#0a0f1a", border: "1px solid #1e293b",
-                      borderRadius: "4px", fontSize: "8px", color: "#94a3b8",
+                      marginTop: theme.spacing.md, padding: theme.spacing.lg, background: theme.colors.bg, border: "1px solid " + theme.colors.borderSubtle,
+                      borderRadius: theme.radii.sm, fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary,
                     }}>
-                      {prof.country && <div style={{ marginBottom: "3px" }}><span style={{ color: "#64748b" }}>Origin:</span> <span style={{ color: "#e2e8f0" }}>{prof.country}</span></div>}
-                      {prof.aliases && prof.aliases.length > 0 && <div style={{ marginBottom: "3px" }}><span style={{ color: "#64748b" }}>Aliases:</span> {prof.aliases.slice(0, 5).join(", ")}</div>}
-                      {(prof.firstSeen || prof.lastSeen) && <div style={{ marginBottom: "3px" }}><span style={{ color: "#64748b" }}>Active:</span> {prof.firstSeen || "?"} — {prof.lastSeen || "present"}</div>}
+                      {prof.country && <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Origin:</span> <span style={{ color: theme.colors.textBody }}>{prof.country}</span></div>}
+                      {prof.aliases && prof.aliases.length > 0 && <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Aliases:</span> {prof.aliases.slice(0, 5).join(", ")}</div>}
+                      {(prof.firstSeen || prof.lastSeen) && <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Active:</span> {prof.firstSeen || "?"} — {prof.lastSeen || "present"}</div>}
                       {prof.sectors && prof.sectors.length > 0 && (
-                        <div style={{ marginBottom: "3px" }}><span style={{ color: "#64748b" }}>Targeting:</span> {prof.sectors.join(", ")}</div>
+                        <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Targeting:</span> {prof.sectors.join(", ")}</div>
                       )}
-                      {prof.description && <div style={{ marginTop: "4px", lineHeight: "1.4", color: "#cbd5e1" }}>{prof.description}</div>}
+                      {prof.description && <div style={{ marginTop: theme.spacing.sm, lineHeight: "1.4", color: theme.colors.textBody }}>{prof.description}</div>}
                     </div>
                   );
                 })()}
@@ -142,24 +144,25 @@ export function ChainsPanel({
       {/* Chain Uniqueness Comparison */}
       {chainSetAnalysis && (
         <div style={{
-          marginTop: "12px", padding: "10px", background: "#1e293b", borderRadius: "6px",
-          border: "1px solid #334155",
+          marginTop: theme.spacing.xl, padding: theme.spacing.lg, background: theme.colors.bgSurface, borderRadius: theme.radii.md,
+          border: "1px solid " + theme.colors.border,
         }}>
-          <div style={{ fontSize: "9px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Chain Comparison</div>
+          <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>Chain Comparison</div>
           {chainSetAnalysis.intersection.size > 0 && (
-            <div style={{ marginBottom: "8px" }}>
-              <div style={{ fontSize: "8px", color: "#f59e0b", marginBottom: "3px" }}>
+            <div style={{ marginBottom: theme.spacing.lg }}>
+              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.orange, marginBottom: theme.spacing.xs }}>
                 Shared by all ({chainSetAnalysis.intersection.size}):
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "2px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
                 {[...chainSetAnalysis.intersection].map((tid: any) => (
                   <span key={tid} style={{
-                    fontSize: "8px", padding: "1px 4px", borderRadius: "2px",
-                    background: "#f59e0b20", color: "#f59e0b",
+                    fontSize: theme.fontSizes.tiny, padding: "2px 6px", borderRadius: theme.radii.sm,
+                    background: theme.colors.orange + "20", color: theme.colors.orange,
+                    fontFamily: '"JetBrains Mono", monospace',
                   }}>{tid}</span>
                 ))}
               </div>
-              <div style={{ fontSize: "7px", color: "#f59e0b", marginTop: "3px", fontStyle: "italic" }}>
+              <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.orange, marginTop: theme.spacing.xs, fontStyle: "italic" }}>
                 Fix any to disrupt all {highlightedChains.length} chains
               </div>
             </div>
@@ -168,20 +171,21 @@ export function ChainsPanel({
             if (unique.size === 0) return null;
             const color = CHAIN_COLORS[colorIndex % CHAIN_COLORS.length].color;
             return (
-              <div key={name} style={{ marginBottom: "6px" }}>
-                <div style={{ fontSize: "8px", color, marginBottom: "2px" }}>Only in {name} ({unique.size}):</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "2px" }}>
+              <div key={name} style={{ marginBottom: theme.spacing.md }}>
+                <div style={{ fontSize: theme.fontSizes.tiny, color, marginBottom: theme.spacing.xs }}>Only in {name} ({unique.size}):</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
                   {[...unique].map((tid: any) => (
                     <span key={tid} style={{
-                      fontSize: "8px", padding: "1px 4px", borderRadius: "2px",
+                      fontSize: theme.fontSizes.tiny, padding: "2px 6px", borderRadius: theme.radii.sm,
                       background: color + "20", color,
+                      fontFamily: '"JetBrains Mono", monospace',
                     }}>{tid}</span>
                   ))}
                 </div>
               </div>
             );
           })}
-          <div style={{ fontSize: "8px", color: "#64748b", marginTop: "6px", borderTop: "1px solid #33415560", paddingTop: "4px" }}>
+          <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: theme.spacing.md, borderTop: "1px solid " + theme.colors.border + "60", paddingTop: theme.spacing.sm }}>
             Union: {chainSetAnalysis.union.size} | Overlap: {chainSetAnalysis.intersection.size}
           </div>
         </div>

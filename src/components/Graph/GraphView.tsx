@@ -1,6 +1,7 @@
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import { CHAIN_COLORS, TACTICS } from '../../data/constants';
 import { ZoomButton } from './ZoomButton';
+import { theme } from '../../theme';
 import type { Technique, Edge, Tactic } from '../../types';
 
 interface PhaseCenterInfo {
@@ -492,7 +493,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", flexDirection: "column", gap: 4, zIndex: 10 }}>
+      <div style={{ position: "absolute", top: 10, right: 10, display: "flex", flexDirection: "column", gap: 6, zIndex: 10 }}>
         <ZoomButton label="+" onClick={zoomIn} />
         <ZoomButton label={"\u2212"} onClick={zoomOut} />
         <ZoomButton label={"\u21BA"} onClick={resetZoom} />
@@ -501,25 +502,25 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
       </div>
       {highlightedChains.length > 0 && (
         <div style={{
-          position: "absolute", top: 8, left: 8, zIndex: 10,
-          display: "flex", flexDirection: "column", gap: 3,
+          position: "absolute", top: 10, left: 10, zIndex: 10,
+          display: "flex", flexDirection: "column", gap: 4,
           background: "rgba(10,15,26,0.8)", backdropFilter: "blur(4px)",
-          padding: "6px 10px", borderRadius: 5, border: "1px solid #1e293b",
+          padding: "8px 12px", borderRadius: 5, border: "1px solid " + theme.colors.borderSubtle,
         }}>
-          <span style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 600 }}>
+          <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 600 }}>
             Active Chains
           </span>
           {highlightedChains.map((chain, i) => (
-            <div key={chain.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div key={chain.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{
-                width: 10, height: 3, borderRadius: 1,
+                width: 12, height: 3, borderRadius: 1,
                 background: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
                 flexShrink: 0,
               }} />
               <span style={{
-                fontSize: "10px", color: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
+                fontSize: theme.fontSizes.base, color: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
                 fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden",
-                textOverflow: "ellipsis", maxWidth: 200,
+                textOverflow: "ellipsis", maxWidth: 220,
               }}>
                 {chain.name}
               </span>
@@ -527,7 +528,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
           ))}
         </div>
       )}
-      <div style={{ position: "absolute", bottom: 8, right: 8, fontSize: "9px", color: "#94a3b8", fontFamily: "monospace", background: "rgba(10,15,26,0.7)", padding: "2px 6px", borderRadius: 3, zIndex: 10 }}>
+      <div style={{ position: "absolute", bottom: 10, right: 10, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, fontFamily: '"JetBrains Mono", monospace', background: "rgba(10,15,26,0.7)", padding: "4px 8px", borderRadius: 4, zIndex: 10 }}>
         {(transform.scale * 100).toFixed(0)}%
       </div>
       <svg ref={svgRef} viewBox={"0 0 " + vw + " " + vh}
@@ -575,7 +576,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
               }
               placed.push({ x: pc.x, halfW, row });
               return (
-                <text key={i} x={pc.x} y={18 + row * 10} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="7.5" fontFamily="monospace" opacity={0.7}
+                <text key={i} x={pc.x} y={18 + row * 11} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="9.5" fontFamily="monospace" opacity={0.8}
                   style={{ cursor: "pointer" }}
                   onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(pc.tacticId); }}
                 >
@@ -785,7 +786,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
                 {isRemediated && (
                   <text x={pos.x} y={pos.y + 4} textAnchor="middle" fill="#22c55e" fontSize="12" fontWeight="bold">{"\u2713"}</text>
                 )}
-                <text x={pos.x} y={pos.y + radius + 10} textAnchor="middle" fill="#94a3b8" fontSize="6.5" fontFamily="monospace">
+                <text x={pos.x} y={pos.y + radius + 11} textAnchor="middle" fill="#94a3b8" fontSize="8.5" fontFamily="monospace">
                   {t.id}
                 </text>
               </g>
@@ -812,32 +813,32 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
             onMouseLeave={() => { tooltipHoveredRef.current = false; clearTooltip(); }}
             style={{
               position: "absolute", left: tooltipPos.x, top: tooltipPos.y,
-              background: "#1e293bf0", border: "1px solid #475569", borderRadius: 6,
-              padding: "8px 10px", pointerEvents: "auto", zIndex: 30,
-              maxWidth: tooltipExpanded ? 400 : 300, fontSize: "12px", color: "#e2e8f0",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
+              background: theme.colors.bgSurface + "f0", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.lg,
+              padding: "12px 16px", pointerEvents: "auto", zIndex: 30,
+              maxWidth: tooltipExpanded ? 420 : 320, fontSize: theme.fontSizes.body, color: theme.colors.textBody,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{ht.name}</div>
-            <div style={{ color: htTactic?.color, fontSize: "11px", marginBottom: 5 }}>{htTactic?.name}</div>
+            <div style={{ color: htTactic?.color, fontSize: theme.fontSizes.base, marginBottom: 6 }}>{htTactic?.name}</div>
             {displaySummary && (
-              <div style={{ fontSize: "10px", color: "#94a3b8", lineHeight: "1.4", marginBottom: needsMore ? 2 : 6, borderTop: "1px solid #334155", paddingTop: 4 }}>
+              <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, lineHeight: "1.5", marginBottom: needsMore ? 4 : 8, borderTop: "1px solid " + theme.colors.border, paddingTop: 6 }}>
                 {displaySummary}
               </div>
             )}
             {needsMore && (
               <div style={{ textAlign: "right", marginBottom: 4 }}>
                 <span onClick={() => setTooltipExpanded(prev => !prev)} style={{
-                  fontSize: "9px", color: "#3b82f6", cursor: "pointer", userSelect: "none",
+                  fontSize: theme.fontSizes.small, color: theme.colors.blue, cursor: "pointer", userSelect: "none",
                 }}>{tooltipExpanded ? "\u25B2 LESS" : "\u25BC MORE"}</span>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 10px", fontSize: "11px" }}>
-              <span style={{ color: "#64748b" }}>Exposure</span>
-              <span style={{ color: htExposure > 0.7 ? "#ef4444" : htExposure > 0.4 ? "#f59e0b" : "#22c55e" }}>{(htExposure * 100).toFixed(0)}%</span>
-              <span style={{ color: "#64748b" }}>Betweenness</span>
-              <span style={{ color: "#3b82f6" }}>{(htBetweenness * 100).toFixed(1)}%</span>
-              <span style={{ color: "#64748b" }}>Chains</span>
-              <span style={{ color: "#6366f1" }}>{htChainCount}</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px", fontSize: theme.fontSizes.base }}>
+              <span style={{ color: theme.colors.textMuted }}>Exposure</span>
+              <span style={{ color: htExposure > 0.7 ? theme.colors.red : htExposure > 0.4 ? theme.colors.orange : theme.colors.green }}>{(htExposure * 100).toFixed(0)}%</span>
+              <span style={{ color: theme.colors.textMuted }}>Betweenness</span>
+              <span style={{ color: theme.colors.blue }}>{(htBetweenness * 100).toFixed(1)}%</span>
+              <span style={{ color: theme.colors.textMuted }}>Chains</span>
+              <span style={{ color: theme.colors.indigo }}>{htChainCount}</span>
             </div>
           </div>
         );
