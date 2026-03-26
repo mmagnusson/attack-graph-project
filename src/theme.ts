@@ -81,6 +81,14 @@ export const theme = {
     round: "50%",
   },
 
+  // ─── Shadows ────────────────────────────────────────────────────────────────
+  shadows: {
+    sm: "0 2px 8px rgba(0,0,0,0.3)",
+    md: "0 4px 16px rgba(0,0,0,0.4)",
+    lg: "0 8px 24px rgba(0,0,0,0.5)",
+    xl: "0 12px 40px rgba(0,0,0,0.6)",
+  },
+
   // ─── Common Styles (reusable inline style objects) ───────────────────────────
 
   // Section heading style (uppercase label)

@@ -27,7 +27,7 @@ export function ExposureSummaryPanel({
 }: ExposureSummaryPanelProps) {
   return (
     <div style={{
-      borderTop: "1px solid " + theme.colors.borderSubtle, padding: "14px 24px",
+      borderTop: "1px solid " + theme.colors.borderSubtle, padding: theme.spacing.xl + " " + theme.spacing.xxl,
       background: theme.colors.bgPanel, flexShrink: 0,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -37,36 +37,36 @@ export function ExposureSummaryPanel({
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={exportCoverageCSV} style={{
             background: "transparent", color: theme.colors.violet, border: "1px solid " + theme.colors.violet, borderRadius: theme.radii.sm,
-            padding: "5px 10px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit",
+            padding: theme.spacing.sm + " " + theme.spacing.lg, fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit",
           }}>EXPORT CSV</button>
           <button onClick={() => { setEnvironmentProfile(null); setProfileExposures(null); }} style={{
             background: "transparent", color: theme.colors.textMuted, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
-            padding: "5px 10px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit",
+            padding: theme.spacing.sm + " " + theme.spacing.lg, fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit",
           }}>CLEAR</button>
         </div>
       </div>
 
       {/* Metric cards row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: theme.spacing.lg, marginBottom: 12 }}>
-        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: "10px 12px", textAlign: "center", border: "1px solid " + theme.colors.borderSubtle }}>
+        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center", border: "1px solid " + theme.colors.borderSubtle }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: exposureSummary.avgExposure > 0.6 ? theme.colors.red : exposureSummary.avgExposure > 0.35 ? theme.colors.orange : theme.colors.green }}>
             {(exposureSummary.avgExposure * 100).toFixed(0)}%
           </div>
           <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: 4 }}>Avg Exposure</div>
         </div>
-        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: "10px 12px", textAlign: "center", border: "1px solid " + theme.colors.borderSubtle }}>
+        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center", border: "1px solid " + theme.colors.borderSubtle }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: theme.colors.green }}>
             {(exposureSummary.totalCoverage * 100).toFixed(0)}%
           </div>
           <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: 4 }}>Avg Coverage</div>
         </div>
-        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: "10px 12px", textAlign: "center", border: "1px solid #ef444420" }}>
+        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center", border: "1px solid " + theme.colors.red + "20" }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: theme.colors.red }}>
             {exposureSummary.highExposed}
           </div>
           <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: 4 }}>Exposed ({">"}70%)</div>
         </div>
-        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: "10px 12px", textAlign: "center", border: "1px solid #22c55e20" }}>
+        <div style={{ background: theme.colors.bgCard, borderRadius: theme.radii.sm, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center", border: "1px solid " + theme.colors.green + "20" }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: theme.colors.green }}>
             {exposureSummary.wellCovered}
           </div>

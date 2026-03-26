@@ -58,19 +58,19 @@ export function ChainsPanel({
             style={{
               padding: "10px 12px", marginBottom: theme.spacing.sm, borderRadius: theme.radii.sm, cursor: "pointer",
               background: isActive ? theme.colors.bgSurface : "transparent",
-              border: "1px solid " + (isActive ? activeColor + "66" : chain.broken ? "#22c55e33" : "#ef444433"),
+              border: "1px solid " + (isActive ? activeColor + "66" : chain.broken ? theme.colors.green + "33" : theme.colors.red + "33"),
               opacity: chain.broken ? 0.6 : 1,
             }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: theme.fontSizes.body, fontWeight: 600, color: chain.broken ? theme.colors.green : theme.colors.textPrimary, display: "flex", alignItems: "center", gap: theme.spacing.md }}>
                 {isActive && <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: theme.radii.round, background: activeColor as any, flexShrink: 0 }} />}
                 {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
-                {chain.custom && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.purple, background: "#a855f715", padding: "2px 6px", borderRadius: theme.radii.sm, marginLeft: 8, fontWeight: 700 }}>CUSTOM</span>}
+                {chain.custom && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.purple, background: theme.colors.purple + "15", padding: "2px 6px", borderRadius: theme.radii.sm, marginLeft: 8, fontWeight: 700 }}>CUSTOM</span>}
               </span>
               <div style={{ display: "flex", gap: theme.spacing.sm, alignItems: "center" }}>
                 <span style={{
                   fontSize: theme.fontSizes.small, padding: "3px 8px", borderRadius: theme.radii.pill,
-                  background: chain.severity > 0.85 ? "#ef444430" : "#f59e0b30",
+                  background: chain.severity > 0.85 ? theme.colors.red + "30" : theme.colors.orange + "30",
                   color: chain.severity > 0.85 ? theme.colors.red : theme.colors.orange,
                 }}>
                   {(chain.severity * 100).toFixed(0)}%
@@ -95,7 +95,7 @@ export function ChainsPanel({
               {chain.path.map((tid: string, j: number) => (
                 <span key={j} style={{
                   padding: "2px 5px", borderRadius: theme.radii.sm,
-                  background: remediated.has(tid) ? "#22c55e20" : (effectiveExposures[tid] ?? 1) > 0.7 ? "#ef444420" : theme.colors.bgSurface,
+                  background: remediated.has(tid) ? theme.colors.green + "20" : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red + "20" : theme.colors.bgSurface,
                   color: remediated.has(tid) ? theme.colors.green : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red : theme.colors.textSecondary,
                   textDecoration: remediated.has(tid) ? "line-through" : "none",
                   fontFamily: '"JetBrains Mono", monospace',
@@ -131,7 +131,7 @@ export function ChainsPanel({
                       {prof.sectors && prof.sectors.length > 0 && (
                         <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Targeting:</span> {prof.sectors.join(", ")}</div>
                       )}
-                      {prof.description && <div style={{ marginTop: theme.spacing.sm, lineHeight: "1.4", color: "#cbd5e1" }}>{prof.description}</div>}
+                      {prof.description && <div style={{ marginTop: theme.spacing.sm, lineHeight: "1.4", color: theme.colors.textBody }}>{prof.description}</div>}
                     </div>
                   );
                 })()}
@@ -157,7 +157,7 @@ export function ChainsPanel({
                 {[...chainSetAnalysis.intersection].map((tid: any) => (
                   <span key={tid} style={{
                     fontSize: theme.fontSizes.tiny, padding: "2px 6px", borderRadius: theme.radii.sm,
-                    background: "#f59e0b20", color: theme.colors.orange,
+                    background: theme.colors.orange + "20", color: theme.colors.orange,
                     fontFamily: '"JetBrains Mono", monospace',
                   }}>{tid}</span>
                 ))}
@@ -185,7 +185,7 @@ export function ChainsPanel({
               </div>
             );
           })}
-          <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: theme.spacing.md, borderTop: "1px solid #33415560", paddingTop: theme.spacing.sm }}>
+          <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: theme.spacing.md, borderTop: "1px solid " + theme.colors.border + "60", paddingTop: theme.spacing.sm }}>
             Union: {chainSetAnalysis.union.size} | Overlap: {chainSetAnalysis.intersection.size}
           </div>
         </div>

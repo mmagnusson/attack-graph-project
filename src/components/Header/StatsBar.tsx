@@ -93,7 +93,7 @@ export function StatsBar(props: StatsBarProps) {
 
   const btnStyle = (active: boolean, color: string) => ({
     background: active ? color : "transparent",
-    color: active ? (color === "#64748b" || color === "#f59e0b" || color === "#14b8a6" ? "#0a0f1a" : "#fff") : color,
+    color: active ? (color === theme.colors.textMuted || color === theme.colors.orange || color === theme.colors.teal ? theme.colors.bg : "#fff") : color,
     border: "1px solid " + color,
     borderRadius: theme.radii.sm,
     padding: "8px 14px",
@@ -105,7 +105,7 @@ export function StatsBar(props: StatsBarProps) {
 
   const menuItemStyle = (active: boolean, color: string) => ({
     display: "flex" as const, alignItems: "center" as const, gap: 10, width: "100%", textAlign: "left" as const,
-    background: "transparent", border: "none", color: active ? color : "#cbd5e1",
+    background: "transparent", border: "none", color: active ? color : theme.colors.textBody,
     padding: "8px 14px", fontSize: theme.fontSizes.small, fontWeight: 600 as const, cursor: "pointer" as const, fontFamily: "inherit",
   });
 

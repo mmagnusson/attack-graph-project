@@ -576,7 +576,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
               }
               placed.push({ x: pc.x, halfW, row });
               return (
-                <text key={i} x={pc.x} y={18 + row * 10} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="7.5" fontFamily="monospace" opacity={0.7}
+                <text key={i} x={pc.x} y={18 + row * 11} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="9.5" fontFamily="monospace" opacity={0.8}
                   style={{ cursor: "pointer" }}
                   onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(pc.tacticId); }}
                 >
@@ -786,7 +786,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
                 {isRemediated && (
                   <text x={pos.x} y={pos.y + 4} textAnchor="middle" fill="#22c55e" fontSize="12" fontWeight="bold">{"\u2713"}</text>
                 )}
-                <text x={pos.x} y={pos.y + radius + 10} textAnchor="middle" fill="#94a3b8" fontSize="6.5" fontFamily="monospace">
+                <text x={pos.x} y={pos.y + radius + 11} textAnchor="middle" fill="#94a3b8" fontSize="8.5" fontFamily="monospace">
                   {t.id}
                 </text>
               </g>
@@ -813,10 +813,10 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
             onMouseLeave={() => { tooltipHoveredRef.current = false; clearTooltip(); }}
             style={{
               position: "absolute", left: tooltipPos.x, top: tooltipPos.y,
-              background: "#1e293bf0", border: "1px solid " + theme.colors.textFaint, borderRadius: 6,
-              padding: "10px 14px", pointerEvents: "auto", zIndex: 30,
+              background: theme.colors.bgSurface + "f0", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.lg,
+              padding: "12px 16px", pointerEvents: "auto", zIndex: 30,
               maxWidth: tooltipExpanded ? 420 : 320, fontSize: theme.fontSizes.body, color: theme.colors.textBody,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{ht.name}</div>
             <div style={{ color: htTactic?.color, fontSize: theme.fontSizes.base, marginBottom: 6 }}>{htTactic?.name}</div>

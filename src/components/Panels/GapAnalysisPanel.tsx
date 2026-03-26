@@ -24,21 +24,21 @@ export function GapAnalysisPanel({
         <button onClick={exportRemediationPlan} disabled={gapAnalysis.gaps.length === 0} style={{
           background: "transparent", color: gapAnalysis.gaps.length === 0 ? theme.colors.textFaint : theme.colors.red,
           border: "1px solid " + (gapAnalysis.gaps.length === 0 ? theme.colors.border : theme.colors.red),
-          borderRadius: theme.radii.sm, padding: "5px 12px", fontSize: theme.fontSizes.small, fontWeight: 700,
+          borderRadius: theme.radii.sm, padding: theme.spacing.sm + " " + theme.spacing.lg, fontSize: theme.fontSizes.small, fontWeight: 700,
           cursor: gapAnalysis.gaps.length === 0 ? "default" : "pointer", fontFamily: "inherit",
           marginLeft: "auto", opacity: gapAnalysis.gaps.length === 0 ? 0.4 : 1,
         }}>EXPORT PLAN</button>
       </h3>
       <div style={{ display: "flex", gap: theme.spacing.xl, marginBottom: theme.spacing.xl, flexWrap: "wrap" }}>
-        <div style={{ background: "#ef444415", border: "1px solid #ef444433", borderRadius: theme.radii.md, padding: "10px 16px", textAlign: "center" }}>
+        <div style={{ background: theme.colors.red + "15", border: "1px solid #ef444433", borderRadius: theme.radii.md, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center" }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: theme.colors.red }}>{gapAnalysis.noCoverageCount}</div>
           <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.red, textTransform: "uppercase", letterSpacing: "0.5px" }}>No Coverage</div>
         </div>
-        <div style={{ background: "#f59e0b15", border: "1px solid #f59e0b33", borderRadius: theme.radii.md, padding: "10px 16px", textAlign: "center" }}>
+        <div style={{ background: theme.colors.orange + "15", border: "1px solid #f59e0b33", borderRadius: theme.radii.md, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center" }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: theme.colors.orange }}>{gapAnalysis.notDeployedCount}</div>
           <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.orange, textTransform: "uppercase", letterSpacing: "0.5px" }}>Not Deployed</div>
         </div>
-        <div style={{ background: theme.colors.bgSurface, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.md, padding: "10px 16px", textAlign: "center" }}>
+        <div style={{ background: theme.colors.bgSurface, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.md, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center" }}>
           <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: theme.colors.textBody }}>{gapAnalysis.gaps.length}</div>
           <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>Total Gaps</div>
         </div>
@@ -51,9 +51,9 @@ export function GapAnalysisPanel({
             else if (s > 0.05) tiers.Medium++;
             else tiers.Low++;
           });
-          const tierColors: Record<string, string> = { Critical: "#ef4444", High: "#f97316", Medium: "#f59e0b", Low: "#64748b" };
+          const tierColors: Record<string, string> = { Critical: theme.colors.red, High: "#f97316", Medium: theme.colors.orange, Low: theme.colors.textMuted };
           return Object.entries(tiers).filter(([, n]) => n > 0).map(([tier, n]) => (
-            <div key={tier} style={{ background: tierColors[tier] + "15", border: "1px solid " + tierColors[tier] + "33", borderRadius: theme.radii.md, padding: "10px 16px", textAlign: "center" }}>
+            <div key={tier} style={{ background: tierColors[tier] + "15", border: "1px solid " + tierColors[tier] + "33", borderRadius: theme.radii.md, padding: theme.spacing.lg + " " + theme.spacing.xl, textAlign: "center" }}>
               <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: tierColors[tier] }}>{n}</div>
               <div style={{ fontSize: theme.fontSizes.tiny, color: tierColors[tier], textTransform: "uppercase", letterSpacing: "0.5px" }}>{tier}</div>
             </div>
@@ -66,8 +66,8 @@ export function GapAnalysisPanel({
           const isNoCoverage = gap.gapType === "no-coverage";
           return (
             <div key={gap.id} onClick={() => setSelectedTech(gap.id)} style={{
-              background: theme.colors.bg, border: "1px solid " + (isNoCoverage ? "#ef444433" : "#f59e0b33"),
-              borderRadius: theme.radii.md, padding: "12px 14px", cursor: "pointer",
+              background: theme.colors.bg, border: "1px solid " + (isNoCoverage ? theme.colors.red + "33" : theme.colors.orange + "33"),
+              borderRadius: theme.radii.md, padding: theme.spacing.lg + " " + theme.spacing.xl, cursor: "pointer",
               borderLeft: "3px solid " + (isNoCoverage ? theme.colors.red : theme.colors.orange),
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: theme.spacing.md }}>
@@ -79,7 +79,7 @@ export function GapAnalysisPanel({
                 </div>
                 <span style={{
                   fontSize: theme.fontSizes.micro, fontWeight: 700, padding: "3px 8px", borderRadius: theme.radii.pill,
-                  background: isNoCoverage ? "#ef444425" : "#f59e0b25",
+                  background: isNoCoverage ? theme.colors.red + "25" : theme.colors.orange + "25",
                   color: isNoCoverage ? theme.colors.red : theme.colors.orange,
                   whiteSpace: "nowrap",
                 }}>

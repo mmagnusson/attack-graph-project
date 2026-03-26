@@ -673,13 +673,13 @@ export default function AttackBreaker() {
             {framework === "ics" ? "ICS/OT" : "ENTERPRISE"}
           </span>
           <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
-          <span style={{ fontSize: theme.fontSizes.base, color: "#cbd5e1" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textBody }}>
             {filteredChains.length} chains
           </span>
           <span style={{ fontSize: theme.fontSizes.base, color: totalDisrupted > 0 ? theme.colors.green : theme.colors.textSecondary }}>
             {totalDisrupted} disrupted
           </span>
-          <span style={{ fontSize: theme.fontSizes.base, color: "#cbd5e1" }}>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textBody }}>
             {remediated.size} remediated
           </span>
           <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
@@ -1042,12 +1042,11 @@ export default function AttackBreaker() {
 
       {/* ═══ Right Sidebar Drawer ═══ */}
       {sidebarOpen && (
-        <div style={{
+        <div className="sidebar-enter" style={{
           position: "fixed", top: 0, right: 0, bottom: 0, width: "min(480px, 90vw)", zIndex: 100,
           display: "flex", flexDirection: "column",
           background: theme.colors.bgPanel, borderLeft: "1px solid " + theme.colors.border,
           boxShadow: "-8px 0 32px rgba(0,0,0,0.5)",
-          transition: "transform 0.2s ease-out",
         }}>
           {/* Sidebar header */}
           <div style={{
@@ -1130,7 +1129,7 @@ export default function AttackBreaker() {
       )}
       {/* Backdrop overlay when sidebar is open */}
       {sidebarOpen && (
-        <div onClick={() => setSidebarPanel(null)}
+        <div className="backdrop-fade" onClick={() => setSidebarPanel(null)}
           style={{
             position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99,
             background: "rgba(0,0,0,0.3)",
