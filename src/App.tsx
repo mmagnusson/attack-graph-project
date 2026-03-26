@@ -87,7 +87,26 @@ export default function AttackBreaker() {
   const [expandedChainProfile, setExpandedChainProfile] = useState<string | null>(null);
   const [showSubTechniques, setShowSubTechniques] = useState(false);
   const [chainSearchQuery, setChainSearchQuery] = useState("");
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(() => {
+    const saved = localStorage.getItem('ab_headerCollapsed');
+    return saved !== null ? saved === 'true' : true; // collapsed by default for more space
+  });
+
+  // ─── Bottom panel tab state ────────────────────────────────────────────────
+  type BottomTab = "chains" | "priority" | "detail";
+  const [bottomTab, setBottomTab] = useState<BottomTab>(() => {
+    const saved = localStorage.getItem('ab_bottomTab');
+    return (saved === "chains" || saved === "priority" || saved === "detail") ? saved : "chains";
+  });
+
+  // Persist layout preferences
+  useEffect(() => { localStorage.setItem('ab_bottomTab', bottomTab); }, [bottomTab]);
+  useEffect(() => { localStorage.setItem('ab_headerCollapsed', String(headerCollapsed)); }, [headerCollapsed]);
+
+  // Auto-switch to detail tab when a technique is selected
+  useEffect(() => {
+    if (selectedTech) setBottomTab("detail");
+  }, [selectedTech]);
 
   // ─── Persistence helpers ─────────────────────────────────────────────────────
 
@@ -836,97 +855,149 @@ export default function AttackBreaker() {
           </div>
         </div>
 
-        {/* Bottom panels */}
+        {/* Bottom panels — tabbed interface */}
         {showBottomPanels && (
           <div style={{
             position: "absolute", bottom: 0, left: 0, right: 0, height: panelHeight, zIndex: 10,
             display: "flex", flexDirection: "column",
             background: "#0a0f1aee", backdropFilter: "blur(8px)", borderTop: "1px solid #1e293b",
           }}>
+            {/* Resize handle */}
             <div onMouseDown={startDividerDrag} onTouchStart={startDividerDragTouch}
               style={{ height: 16, flexShrink: 0, cursor: "row-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}>
               <div style={{ width: 48, height: 4, background: theme.colors.textFaint, borderRadius: 2 }} />
             </div>
-            <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
-              {/* Attack Chains */}
-              <div style={{ flex: "1 1 300px", borderRight: "1px solid " + theme.colors.borderSubtle, padding: popoutChains ? 0 : "14px 18px", overflow: "auto" }}>
-                {popoutChains ? (
-                  <>
-                    <PopoutPlaceholder label="Attack Chains" onRestore={() => setPopoutChains(false)} />
-                    <PopoutPanel title={"Attack Chains (" + filteredChains.length + ")"} width={500} height={700} onClose={() => setPopoutChains(false)}>
-                      <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
-                        highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                        remediated={remediated} effectiveExposures={effectiveExposures}
-                        chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
-                        popoutChains={popoutChains} setPopoutChains={setPopoutChains}
-                        setCustomChains={setCustomChains}
-                        expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
-                        activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
-                      />
-                    </PopoutPanel>
-                  </>
-                ) : (
-                  <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
-                    highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                    remediated={remediated} effectiveExposures={effectiveExposures}
-                    chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
-                    popoutChains={popoutChains} setPopoutChains={setPopoutChains}
-                    setCustomChains={setCustomChains}
-                    expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
-                    activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
-                  />
-                )}
-              </div>
-              {/* Priority Ranking */}
-              <div style={{ flex: "1 1 260px", borderRight: "1px solid " + theme.colors.borderSubtle, padding: popoutPriority ? 0 : "14px 18px", overflow: "auto" }}>
-                {popoutPriority ? (
-                  <>
-                    <PopoutPlaceholder label="Remediation Priority" onRestore={() => setPopoutPriority(false)} />
-                    <PopoutPanel title="Remediation Priority" width={400} height={600} onClose={() => setPopoutPriority(false)}>
-                      <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
-                        setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
-                        optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
-                    </PopoutPanel>
-                  </>
-                ) : (
-                  <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
-                    setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
-                    optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
-                )}
-              </div>
-              {/* Detail Panel */}
-              <div style={{ flex: "1 1 260px", padding: popoutDetail ? 0 : "14px 18px", overflow: "auto" }}>
-                {popoutDetail ? (
-                  <>
-                    <PopoutPlaceholder label="Node Detail" onRestore={() => setPopoutDetail(false)} />
-                    <PopoutPanel title={"Node Detail" + (selectedTechData ? ": " + selectedTechData.id : "")} width={400} height={700} onClose={() => setPopoutDetail(false)}>
-                      <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
-                        betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
-                        exposures={exposures} handleExposureChange={handleExposureChange}
-                        remediated={remediated} toggleRemediate={toggleRemediate}
-                        deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
-                        highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                        fwConfig={fwConfig} profileExposures={profileExposures}
-                        activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
-                        activeMitigations={activeMitigations}
-                        popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
-                      />
-                    </PopoutPanel>
-                  </>
-                ) : (
-                  <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
-                    betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
-                    exposures={exposures} handleExposureChange={handleExposureChange}
-                    remediated={remediated} toggleRemediate={toggleRemediate}
-                    deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
-                    highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
-                    fwConfig={fwConfig} profileExposures={profileExposures}
-                    activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
-                    activeMitigations={activeMitigations}
-                    popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
-                  />
-                )}
-              </div>
+            {/* Tab bar */}
+            <div style={{
+              display: "flex", gap: 0, flexShrink: 0,
+              borderBottom: "1px solid " + theme.colors.borderSubtle,
+              background: theme.colors.bgPanel,
+              padding: "0 12px",
+            }}>
+              {([
+                { id: "chains" as BottomTab, label: "Attack Chains", count: filteredChains.length, color: theme.colors.violet, popped: popoutChains },
+                { id: "priority" as BottomTab, label: "Priority", count: priorityRanking.length, color: theme.colors.orange, popped: popoutPriority },
+                { id: "detail" as BottomTab, label: "Detail" + (selectedTechData ? ": " + selectedTechData.id : ""), count: null, color: theme.colors.cyan, popped: popoutDetail },
+              ]).map(tab => (
+                <button key={tab.id} onClick={() => setBottomTab(tab.id)}
+                  style={{
+                    background: bottomTab === tab.id ? theme.colors.bgCard : "transparent",
+                    border: "none",
+                    borderBottom: bottomTab === tab.id ? "2px solid " + tab.color : "2px solid transparent",
+                    color: bottomTab === tab.id ? tab.color : theme.colors.textMuted,
+                    padding: "8px 18px",
+                    fontSize: theme.fontSizes.base,
+                    fontWeight: bottomTab === tab.id ? 600 : 400,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "color 0.15s, border-color 0.15s",
+                    display: "flex", alignItems: "center", gap: 8,
+                    position: "relative",
+                  }}>
+                  {tab.label}
+                  {tab.count !== null && (
+                    <span style={{
+                      fontSize: theme.fontSizes.tiny,
+                      background: bottomTab === tab.id ? tab.color + "22" : theme.colors.bgSurface,
+                      color: bottomTab === tab.id ? tab.color : theme.colors.textFaint,
+                      padding: "1px 7px",
+                      borderRadius: theme.radii.pill,
+                      fontWeight: 600,
+                    }}>{tab.count}</span>
+                  )}
+                  {tab.popped && (
+                    <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint }}>⧉</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {/* Tab content — full width */}
+            <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+              {/* Attack Chains tab */}
+              {bottomTab === "chains" && (
+                <div style={{ padding: popoutChains ? 0 : "14px 20px", height: "100%" }}>
+                  {popoutChains ? (
+                    <>
+                      <PopoutPlaceholder label="Attack Chains" onRestore={() => setPopoutChains(false)} />
+                      <PopoutPanel title={"Attack Chains (" + filteredChains.length + ")"} width={500} height={700} onClose={() => setPopoutChains(false)}>
+                        <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
+                          highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                          remediated={remediated} effectiveExposures={effectiveExposures}
+                          chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
+                          popoutChains={popoutChains} setPopoutChains={setPopoutChains}
+                          setCustomChains={setCustomChains}
+                          expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
+                          activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
+                        />
+                      </PopoutPanel>
+                    </>
+                  ) : (
+                    <ChainsPanel filteredChains={filteredChains} displayedChainStatus={displayedChainStatus}
+                      highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                      remediated={remediated} effectiveExposures={effectiveExposures}
+                      chainSearchQuery={chainSearchQuery} setChainSearchQuery={setChainSearchQuery}
+                      popoutChains={popoutChains} setPopoutChains={setPopoutChains}
+                      setCustomChains={setCustomChains}
+                      expandedChainProfile={expandedChainProfile} setExpandedChainProfile={setExpandedChainProfile}
+                      activeGroupProfiles={activeGroupProfiles} chainSetAnalysis={chainSetAnalysis}
+                    />
+                  )}
+                </div>
+              )}
+              {/* Priority tab */}
+              {bottomTab === "priority" && (
+                <div style={{ padding: popoutPriority ? 0 : "14px 20px", height: "100%" }}>
+                  {popoutPriority ? (
+                    <>
+                      <PopoutPlaceholder label="Remediation Priority" onRestore={() => setPopoutPriority(false)} />
+                      <PopoutPanel title="Remediation Priority" width={400} height={600} onClose={() => setPopoutPriority(false)}>
+                        <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
+                          setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
+                          optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
+                      </PopoutPanel>
+                    </>
+                  ) : (
+                    <PriorityPanel priorityRanking={priorityRanking} selectedTech={selectedTech}
+                      setSelectedTech={setSelectedTech} toggleRemediate={toggleRemediate}
+                      optimal={optimal} popoutPriority={popoutPriority} setPopoutPriority={setPopoutPriority} />
+                  )}
+                </div>
+              )}
+              {/* Detail tab */}
+              {bottomTab === "detail" && (
+                <div style={{ padding: popoutDetail ? 0 : "14px 20px", height: "100%" }}>
+                  {popoutDetail ? (
+                    <>
+                      <PopoutPlaceholder label="Node Detail" onRestore={() => setPopoutDetail(false)} />
+                      <PopoutPanel title={"Node Detail" + (selectedTechData ? ": " + selectedTechData.id : "")} width={400} height={700} onClose={() => setPopoutDetail(false)}>
+                        <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
+                          betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
+                          exposures={exposures} handleExposureChange={handleExposureChange}
+                          remediated={remediated} toggleRemediate={toggleRemediate}
+                          deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
+                          highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                          fwConfig={fwConfig} profileExposures={profileExposures}
+                          activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
+                          activeMitigations={activeMitigations}
+                          popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
+                        />
+                      </PopoutPanel>
+                    </>
+                  ) : (
+                    <DetailPanel selectedTech={selectedTech} selectedTechData={selectedTechData} selectedTactic={selectedTactic}
+                      betweenness={betweenness} chainCoverage={chainCoverage} effectiveExposures={effectiveExposures}
+                      exposures={exposures} handleExposureChange={handleExposureChange}
+                      remediated={remediated} toggleRemediate={toggleRemediate}
+                      deployedControls={deployedControls} filteredChains={filteredChains} chainStatus={chainStatus}
+                      highlightedChains={highlightedChains} toggleHighlightedChain={toggleHighlightedChain}
+                      fwConfig={fwConfig} profileExposures={profileExposures}
+                      activeTechDescriptions={activeTechDescriptions} activeChainTechContext={activeChainTechContext}
+                      activeMitigations={activeMitigations}
+                      popoutDetail={popoutDetail} setPopoutDetail={setPopoutDetail}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -957,7 +1028,7 @@ export default function AttackBreaker() {
 
       {/* Analysis Panel */}
       {showAnalysis && !popoutAnalysis && (
-        <div style={{ borderTop: "1px solid #1e293b", padding: "16px 24px", background: "#0d1321", flexShrink: 0, maxHeight: "40vh", overflow: "auto" }}>
+        <div style={{ borderTop: "1px solid " + theme.colors.borderSubtle, padding: "16px 24px", background: theme.colors.bgPanel, flexShrink: 0, maxHeight: "40vh", overflow: "auto" }}>
           <AnalysisPanel remediationBudget={remediationBudget} optimal={optimal}
             activeTechniques={activeTechniques} betweenness={betweenness} remediated={remediated}
             effectiveExposures={effectiveExposures} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
