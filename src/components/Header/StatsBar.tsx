@@ -14,9 +14,6 @@ interface StatsBarProps {
   exportCSV: () => void;
   navFileInputRef: React.RefObject<HTMLInputElement | null>;
   exportNavigatorLayer: () => void;
-  showControls: boolean;
-  setShowControls: (v: boolean) => void;
-  setPopoutControls: (v: boolean) => void;
   dataSource: string;
   fwConfig: any;
   showSubTechniques: boolean;
@@ -27,17 +24,10 @@ interface StatsBarProps {
   setChainBuilderName: (v: string) => void;
   phaseWeighting: boolean;
   setPhaseWeighting: (fn: (prev: boolean) => boolean) => void;
-  showGapAnalysis: boolean;
-  setShowGapAnalysis: (fn: (prev: boolean) => boolean) => void;
-  setPopoutGapAnalysis: (v: boolean) => void;
-  gapAnalysis: { gaps: any[] };
   compareMode: boolean;
   setCompareMode: (fn: (prev: boolean) => boolean) => void;
   environmentProfile: any;
   setShowProfileWizard: (v: boolean) => void;
-  showExecutiveSummary: boolean;
-  setShowExecutiveSummary: (fn: (prev: boolean) => boolean) => void;
-  setPopoutExecutive: (v: boolean) => void;
   showBottomPanels: boolean;
   setShowBottomPanels: (fn: (prev: boolean) => boolean) => void;
   highlightedChains: any[];
@@ -49,9 +39,6 @@ interface StatsBarProps {
   shareConfirm: boolean;
   resetAll: () => void;
   showSaved: boolean;
-  showAnalysis: boolean;
-  setShowAnalysis: (fn: (prev: boolean) => boolean) => void;
-  setPopoutAnalysis: (v: boolean) => void;
   sidebarPanel: "controls" | "analysis" | "gap" | "executive" | null;
   setSidebarPanel: (v: "controls" | "analysis" | "gap" | "executive" | null) => void;
 }
@@ -60,20 +47,16 @@ export function StatsBar(props: StatsBarProps) {
   const {
     framework, filteredChains, totalDisrupted, remediated, optimal,
     applyOptimal, exportCSV, navFileInputRef, exportNavigatorLayer,
-    showControls, setShowControls, setPopoutControls,
     dataSource, fwConfig,
     showSubTechniques, setShowSubTechniques,
     chainBuilderMode, setChainBuilderMode, setChainBuilderPath, setChainBuilderName,
     phaseWeighting, setPhaseWeighting,
-    showGapAnalysis, setShowGapAnalysis, setPopoutGapAnalysis, gapAnalysis,
     compareMode, setCompareMode,
     environmentProfile, setShowProfileWizard,
-    showExecutiveSummary, setShowExecutiveSummary, setPopoutExecutive,
     showBottomPanels, setShowBottomPanels,
     highlightedChains, isolateChain, setIsolateChain,
     customPositions, setCustomPositions,
     handleShare, shareConfirm, resetAll, showSaved,
-    showAnalysis, setShowAnalysis, setPopoutAnalysis,
     sidebarPanel, setSidebarPanel,
   } = props;
 

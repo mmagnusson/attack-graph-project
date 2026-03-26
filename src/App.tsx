@@ -59,13 +59,11 @@ export default function AttackBreaker() {
   const [remediated, setRemediated] = useState<Set<string>>(new Set());
   const [remediationBudget, setRemediationBudget] = useState(5);
   const [sectorFilter, setSectorFilter] = useState("all");
-  const [showAnalysis, setShowAnalysis] = useState(false);
   const [customPositions, setCustomPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   // ─── Security controls state ─────────────────────────────────────────────────
 
   const [deployedControls, setDeployedControls] = useState<Set<string>>(new Set());
-  const [showControls, setShowControls] = useState(false);
 
   // ─── Popout panel states ─────────────────────────────────────────────────────
 
@@ -74,12 +72,10 @@ export default function AttackBreaker() {
   const [popoutDetail, setPopoutDetail] = useState(false);
   const [popoutAnalysis, setPopoutAnalysis] = useState(false);
   const [popoutControls, setPopoutControls] = useState(false);
-  const [showGapAnalysis, setShowGapAnalysis] = useState(false);
   const [popoutGapAnalysis, setPopoutGapAnalysis] = useState(false);
 
   // ─── Feature toggles ────────────────────────────────────────────────────────
 
-  const [showExecutiveSummary, setShowExecutiveSummary] = useState(false);
   const [popoutExecutive, setPopoutExecutive] = useState(false);
   const [phaseWeighting, setPhaseWeighting] = useState(false);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string> | null>(null);
@@ -414,9 +410,9 @@ export default function AttackBreaker() {
   }, [displayTechniques, deployedControls, effectiveExposures, betweenness, chainCoverage, remediated, fwConfig]);
 
   const gapNodeSet = useMemo(() => {
-    if (!showGapAnalysis) return null;
+    if (sidebarPanel !== "gap") return null;
     return new Set(gapAnalysis.gaps.map((g: any) => g.id));
-  }, [showGapAnalysis, gapAnalysis]);
+  }, [sidebarPanel, gapAnalysis]);
 
   const optimal = useMemo(() =>
     findOptimalRemediation(activeTechniques, filteredChains, effectiveExposures, remediationBudget, phaseWeighting, fwConfig as any),
@@ -581,13 +577,12 @@ export default function AttackBreaker() {
     setRemediated(new Set());
     setSelectedTech(null);
     setHighlightedChains([]);
-    setShowAnalysis(false);
+    setSidebarPanel(null);
     setEnvPreset("government");
     setSectorFilter("all");
     setRemediationBudget(5);
     setCustomPositions({});
     setDeployedControls(new Set());
-    setShowControls(false);
     setPopoutChains(false);
     setPopoutPriority(false);
     setPopoutDetail(false);
@@ -595,10 +590,8 @@ export default function AttackBreaker() {
     setPopoutControls(false);
     setChainSearchQuery("");
     setShowSubTechniques(false);
-    setShowExecutiveSummary(false);
     setPopoutExecutive(false);
     setShareConfirm(false);
-    setShowGapAnalysis(false);
     setPopoutGapAnalysis(false);
     setPhaseWeighting(false);
     setSelectedPlatforms(null);
@@ -716,22 +709,17 @@ export default function AttackBreaker() {
         framework={framework} filteredChains={filteredChains} totalDisrupted={totalDisrupted}
         remediated={remediated} optimal={optimal} applyOptimal={applyOptimal}
         exportCSV={exportCSV} navFileInputRef={navFileInputRef} exportNavigatorLayer={exportNavigatorLayer}
-        showControls={showControls} setShowControls={setShowControls} setPopoutControls={setPopoutControls}
         dataSource={dataSource} fwConfig={fwConfig}
         showSubTechniques={showSubTechniques} setShowSubTechniques={setShowSubTechniques}
         chainBuilderMode={chainBuilderMode} setChainBuilderMode={setChainBuilderMode}
         setChainBuilderPath={setChainBuilderPath} setChainBuilderName={setChainBuilderName}
         phaseWeighting={phaseWeighting} setPhaseWeighting={setPhaseWeighting}
-        showGapAnalysis={showGapAnalysis} setShowGapAnalysis={setShowGapAnalysis} setPopoutGapAnalysis={setPopoutGapAnalysis}
-        gapAnalysis={gapAnalysis}
         compareMode={compareMode} setCompareMode={setCompareMode}
         environmentProfile={environmentProfile} setShowProfileWizard={setShowProfileWizard}
-        showExecutiveSummary={showExecutiveSummary} setShowExecutiveSummary={setShowExecutiveSummary} setPopoutExecutive={setPopoutExecutive}
         showBottomPanels={showBottomPanels} setShowBottomPanels={setShowBottomPanels}
         highlightedChains={highlightedChains} isolateChain={isolateChain} setIsolateChain={setIsolateChain}
         customPositions={customPositions} setCustomPositions={setCustomPositions}
         handleShare={handleShare} shareConfirm={shareConfirm} resetAll={resetAll} showSaved={showSaved}
-        showAnalysis={showAnalysis} setShowAnalysis={setShowAnalysis} setPopoutAnalysis={setPopoutAnalysis}
         sidebarPanel={sidebarPanel} setSidebarPanel={setSidebarPanel}
       />}
 
