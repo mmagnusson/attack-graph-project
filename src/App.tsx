@@ -36,6 +36,7 @@ import { GraphView } from './components/Graph';
 import { LegendItem, PopoutPanel, PopoutPlaceholder } from './components/Analysis';
 import { ExecutiveSummary } from './components/Export';
 import { ProfileWizard } from './components/ProfileWizard';
+import { HelpGuide } from './components/HelpGuide';
 import { Header, StatsBar } from './components/Header';
 import {
   ChainsPanel, PriorityPanel, DetailPanel,
@@ -99,6 +100,8 @@ export default function AttackBreaker() {
     const saved = localStorage.getItem('ab_bottomTab');
     return (saved === "chains" || saved === "priority" || saved === "detail") ? saved : "chains";
   });
+
+  const [showHelpGuide, setShowHelpGuide] = useState(false);
 
   // Persist layout preferences
   useEffect(() => { localStorage.setItem('ab_bottomTab', bottomTab); }, [bottomTab]);
@@ -684,6 +687,12 @@ export default function AttackBreaker() {
             {dataSource === "stix" ? "STIX" : dataSource === "upload" ? uploadedFileName || "Uploaded" : "Built-in"}
           </span>
           <div style={{ flex: 1 }} />
+          <button onClick={() => setShowHelpGuide(true)} title="Help / Guide"
+            style={{
+              background: "transparent", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
+              color: theme.colors.textSecondary, cursor: "pointer", padding: "2px 8px", fontSize: theme.fontSizes.body,
+              fontFamily: "inherit", lineHeight: 1,
+            }}>?</button>
           <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>
             H expand toolbar &middot; B toggle panels &middot; 1/2/3 tabs
           </span>
@@ -725,6 +734,7 @@ export default function AttackBreaker() {
         customPositions={customPositions} setCustomPositions={setCustomPositions}
         handleShare={handleShare} shareConfirm={shareConfirm} resetAll={resetAll} showSaved={showSaved}
         sidebarPanel={sidebarPanel} setSidebarPanel={setSidebarPanel}
+        onShowHelp={() => setShowHelpGuide(true)}
       />}
 
       {/* Collapse toolbar button (shown when expanded) */}
@@ -1191,6 +1201,11 @@ export default function AttackBreaker() {
           }}
           onClose={() => setShowProfileWizard(false)}
         />
+      )}
+
+      {/* Help Guide */}
+      {showHelpGuide && (
+        <HelpGuide onClose={() => setShowHelpGuide(false)} />
       )}
     </div>
   );

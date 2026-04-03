@@ -41,6 +41,7 @@ interface StatsBarProps {
   showSaved: boolean;
   sidebarPanel: "controls" | "analysis" | "gap" | "executive" | null;
   setSidebarPanel: (v: "controls" | "analysis" | "gap" | "executive" | null) => void;
+  onShowHelp: () => void;
 }
 
 export function StatsBar(props: StatsBarProps) {
@@ -58,6 +59,7 @@ export function StatsBar(props: StatsBarProps) {
     customPositions, setCustomPositions,
     handleShare, shareConfirm, resetAll, showSaved,
     sidebarPanel, setSidebarPanel,
+    onShowHelp,
   } = props;
 
   // "More" dropdown state
@@ -180,6 +182,12 @@ export function StatsBar(props: StatsBarProps) {
             background: theme.colors.bgSurface, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.md,
             padding: "8px 0", minWidth: 220, boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
           }}>
+            <button onClick={() => { onShowHelp(); setMoreMenuOpen(false); }} style={menuItemStyle(false, "#22d3ee")}>
+              <span style={dot(false, "#22d3ee")} />
+              HELP / GUIDE
+            </button>
+            <div style={{ borderTop: "1px solid " + theme.colors.border, margin: "6px 0" }} />
+
             {/* ── View ── */}
             <div style={{ padding: "6px 14px 4px", ...theme.sectionLabel, fontSize: theme.fontSizes.tiny }}>View</div>
             {dataSource === "stix" && fwConfig.hasSubTechniques && (
