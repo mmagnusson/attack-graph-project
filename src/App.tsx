@@ -662,6 +662,10 @@ export default function AttackBreaker() {
               color: theme.colors.textSecondary, cursor: "pointer", padding: "2px 8px", fontSize: theme.fontSizes.body,
               fontFamily: "inherit", lineHeight: 1,
             }}>{"\u25BC"}</button>
+          <span style={{ fontSize: theme.fontSizes.heading, fontWeight: 700, color: theme.colors.textPrimary, letterSpacing: "-0.5px" }}>
+            AttackBreaker
+          </span>
+          <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary }}>|</span>
           <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.blue, fontWeight: 700 }}>
             {framework === "ics" ? "ICS/OT" : "ENTERPRISE"}
           </span>
