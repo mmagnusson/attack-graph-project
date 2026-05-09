@@ -54,7 +54,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
   { id: "siem", name: "SIEM / SOC", category: "detective", cost: "$$$$",
     coverage: { "T1059": -0.3, "T1055": -0.35, "T1021": -0.25, "T1071": -0.3, "T1572": -0.25 } },
   { id: "hunt", name: "Threat Hunting", category: "detective", cost: "$$$",
-    coverage: { "T1027": -0.35, "T1070": -0.3, "T1055": -0.3, "T1562": -0.3 } },
+    coverage: { "T1027": -0.35, "T1070": -0.3, "T1055": -0.3, "T1685": -0.3 } },
   { id: "vuln-scan", name: "Vulnerability Scanning", category: "detective", cost: "$",
     coverage: { "T1190": -0.25, "T1068": -0.2, "T1548": -0.2 } },
   { id: "ids", name: "IDS / IPS", category: "detective", cost: "$$",
@@ -68,7 +68,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
   { id: "deception", name: "Deception / Honeypots", category: "detective", cost: "$$",
     coverage: { "T1082": -0.35, "T1069": -0.3, "T1046": -0.3, "T1087": -0.25 } },
   { id: "log-mgmt", name: "Centralized Log Management", category: "detective", cost: "$$",
-    coverage: { "T1070": -0.35, "T1562": -0.25, "T1059": -0.15 } },
+    coverage: { "T1070": -0.35, "T1685": -0.25, "T1059": -0.15 } },
   { id: "email-mon", name: "Email Security Monitoring", category: "detective", cost: "$",
     coverage: { "T1114": -0.4, "T1566": -0.15, "T1598": -0.15 } },
 
