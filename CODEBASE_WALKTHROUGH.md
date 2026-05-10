@@ -348,6 +348,21 @@ This factory function returns a `FrameworkConfig` object that bundles all framew
 
 This pattern keeps the rest of the app framework-agnostic — components just read from `fwConfig` without caring whether it's Enterprise or ICS data.
 
+### ATT&CK Version Pinning
+
+The app is pinned to a specific MITRE ATT&CK release. As of this writing, that's **ATT&CK v19.0** (April 2026). Version pinning lives in two places:
+
+- `data/frameworkConfig.ts` — `stixUrl` and `stixCacheKey` per framework (Enterprise + ICS). Cache key changes force a refetch on the next page load, which is what you want when bumping versions.
+- `data/coverageKb.ts` — `metadata.attack_version` on each KB, plus the Navigator export version in `hooks/useExportHandlers.ts`.
+
+**v19's Defense Evasion split.** v19 split the Defense Evasion tactic into two tactics:
+- **TA0005 Stealth** — adversary blends in / hides actions (T1027 Obfuscated Files, T1036 Masquerading, T1055 Process Injection, etc.)
+- **TA0112 Defense Impairment** — adversary actively tampers with security controls (T1562 Impair Defenses, T1070 Indicator Removal, T1599 Network Boundary Bridging, etc.)
+
+Both sit at phase 4. `STIX_TACTIC_MAP` in `data/constants.ts` maps the v19 STIX slugs (`stealth`, `defense-impairment`) to those tactic IDs. The layout in `engine/graphModel.ts` filters tactics by presence of techniques, so the split flows through automatically — no special-casing needed.
+
+**Upgrading to a future ATT&CK version** typically means bumping the four files listed above. If a future release adds another tactic or restructures further, also update the `TACTICS` array and `STIX_TACTIC_MAP` in `data/constants.ts`.
+
 ---
 
 ## Key Algorithms Explained
