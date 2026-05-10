@@ -101,7 +101,7 @@ export function useExportHandlers({
     const layer = {
       name: "ATT&CK Path Optimizer Export",
       domain: fwConfig.navigatorDomain,
-      versions: { attack: "14", navigator: "4.9.1", layer: "4.5" },
+      versions: { attack: "19", navigator: "4.9.1", layer: "4.5" },
       techniques,
       gradient: { colors: ["#22c55e", "#f59e0b", "#ef4444"], minValue: 0, maxValue: 100 },
       description: "Exported from ATT&CK Path Optimizer on " + new Date().toISOString().split("T")[0],

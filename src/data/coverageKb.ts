@@ -43,7 +43,7 @@ export interface CoverageKB {
 
 export const COVERAGE_KB: CoverageKB = {
   metadata: {
-    attack_version: "16.1",
+    attack_version: "19.0",
     last_updated: "2026-03-10",
     sources: ["MITRE Evals ER7 (2025)", "MITRE Evals ER6 (2024)", "Sigma Rules", "Vendor Navigator Layers", "ATT&CK Data Sources"],
   },
@@ -781,7 +781,7 @@ export const COVERAGE_KB: CoverageKB = {
 // ICS Coverage KB — OT-specific tools and infrastructure
 export const ICS_COVERAGE_KB: CoverageKB = {
   metadata: {
-    attack_version: "16.1",
+    attack_version: "19.0",
     last_updated: "2026-03-10",
     sources: ["Vendor Documentation", "ICS-CERT Advisories", "ATT&CK for ICS Data Sources"],
   },
