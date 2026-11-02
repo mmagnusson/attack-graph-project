@@ -1,31 +1,41 @@
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react';
-import { CHAIN_COLORS, TACTICS } from '../../data/constants';
+import { CHAIN_COLORS, ENCODING } from '../../data/constants';
 import { ZoomButton } from './ZoomButton';
 import { theme } from '../../theme';
 import type { Technique, Edge, Tactic } from '../../types';
+import type { NodeMetrics } from '../../engine/displayMetrics';
+import type { PhaseCenter } from '../../engine/graphModel';
+import { fmtPct } from '../../engine/displayMetrics';
 
-interface PhaseCenterInfo {
-  x: number;
+export interface ChainOverlay {
+  id: string;
+  name: string;
+  colorIndex: number;
+  nodes: Set<string>;
+  edges: Edge[];
+}
+
+export interface GateMarker {
   label: string;
-  color?: string;
-  tacticId: string;
+  tacticIds: string[];
+  value: number;
 }
 
 interface GraphViewProps {
   techniques: Technique[];
   edges: Edge[];
   positions: Record<string, { x: number; y: number }>;
-  exposures: Record<string, number>;
-  betweenness: Record<string, number>;
-  chainCoverage: Record<string, number>;
+  metrics: Record<string, NodeMetrics>;
   selectedTech: string | null;
   onSelectTech: (id: string) => void;
-  highlightedChains: { path: string[]; name: string }[];
-  remediated: Set<string>;
-  optimalSet: string[];
+  chainOverlays: ChainOverlay[];
+  gateMarkers: GateMarker[] | null;
+  focusSet: Set<string> | null;
+  focusColor: string;
+  blindSpots: Set<string> | null;
   viewHeight: number;
   viewWidth: number;
-  phaseCenters: PhaseCenterInfo[];
+  phaseCenters: PhaseCenter[];
   onNodeDrag: (nodeId: string, dx: number, dy: number) => void;
   searchMatches: Set<string> | null;
   collapsedTactics: Set<string>;
@@ -34,18 +44,17 @@ interface GraphViewProps {
   chainBuilderPath: string[];
   onChainBuilderClick: (nodeId: string) => void;
   isolateChain: boolean;
-  gapNodes: Set<string> | null;
-  techDescriptions: Record<string, string | { summary: string }> | null;
   onPopout?: () => void;
   tactics: Tactic[];
-  profileExposures: Record<string, { coverageSources: any[] }> | null;
 }
 
-export function GraphView({ techniques, edges, positions, exposures, betweenness, chainCoverage,
-  selectedTech, onSelectTech, highlightedChains, remediated, optimalSet,
+const CRITICAL = "#d03b3b";
+
+export function GraphView({ techniques, edges, positions, metrics, selectedTech, onSelectTech,
+  chainOverlays, gateMarkers, focusSet, focusColor, blindSpots,
   viewHeight, viewWidth, phaseCenters, onNodeDrag, searchMatches,
   collapsedTactics, onToggleCollapse, chainBuilderMode, chainBuilderPath, onChainBuilderClick,
-  isolateChain, gapNodes, techDescriptions, onPopout, tactics, profileExposures }: GraphViewProps) {
+  isolateChain, onPopout, tactics }: GraphViewProps) {
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -91,54 +100,23 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
   const vh = viewHeight || 420;
   const vw = viewWidth || 1000;
 
-  const displayTechSet = useMemo(() => new Set(techniques.map(t => t.id)), [techniques]);
+  const { maxActivity, totalActivity } = useMemo(() => {
+    let max = 0, total = 0;
+    for (const t of techniques) {
+      const a = metrics[t.id]?.activity ?? 0;
+      total += a;
+      if (a > max) max = a;
+    }
+    return { maxActivity: max || 1, totalActivity: total || 1 };
+  }, [techniques, metrics]);
 
-  const chainComputations = useMemo(() => {
-    return highlightedChains.map((chain, colorIndex) => {
-      const projected: string[] = [];
-      for (const tid of chain.path) {
-        let mapped = tid;
-        if (!displayTechSet.has(tid)) {
-          const parentId = tid.includes('.') ? tid.split('.')[0] : null;
-          if (parentId && displayTechSet.has(parentId)) {
-            mapped = parentId;
-          } else {
-            continue;
-          }
-        }
-        if (projected.length === 0 || projected[projected.length - 1] !== mapped) {
-          projected.push(mapped);
-        }
-      }
-      const edgesSet = new Set<string>();
-      for (let i = 0; i < projected.length - 1; i++) {
-        edgesSet.add(projected[i] + "->" + projected[i + 1]);
-      }
-      return { chain, colorIndex, projected, edges: edgesSet, nodes: new Set(projected), color: CHAIN_COLORS[colorIndex].color };
-    });
-  }, [highlightedChains, displayTechSet]);
+  const maxEdgeWeight = useMemo(() => Math.max(1, ...edges.map(e => e.weight ?? 1)), [edges]);
 
   const nodeChainMap = useMemo(() => {
     const m: Record<string, number[]> = {};
-    chainComputations.forEach(c => {
-      c.nodes.forEach(n => {
-        if (!m[n]) m[n] = [];
-        m[n].push(c.colorIndex);
-      });
-    });
+    chainOverlays.forEach(c => c.nodes.forEach(n => { (m[n] ||= []).push(c.colorIndex); }));
     return m;
-  }, [chainComputations]);
-
-  const edgeChainMap = useMemo(() => {
-    const m: Record<string, number[]> = {};
-    chainComputations.forEach(c => {
-      c.edges.forEach(e => {
-        if (!m[e]) m[e] = [];
-        m[e].push(c.colorIndex);
-      });
-    });
-    return m;
-  }, [chainComputations]);
+  }, [chainOverlays]);
 
   const techTacticMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -146,14 +124,15 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
     return m;
   }, [techniques]);
 
+  const tacticById = useMemo(() => new Map(tactics.map(t => [t.id, t])), [tactics]);
+
   const collapsedSummary = useMemo(() => {
-    if (!collapsedTactics || collapsedTactics.size === 0) return {} as Record<string, { x: number; y: number; count: number }>;
     const summary: Record<string, { x: number; y: number; count: number }> = {};
+    if (!collapsedTactics || collapsedTactics.size === 0) return summary;
     collapsedTactics.forEach(tacId => {
-      const tacTechs = techniques.filter(t => t.tactic === tacId);
-      if (tacTechs.length === 0) return;
       let sx = 0, sy = 0, count = 0;
-      tacTechs.forEach(t => {
+      techniques.forEach(t => {
+        if (t.tactic !== tacId) return;
         const p = positions[t.id];
         if (p) { sx += p.x; sy += p.y; count++; }
       });
@@ -171,9 +150,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
       const fromCol = fromTac && collapsedTactics.has(fromTac);
       const toCol = toTac && collapsedTactics.has(toTac);
       if (fromCol && toCol && fromTac === toTac) return false;
-      const fk = fromCol ? "~" + fromTac : e.from;
-      const tk = toCol ? "~" + toTac : e.to;
-      const key = fk + ">" + tk;
+      const key = (fromCol ? "~" + fromTac : e.from) + ">" + (toCol ? "~" + toTac : e.to);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -187,23 +164,6 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
     }
     return positions[techId];
   }, [techTacticMap, collapsedTactics, collapsedSummary, positions]);
-
-  const missingChainEdges = useMemo(() => {
-    if (highlightedChains.length === 0) return [];
-    const graphEdgeSet = new Set(edges.map(e => e.from + "->" + e.to));
-    const missing: { from: string; to: string; colorIndex: number; color: string }[] = [];
-    const seen = new Set<string>();
-    chainComputations.forEach(c => {
-      for (let i = 0; i < c.projected.length - 1; i++) {
-        const key = c.projected[i] + "->" + c.projected[i + 1];
-        if (!graphEdgeSet.has(key) && !seen.has(key + ":" + c.colorIndex)) {
-          seen.add(key + ":" + c.colorIndex);
-          missing.push({ from: c.projected[i], to: c.projected[i + 1], colorIndex: c.colorIndex, color: c.color });
-        }
-      }
-    });
-    return missing;
-  }, [highlightedChains, chainComputations, edges]);
 
   const builderEdges = useMemo(() => {
     if (!chainBuilderMode || !chainBuilderPath || chainBuilderPath.length < 2) return [];
@@ -320,7 +280,6 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
         const t = transformRef.current;
 
         // Use SVG's built-in matrix to correctly map screen → viewBox coords
-        // This handles aspect ratio, letterboxing, and any CSS transforms
         const ctm = svg.getScreenCTM();
         let nodeX: number, nodeY: number;
         if (ctm) {
@@ -328,11 +287,9 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
           pt.x = touch.clientX;
           pt.y = touch.clientY;
           const svgPt = pt.matrixTransform(ctm.inverse());
-          // Untransform from viewBox coords to node-space coords
           nodeX = (svgPt.x - t.x) / t.scale;
           nodeY = (svgPt.y - t.y) / t.scale;
         } else {
-          // Fallback: simple linear mapping
           const rect = svg.getBoundingClientRect();
           const svgX = (touch.clientX - rect.left) / rect.width * viewWidthRef.current;
           const svgY = (touch.clientY - rect.top) / rect.height * viewHeightRef.current;
@@ -345,9 +302,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
         let closest: string | null = null;
         let closestDist = tapRadius;
         const curPositions = positionsRef.current;
-        const posKeys = Object.keys(curPositions);
-        for (let i = 0; i < posKeys.length; i++) {
-          const id = posKeys[i];
+        for (const id of Object.keys(curPositions)) {
           const p = curPositions[id];
           if (!p) continue;
           const d = Math.hypot(p.x - nodeX, p.y - nodeY);
@@ -406,9 +361,8 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
       const scale = transformRef.current.scale;
-      const vhCur = viewHeightRef.current;
       const svgDx = dx / rect.width * viewWidthRef.current / scale;
-      const svgDy = dy / rect.height * vhCur / scale;
+      const svgDy = dy / rect.height * viewHeightRef.current / scale;
       if (onNodeDragRef.current) onNodeDragRef.current(dragNodeRef.current, svgDx, svgDy);
       return;
     }
@@ -491,16 +445,26 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
     setTransform({ x: vw / 2 - cx * scale, y: vh / 2 - cy * scale, scale });
   }, [positions, vw, vh]);
 
+  const lineBetween = (from: { x: number; y: number }, to: { x: number; y: number }, offset = 0) => {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return null;
+    const ux = dx / len, uy = dy / len, px = -uy * offset, py = ux * offset, r = 14;
+    return { x1: from.x + ux * r + px, y1: from.y + uy * r + py, x2: to.x - ux * (r + 6) + px, y2: to.y - uy * (r + 6) + py };
+  };
+
+  const highlighting = chainOverlays.length > 0;
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div style={{ position: "absolute", top: 10, right: 10, display: "flex", flexDirection: "column", gap: 6, zIndex: 10 }}>
         <ZoomButton label="+" onClick={zoomIn} />
-        <ZoomButton label={"\u2212"} onClick={zoomOut} />
-        <ZoomButton label={"\u21BA"} onClick={resetZoom} />
+        <ZoomButton label={"−"} onClick={zoomOut} />
+        <ZoomButton label={"↺"} onClick={resetZoom} />
         <ZoomButton label="FIT" onClick={zoomToFit} />
-        {onPopout && <ZoomButton label={"\u2197"} onClick={onPopout} />}
+        {onPopout && <ZoomButton label={"↗"} onClick={onPopout} />}
       </div>
-      {highlightedChains.length > 0 && (
+      {highlighting && (
         <div style={{
           position: "absolute", top: 10, left: 10, zIndex: 10,
           display: "flex", flexDirection: "column", gap: 4,
@@ -508,24 +472,19 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
           padding: "8px 12px", borderRadius: 5, border: "1px solid " + theme.colors.borderSubtle,
         }}>
           <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 600 }}>
-            Active Chains
+            Highlighted actors
           </span>
-          {highlightedChains.map((chain, i) => (
-            <div key={chain.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{
-                width: 12, height: 3, borderRadius: 1,
-                background: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
-                flexShrink: 0,
-              }} />
-              <span style={{
-                fontSize: theme.fontSizes.base, color: CHAIN_COLORS[i % CHAIN_COLORS.length].color,
-                fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden",
-                textOverflow: "ellipsis", maxWidth: 220,
-              }}>
-                {chain.name}
+          {chainOverlays.map(c => (
+            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 12, height: 3, borderRadius: 1, background: CHAIN_COLORS[c.colorIndex].color, flexShrink: 0 }} />
+              <span style={{ fontSize: theme.fontSizes.base, color: theme.colors.textBody, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>
+                {c.name}
               </span>
             </div>
           ))}
+          <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, maxWidth: 240 }}>
+            Lines fan out from the actor's most-used technique to its options at the next stage.
+          </span>
         </div>
       )}
       <div style={{ position: "absolute", bottom: 10, right: 10, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, fontFamily: '"JetBrains Mono", monospace', background: "rgba(10,15,26,0.7)", padding: "4px 8px", borderRadius: 4, zIndex: 10 }}>
@@ -541,10 +500,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
       >
         <defs>
           <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
-            <polygon points="0 0, 6 2, 0 4" fill="#475569" fillOpacity="0.4" />
-          </marker>
-          <marker id="arrowhead-active" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
-            <polygon points="0 0, 6 2, 0 4" fill="#f59e0b" />
+            <polygon points="0 0, 6 2, 0 4" fill="#475569" fillOpacity="0.5" />
           </marker>
           {CHAIN_COLORS.map((cc, i) => (
             <marker key={"chain-marker-" + i} id={"arrowhead-chain-" + i} markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
@@ -561,12 +517,11 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
         </defs>
         <g transform={"translate(" + transform.x + "," + transform.y + ") scale(" + transform.scale + ")"}>
           {(() => {
-            const arr = phaseCenters || [];
             const charW = 4.5;
             const placed: { x: number; halfW: number; row: number }[] = [];
-            return arr.map((pc, i) => {
+            return phaseCenters.map((pc, i) => {
               const isCollapsed = collapsedTactics && collapsedTactics.has(pc.tacticId);
-              const text = (isCollapsed ? "[+] " : "[\u2212] ") + pc.label;
+              const text = (isCollapsed ? "[+] " : "[−] ") + pc.label;
               const halfW = text.length * charW / 2;
               let row = 0;
               for (let r = 0; r < 4; r++) {
@@ -578,7 +533,7 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
               return (
                 <text key={i} x={pc.x} y={18 + row * 11} textAnchor="middle" fill={pc.color || "#64748b"} fontSize="9.5" fontFamily="monospace" opacity={0.8}
                   style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(pc.tacticId); }}
+                  onClick={(e) => { e.stopPropagation(); onToggleCollapse(pc.tacticId); }}
                 >
                   {text}
                 </text>
@@ -586,11 +541,28 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
             });
           })()}
 
-          {collapsedTactics && Object.entries(collapsedSummary).map(([tacId, info]) => {
-            const tac = (tactics || TACTICS).find(t => t.id === tacId);
+          {gateMarkers && gateMarkers.flatMap(g => g.tacticIds.map(tid => {
+            const pc = phaseCenters.find(p => p.tacticId === tid);
+            if (!pc) return null;
+            const s = g.value < 0.2 ? { icon: "✂", word: "cut", color: ENCODING.cut }
+              : g.value < 0.6 ? { icon: "◐", word: "narrowed", color: "#fab219" }
+                : { icon: "○", word: "open", color: theme.colors.textMuted };
+            const label = s.icon + " " + s.word + " " + fmtPct(g.value);
+            const w = label.length * 7 + 12;
+            return (
+              <g key={"gate-" + g.label + tid}>
+                <title>{g.label}: {fmtPct(g.value, 1)} of attempts pass this stage without raising an alert</title>
+                <rect x={pc.x - w / 2} y={vh - 26} width={w} height={20} rx={5} fill={theme.colors.bgSurface} stroke={s.color} strokeWidth={1.5} />
+                <text x={pc.x} y={vh - 12} textAnchor="middle" fill={theme.colors.textBody} fontSize="12.5">{label}</text>
+              </g>
+            );
+          }))}
+
+          {Object.entries(collapsedSummary).map(([tacId, info]) => {
+            const tac = tacticById.get(tacId);
             return (
               <g key={"collapsed-" + tacId} style={{ cursor: "pointer" }}
-                onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(tacId); }}>
+                onClick={(e) => { e.stopPropagation(); onToggleCollapse(tacId); }}>
                 <circle cx={info.x} cy={info.y} r={20}
                   fill={tac?.color || "#6366f1"} fillOpacity={0.15}
                   stroke={tac?.color || "#6366f1"} strokeWidth={1.5} strokeOpacity={0.5} strokeDasharray="4,2"
@@ -602,127 +574,64 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
             );
           })}
 
-          {missingChainEdges.map((e, i) => {
-            const from = getNodePos(e.from);
-            const to = getNodePos(e.to);
-            if (!from || !to) return null;
-            const dx = to.x - from.x;
-            const dy = to.y - from.y;
-            const len = Math.sqrt(dx * dx + dy * dy);
-            if (len === 0) return null;
-            const ux = dx / len, uy = dy / len, r = 14;
-            return (
-              <line key={"chain-gap-" + i} x1={from.x + ux * r} y1={from.y + uy * r}
-                x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
-                stroke={e.color} strokeWidth={2} strokeOpacity={0.9}
-                markerEnd={"url(#arrowhead-chain-" + e.colorIndex + ")"} />
-            );
-          })}
-
           {builderEdges.map((e, i) => {
-            const from = positions[e.from];
-            const to = positions[e.to];
-            if (!from || !to) return null;
-            const dx = to.x - from.x;
-            const dy = to.y - from.y;
-            const len = Math.sqrt(dx * dx + dy * dy);
-            if (len === 0) return null;
-            const ux = dx / len, uy = dy / len, r = 14;
-            return (
-              <line key={"builder-" + i} x1={from.x + ux * r} y1={from.y + uy * r}
-                x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
-                stroke="#a855f7" strokeWidth={2.5} strokeOpacity={0.8}
-                markerEnd="url(#arrowhead-builder)" strokeDasharray="6,3" />
-            );
+            const from = positions[e.from], to = positions[e.to];
+            const l = from && to ? lineBetween(from, to) : null;
+            if (!l) return null;
+            return <line key={"builder-" + i} {...l} stroke="#a855f7" strokeWidth={2.5} strokeOpacity={0.8} markerEnd="url(#arrowhead-builder)" strokeDasharray="6,3" />;
           })}
 
-          {processedEdges.map((e, i) => {
-            const from = getNodePos(e.from);
-            const to = getNodePos(e.to);
-            if (!from || !to) return null;
-            const edgeKey = e.from + "->" + e.to;
-            const chainColors = edgeChainMap[edgeKey];
-            const isChainEdge = !!chainColors;
-            const isRemediatedEdge = remediated.has(e.from) || remediated.has(e.to);
-            const dimmed = highlightedChains.length > 0 && !isChainEdge;
-            if (dimmed && isolateChain) return null;
-            const searchDimmedEdge = searchMatches && searchMatches.size > 0 && !searchMatches.has(e.from) && !searchMatches.has(e.to);
-
-            const dx = to.x - from.x;
-            const dy = to.y - from.y;
-            const len = Math.sqrt(dx * dx + dy * dy);
-            if (len === 0) return null;
-            const ux = dx / len;
-            const uy = dy / len;
-            const r = 14;
-
-            if (isChainEdge && chainColors.length > 1) {
-              const px = -uy, py = ux;
-              const spacing = 3;
-              const totalWidth = (chainColors.length - 1) * spacing;
-              return (
-                <g key={i}>
-                  {chainColors.map((ci, j) => {
-                    const offset = -totalWidth / 2 + j * spacing;
-                    return (
-                      <line key={j}
-                        x1={from.x + ux * r + px * offset} y1={from.y + uy * r + py * offset}
-                        x2={to.x - ux * (r + 6) + px * offset} y2={to.y - uy * (r + 6) + py * offset}
-                        stroke={CHAIN_COLORS[ci].color} strokeWidth={1.5} strokeOpacity={searchDimmedEdge ? 0.04 : 0.9}
-                        markerEnd={"url(#arrowhead-chain-" + ci + ")"}
-                      />
-                    );
-                  })}
-                </g>
-              );
-            }
-
-            const chainColor = isChainEdge ? CHAIN_COLORS[chainColors[0]].color : null;
-            return (
-              <line
-                key={i}
-                x1={from.x + ux * r} y1={from.y + uy * r}
-                x2={to.x - ux * (r + 6)} y2={to.y - uy * (r + 6)}
-                stroke={isRemediatedEdge ? "#22c55e" : isChainEdge ? chainColor! : "#334155"}
-                strokeWidth={isChainEdge ? 2 : 0.7}
-                strokeOpacity={searchDimmedEdge ? 0.04 : dimmed ? 0.08 : isRemediatedEdge ? 0.3 : isChainEdge ? 0.9 : 0.2}
-                markerEnd={isChainEdge ? "url(#arrowhead-chain-" + chainColors[0] + ")" : "url(#arrowhead)"}
-                strokeDasharray={isRemediatedEdge ? "3,3" : "none"}
-              />
-            );
+          {!(highlighting && isolateChain) && processedEdges.map((e, i) => {
+            const from = getNodePos(e.from), to = getNodePos(e.to);
+            const l = from && to ? lineBetween(from, to) : null;
+            if (!l) return null;
+            const searchDimmed = searchMatches && searchMatches.size > 0 && !searchMatches.has(e.from) && !searchMatches.has(e.to);
+            const strength = (e.weight ?? 1) / maxEdgeWeight;
+            const opacity = searchDimmed ? 0.03 : highlighting ? 0.04 : 0.05 + 0.3 * strength;
+            return <line key={i} {...l} stroke="#475569" strokeWidth={0.6 + strength * 0.8} strokeOpacity={opacity} markerEnd="url(#arrowhead)" />;
           })}
+
+          {chainOverlays.map((c, ci) => c.edges.map((e, i) => {
+            const from = getNodePos(e.from), to = getNodePos(e.to);
+            const offset = (ci - (chainOverlays.length - 1) / 2) * 3;
+            const l = from && to ? lineBetween(from, to, offset) : null;
+            if (!l) return null;
+            return <line key={"fan-" + c.id + "-" + i} {...l} stroke={CHAIN_COLORS[c.colorIndex].color} strokeWidth={1.4} strokeOpacity={0.75}
+              markerEnd={"url(#arrowhead-chain-" + c.colorIndex + ")"} />;
+          }))}
 
           {techniques.map(t => {
             const pos = positions[t.id];
             if (!pos) return null;
             if (collapsedTactics && collapsedTactics.has(t.tactic)) return null;
-            const tactic = (tactics || TACTICS).find(ta => ta.id === t.tactic);
-            const exposure = exposures[t.id] ?? 1.0;
-            const bc = betweenness[t.id] ?? 0;
-            const cc = chainCoverage[t.id] ?? 0;
-            const priority = bc * exposure;
+            const tactic = tacticById.get(t.tactic);
+            const m = metrics[t.id];
+            const success = m?.success ?? 1;
+            const detection = m?.detection ?? 0;
+            const activity = m ? Math.sqrt(m.activity / maxActivity) : 0;
             const isSelected = selectedTech === t.id;
             const nodeColors = nodeChainMap[t.id];
             const isInChain = !!nodeColors;
-            const isRemediated = remediated.has(t.id);
-            const isOptimal = optimalSet.includes(t.id);
-            const dimmedNode = highlightedChains.length > 0 && !isInChain;
+            const dimmedNode = highlighting && !isInChain;
             if (dimmedNode && isolateChain) return null;
             const searchDimmed = searchMatches && searchMatches.size > 0 && !searchMatches.has(t.id);
+            const focused = focusSet?.has(t.id);
+            const blind = blindSpots?.has(t.id);
 
             const isSub = !!t.parentId;
-            const radius = isSub ? (5 + priority * 6) : (8 + priority * 10);
-            const nodeColor = isRemediated ? "#22c55e" : tactic?.color || "#6366f1";
-            const baseOpacity = dimmedNode ? 0.15 : exposure < 0.2 ? 0.3 : isSub ? 0.7 : 1;
+            const radius = isSub ? (5 + activity * 7) : (8 + activity * 12);
+            const baseOpacity = dimmedNode ? 0.15 : (focusSet && !focused) ? 0.35 : isSub ? 0.8 : 1;
             const opacity = searchDimmed ? Math.min(baseOpacity, 0.12) : baseOpacity;
-
+            const r1 = radius + 3, c1 = 2 * Math.PI * r1;
+            const r2 = radius + 6, c2 = 2 * Math.PI * r2;
             const chainStrokeColor = isInChain && nodeColors.length === 1 ? CHAIN_COLORS[nodeColors[0]].color : null;
+            const rot = "rotate(-90 " + pos.x + " " + pos.y + ")";
 
             return (
               <g key={t.id}
                 onMouseDown={(e) => handleNodeMouseDown(e, t.id)}
                 onMouseEnter={(e) => {
-                  clearTimeout(tooltipHideTimeout.current!);
+                  if (tooltipHideTimeout.current) clearTimeout(tooltipHideTimeout.current);
                   const rect = svgRef.current?.parentElement?.getBoundingClientRect();
                   if (rect) {
                     if (hoveredNode !== t.id) setTooltipExpanded(false);
@@ -733,37 +642,32 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
                 style={{ cursor: dragNodeRef.current === t.id ? "grabbing" : "pointer" }}
                 opacity={opacity}
               >
-                <circle cx={pos.x} cy={pos.y} r={radius + 3}
-                  fill="none" stroke={exposure > 0.7 ? "#ef4444" : exposure > 0.4 ? "#f59e0b" : "#22c55e"}
-                  strokeWidth={1.5} strokeOpacity={0.5} strokeDasharray={exposure * 20 + " " + (1 - exposure) * 20}
-                />
-                {profileExposures && profileExposures[t.id] && profileExposures[t.id].coverageSources.length > 0 && (
-                  <circle cx={pos.x} cy={pos.y} r={radius + 5.5}
-                    fill="none" stroke="#8b5cf6" strokeWidth={1} strokeOpacity={0.45}
-                    strokeDasharray="2,3"
-                  />
+                {/* residual success: arc length = chance an attempt works after prevention */}
+                <circle cx={pos.x} cy={pos.y} r={r1} fill="none" stroke={ENCODING.success} strokeOpacity={0.16} strokeWidth={2} />
+                {!m?.blocked && success > 0.005 && (
+                  <circle cx={pos.x} cy={pos.y} r={r1} fill="none" stroke={ENCODING.success} strokeWidth={2}
+                    strokeDasharray={(success * c1).toFixed(2) + " " + c1.toFixed(2)} transform={rot} style={{ transition: "stroke-dasharray 0.35s" }} />
                 )}
-                {isOptimal && !isRemediated && (
-                  <circle cx={pos.x} cy={pos.y} r={radius + 7}
-                    fill="none" stroke="#f59e0b" strokeWidth={2} strokeDasharray="2,2"
-                    opacity={0.8}
-                  >
+                {/* detection coverage: outer arc */}
+                {detection > 0.005 && (
+                  <>
+                    <circle cx={pos.x} cy={pos.y} r={r2} fill="none" stroke={ENCODING.detection} strokeOpacity={0.16} strokeWidth={1.5} />
+                    <circle cx={pos.x} cy={pos.y} r={r2} fill="none" stroke={ENCODING.detection} strokeWidth={1.5}
+                      strokeDasharray={(detection * c2).toFixed(2) + " " + c2.toFixed(2)} transform={rot} style={{ transition: "stroke-dasharray 0.35s" }} />
+                  </>
+                )}
+                {(focused || blind) && (
+                  <circle cx={pos.x} cy={pos.y} r={radius + 9} fill="none" stroke={focused ? focusColor : CRITICAL} strokeWidth={1.5}
+                    strokeDasharray={focused ? "3,2" : "2,3"} opacity={0.9}>
                     <animate attributeName="stroke-dashoffset" from="0" to="20" dur="2s" repeatCount="indefinite" />
                   </circle>
                 )}
-                {gapNodes && gapNodes.has(t.id) && !isRemediated && (
-                  <circle cx={pos.x} cy={pos.y} r={radius + 5}
-                    fill="none" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="3,3"
-                    opacity={0.7}
-                  >
-                    <animate attributeName="stroke-dashoffset" from="0" to="12" dur="1.5s" repeatCount="indefinite" />
-                  </circle>
-                )}
                 <circle cx={pos.x} cy={pos.y} r={radius}
-                  fill={nodeColor} fillOpacity={isRemediated ? 0.3 : 0.8}
+                  fill={tactic?.color || "#6366f1"} fillOpacity={m?.blocked ? 0.2 : 0.85}
                   stroke={isSelected ? "#fff" : chainStrokeColor || "transparent"}
                   strokeWidth={isSelected ? 2 : isInChain ? 1.5 : 0}
                   filter={isSelected || isInChain ? "url(#glow)" : "none"}
+                  style={{ transition: "r 0.35s" }}
                 />
                 {isInChain && nodeColors.length > 1 && (() => {
                   const ringR = radius + 1;
@@ -774,19 +678,18 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
                       fill="none" stroke={CHAIN_COLORS[ci].color} strokeWidth={2}
                       strokeDasharray={segLen + " " + (circumference - segLen)}
                       strokeDashoffset={-j * segLen}
-                      filter="url(#glow)"
                     />
                   ));
                 })()}
-                {cc > 0 && !dimmedNode && (
-                  <text x={pos.x} y={pos.y + 3} textAnchor="middle" fill="#fff" fontSize="8" fontWeight="bold" fontFamily="monospace">
-                    {cc}
-                  </text>
+                {m && m.mitigations > 0 && (
+                  <circle cx={pos.x + r1 * Math.SQRT1_2} cy={pos.y - r1 * Math.SQRT1_2} r={3} fill={ENCODING.prevention} stroke={theme.colors.bg} strokeWidth={1.5} />
                 )}
-                {isRemediated && (
-                  <text x={pos.x} y={pos.y + 4} textAnchor="middle" fill="#22c55e" fontSize="12" fontWeight="bold">{"\u2713"}</text>
-                )}
-                <text x={pos.x} y={pos.y + radius + 11} textAnchor="middle" fill="#94a3b8" fontSize="8.5" fontFamily="monospace">
+                {m?.blocked ? (
+                  <text x={pos.x} y={pos.y + 4} textAnchor="middle" fill={ENCODING.cut} fontSize="12" fontWeight="bold">{"✓"}</text>
+                ) : (m && m.actors > 0 && !dimmedNode && (
+                  <text x={pos.x} y={pos.y + 3} textAnchor="middle" fill="#fff" fontSize="8" fontWeight="bold" fontFamily="monospace">{m.actors}</text>
+                ))}
+                <text x={pos.x} y={pos.y + r2 + 9} textAnchor="middle" fill="#94a3b8" fontSize="8.5" fontFamily="monospace">
                   {t.id}
                 </text>
               </g>
@@ -797,19 +700,15 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
       {hoveredNode && tooltipPos && (() => {
         const ht = techniques.find(t => t.id === hoveredNode);
         if (!ht) return null;
-        const htTactic = (tactics || TACTICS).find(ta => ta.id === ht.tactic);
-        const htExposure = exposures[hoveredNode] ?? 1.0;
-        const htBetweenness = betweenness[hoveredNode] ?? 0;
-        const htChainCount = chainCoverage[hoveredNode] ?? 0;
-        const htDesc = techDescriptions?.[hoveredNode];
-        const htSummary = htDesc ? (typeof htDesc === 'string' ? htDesc : htDesc.summary) : null;
+        const m = metrics[hoveredNode];
+        const htSummary = ht.description ?? null;
         const TOOLTIP_TRUNC = 150;
-        const needsMore = htSummary && htSummary.length > TOOLTIP_TRUNC;
+        const needsMore = !!htSummary && htSummary.length > TOOLTIP_TRUNC;
         const displaySummary = htSummary && (!needsMore || tooltipExpanded) ? htSummary
           : htSummary ? htSummary.slice(0, htSummary.lastIndexOf(' ', TOOLTIP_TRUNC) || TOOLTIP_TRUNC) + '...' : null;
         return (
           <div
-            onMouseEnter={() => { tooltipHoveredRef.current = true; clearTimeout(tooltipHideTimeout.current!); }}
+            onMouseEnter={() => { tooltipHoveredRef.current = true; if (tooltipHideTimeout.current) clearTimeout(tooltipHideTimeout.current); }}
             onMouseLeave={() => { tooltipHoveredRef.current = false; clearTooltip(); }}
             style={{
               position: "absolute", left: tooltipPos.x, top: tooltipPos.y,
@@ -818,8 +717,15 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
               maxWidth: tooltipExpanded ? 420 : 320, fontSize: theme.fontSizes.body, color: theme.colors.textBody,
               boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>{ht.name}</div>
-            <div style={{ color: htTactic?.color, fontSize: theme.fontSizes.base, marginBottom: 6 }}>{htTactic?.name}</div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>{ht.id} {ht.name}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+              {ht.tactics.map(tid => {
+                const tac = tacticById.get(tid);
+                return <span key={tid} style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary }}>
+                  <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: tac?.color, marginRight: 4 }} />{tac?.name ?? tid}
+                </span>;
+              })}
+            </div>
             {displaySummary && (
               <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, lineHeight: "1.5", marginBottom: needsMore ? 4 : 8, borderTop: "1px solid " + theme.colors.border, paddingTop: 6 }}>
                 {displaySummary}
@@ -829,17 +735,23 @@ export function GraphView({ techniques, edges, positions, exposures, betweenness
               <div style={{ textAlign: "right", marginBottom: 4 }}>
                 <span onClick={() => setTooltipExpanded(prev => !prev)} style={{
                   fontSize: theme.fontSizes.small, color: theme.colors.blue, cursor: "pointer", userSelect: "none",
-                }}>{tooltipExpanded ? "\u25B2 LESS" : "\u25BC MORE"}</span>
+                }}>{tooltipExpanded ? "▲ LESS" : "▼ MORE"}</span>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px", fontSize: theme.fontSizes.base }}>
-              <span style={{ color: theme.colors.textMuted }}>Exposure</span>
-              <span style={{ color: htExposure > 0.7 ? theme.colors.red : htExposure > 0.4 ? theme.colors.orange : theme.colors.green }}>{(htExposure * 100).toFixed(0)}%</span>
-              <span style={{ color: theme.colors.textMuted }}>Betweenness</span>
-              <span style={{ color: theme.colors.blue }}>{(htBetweenness * 100).toFixed(1)}%</span>
-              <span style={{ color: theme.colors.textMuted }}>Chains</span>
-              <span style={{ color: theme.colors.indigo }}>{htChainCount}</span>
-            </div>
+            {m && (
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 12px", fontSize: theme.fontSizes.base, alignItems: "center" }}>
+                <span style={{ color: theme.colors.textMuted }}><span style={{ color: ENCODING.success }}>{"●"}</span> Residual success</span>
+                <span>{m.blocked ? "assumed blocked" : fmtPct(m.success)}</span>
+                <span style={{ color: theme.colors.textMuted }}><span style={{ color: ENCODING.detection }}>{"●"}</span> Detection coverage</span>
+                <span>{fmtPct(m.detection)}</span>
+                <span style={{ color: theme.colors.textMuted }}>Share of residual activity</span>
+                <span>{fmtPct(m.activity / totalActivity, 1)}</span>
+                <span style={{ color: theme.colors.textMuted }}>Modeled actors using it</span>
+                <span>{m.actors}</span>
+                <span style={{ color: theme.colors.textMuted }}><span style={{ color: ENCODING.prevention }}>{"●"}</span> Mitigations in place</span>
+                <span>{m.mitigations}</span>
+              </div>
+            )}
           </div>
         );
       })()}

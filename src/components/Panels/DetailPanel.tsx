@@ -1,360 +1,245 @@
-// ─── DetailPanel — Node detail with exposure controls, mitigations, threat context ──
+// ─── DetailPanel — one technique: residual risk, MITRE mitigations, MITRE detection ──
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { CHAIN_COLORS, CONTROL_CATEGORIES } from '../../data/constants';
-import { MITIGATION_DESCRIPTIONS } from '../../data/techniqueMetadata';
+import { useMemo, useState } from 'react';
+import type { AttackChain, AttackDataset, DefensePosture, FrameworkConfig, Technique, TechniqueAssessment } from '../../types';
+import type { RiskModelView } from '../../hooks/useRiskModel';
+import { simulateAddition } from '../../engine/riskModel';
+import { fmtPct } from '../../engine/displayMetrics';
+import { CHAIN_COLORS, ENCODING } from '../../data/constants';
 import { MetricBox, PopoutButton } from '../Analysis';
+import { Meter, SmallButton } from '../ui';
+import { linkButton, mono } from '../styles';
 import { theme } from '../../theme';
 
 interface DetailPanelProps {
-  selectedTech: string | null;
-  selectedTechData: any;
-  selectedTactic: any;
-  betweenness: Record<string, number>;
-  chainCoverage: Record<string, number>;
-  effectiveExposures: Record<string, number>;
-  exposures: Record<string, number>;
-  handleExposureChange: (techId: string, value: number) => void;
-  remediated: Set<string>;
-  toggleRemediate: (techId: string) => void;
-  deployedControls: Set<string>;
-  filteredChains: any[];
-  chainStatus: any[];
-  highlightedChains: any[];
-  toggleHighlightedChain: (chain: any) => void;
-  fwConfig: any;
-  profileExposures: Record<string, any> | null;
-  activeTechDescriptions: Record<string, any>;
-  activeChainTechContext: Record<string, any>;
-  activeMitigations: Record<string, any>;
-  popoutDetail: boolean;
-  setPopoutDetail: (v: boolean) => void;
+  cfg: FrameworkConfig;
+  dataset: AttackDataset;
+  rm: RiskModelView;
+  posture: DefensePosture;
+  tech: Technique | undefined;
+  platforms: ReadonlySet<string> | null;
+  exposure: number;
+  exposureOverridden: boolean;
+  setExposure: (id: string, v: number | undefined) => void;
+  toggleMitigation: (id: string) => void;
+  setDataComponents: (ids: string[], on: boolean) => void;
+  toggleBlocked: (id: string) => void;
+  assessment: Record<string, TechniqueAssessment> | null;
+  chains: AttackChain[];
+  colorOf: (id: string) => number | undefined;
+  toggleHighlighted: (id: string) => void;
+  onSelectTech: (id: string) => void;
+  showSubTechniques: boolean;
+  popout: boolean;
+  onPopout: () => void;
 }
 
-export function DetailPanel({
-  selectedTech, selectedTechData, selectedTactic,
-  betweenness, chainCoverage, effectiveExposures, exposures,
-  handleExposureChange, remediated, toggleRemediate,
-  deployedControls, filteredChains, chainStatus,
-  highlightedChains, toggleHighlightedChain,
-  fwConfig, profileExposures,
-  activeTechDescriptions, activeChainTechContext, activeMitigations,
-  popoutDetail, setPopoutDetail,
-}: DetailPanelProps) {
-  const [expandedExamples, setExpandedExamples] = useState(false);
-  const [expandedMitigation, setExpandedMitigation] = useState<string | null>(null);
+export function DetailPanel(p: DetailPanelProps) {
+  const { cfg, dataset, rm, posture, tech } = p;
+  const [openNote, setOpenNote] = useState<string | null>(null);
+  const [showAllActors, setShowAllActors] = useState(false);
 
-  // Reset expanded state when selected tech changes
-  const prevTechRef = React.useRef(selectedTech);
-  if (prevTechRef.current !== selectedTech) {
-    prevTechRef.current = selectedTech;
-    if (expandedExamples) setExpandedExamples(false);
-    if (expandedMitigation) setExpandedMitigation(null);
-  }
+  const family = useMemo(() => {
+    if (!tech) return [] as string[];
+    if (tech.parentId || p.showSubTechniques) return [tech.id];
+    return dataset.techniques.filter(t => t.id === tech.id || t.parentId === tech.id).map(t => t.id);
+  }, [tech, dataset, p.showSubTechniques]);
 
-  const techExamples = useMemo(() => {
-    if (!selectedTech) return null;
-    const raw = activeTechDescriptions[selectedTech];
-    if (!raw) return null;
-    return typeof raw === 'string' ? { summary: raw, examples: [] } : raw;
-  }, [selectedTech, activeTechDescriptions]);
+  const blockImpact = useMemo(() => {
+    if (!tech || !rm.model || !rm.baseState || rm.baseState.risk === 0) return 0;
+    if (posture.blocked.has(tech.id)) return 0;
+    return 1 - simulateAddition(rm.model, rm.params, rm.baseState, { blocked: [tech.id] }) / rm.baseState.risk;
+  }, [tech, rm.model, rm.params, rm.baseState, posture]);
 
-  const getChainTechContext = useCallback((chainName: string, techId: string) => {
-    const descs = activeChainTechContext[chainName];
-    if (!descs) return null;
-    if (descs[techId]) return descs[techId];
-    const subs = Object.entries(descs)
-      .filter(([k]: [string, any]) => k.startsWith(techId + '.'))
-      .map(([, v]: [string, any]) => v);
-    return subs.length > 0 ? subs[0] : null;
-  }, [activeChainTechContext]);
+  const users = useMemo(() => {
+    const fam = new Set(family);
+    return p.chains
+      .filter(c => c.path.some(t => fam.has(t)))
+      .map(c => ({ c, v: rm.viabilityById.get(c.id) ?? 0 }))
+      .sort((a, b) => b.v - a.v);
+  }, [family, p.chains, rm.viabilityById]);
 
-  if (!selectedTechData) {
+  if (!tech) {
     return (
-      <div style={{ paddingTop: "48px", textAlign: "center" }}>
-        <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.3 }}>⬡</div>
-        <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.body, fontWeight: 500, marginBottom: "6px" }}>
-          No node selected
-        </div>
-        <div style={{ color: theme.colors.textFaint, fontSize: theme.fontSizes.small, lineHeight: 1.6 }}>
-          Click a technique node in the graph to view<br />
-          exposure, mitigations, and attack chain context
-        </div>
-        <div style={{
-          marginTop: "20px", padding: "8px 14px", display: "inline-block",
-          background: theme.colors.bgSurface, borderRadius: theme.radii.md,
-          border: "1px solid " + theme.colors.borderSubtle,
-        }}>
-          <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
-            Tip: Press <kbd style={{ background: theme.colors.bgCard, padding: "1px 5px", borderRadius: 3, border: "1px solid " + theme.colors.border, fontSize: theme.fontSizes.tiny }}>3</kbd> to switch to this tab
-          </span>
-        </div>
+      <div style={{ paddingTop: 40, textAlign: "center", color: theme.colors.textMuted, fontSize: theme.fontSizes.small, lineHeight: 1.7 }}>
+        <div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>{"⬡"}</div>
+        Click a technique on the graph to see its residual risk, MITRE mitigations,<br />and MITRE detection strategy with the telemetry each analytic needs.
       </div>
     );
   }
 
+  const m = rm.metrics[tech.id];
+  const parent = tech.parentId;
+  const mitigations = dataset.mitigations.filter(x => x.techniques.includes(tech.id) || (parent && x.techniques.includes(parent)));
+  const note = (mid: string) => dataset.mitigationNotes[tech.id]?.[mid] ?? (parent ? dataset.mitigationNotes[parent]?.[mid] : undefined);
+  const strategy = dataset.detections[tech.id];
+  const subStrategies = family.length > 1 ? family.filter(id => id !== tech.id && dataset.detections[id]).length : 0;
+  const dcName = (id: string) => dataset.dataComponents.find(d => d.id === id)?.name ?? id;
+  const assess = p.assessment?.[tech.id];
+  const isBlocked = posture.blocked.has(tech.id);
+  const shownUsers = showAllActors ? users : users.slice(0, 8);
+
   return (
     <>
       <h3 style={{ ...theme.panelHeading }}>
-        Node Detail: {selectedTechData.id}
-        {!popoutDetail && <PopoutButton onClick={() => setPopoutDetail(true)} title="Pop out Detail" />}
+        {tech.id}
+        {!p.popout && <PopoutButton onClick={p.onPopout} title="Pop out Detail" />}
       </h3>
-      <div style={{ marginBottom: theme.spacing.xl }}>
-        <div style={{ fontSize: theme.fontSizes.large, fontWeight: 700, color: theme.colors.textPrimary }}>{selectedTechData.name}</div>
-        <div style={{ fontSize: theme.fontSizes.small, color: selectedTactic?.color, marginTop: theme.spacing.xs }}>
-          {selectedTactic?.name} ({selectedTactic?.id})
-        </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.spacing.lg, marginBottom: theme.spacing.xl }}>
-        <MetricBox label="Betweenness" value={((betweenness[selectedTech!] ?? 0) * 100).toFixed(1)} unit="%" color={theme.colors.blue} />
-        <MetricBox label="Chain Count" value={chainCoverage[selectedTech!] ?? 0} unit={"/" + filteredChains.length} color={theme.colors.indigo} />
-        <MetricBox label="Exposure" value={((effectiveExposures[selectedTech!] ?? 1) * 100).toFixed(0)} unit="%" color={
-          (effectiveExposures[selectedTech!] ?? 1) > 0.7 ? theme.colors.red : (effectiveExposures[selectedTech!] ?? 1) > 0.4 ? theme.colors.orange : theme.colors.green
-        } />
-        <MetricBox label="Priority Score" value={(
-          (betweenness[selectedTech!] ?? 0) * (effectiveExposures[selectedTech!] ?? 1) * (chainCoverage[selectedTech!] ?? 0) / Math.max(filteredChains.length, 1) * 100
-        ).toFixed(1)} unit="pts" color={theme.colors.orange} />
+      <div style={{ fontSize: theme.fontSizes.large, fontWeight: 700, color: theme.colors.textPrimary }}>{tech.name}</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "6px 0 12px" }}>
+        {tech.tactics.map(tid => {
+          const t = cfg.tactics.find(x => x.id === tid);
+          return <span key={tid} style={{ fontSize: theme.fontSizes.micro, padding: "2px 7px", borderRadius: theme.radii.sm, background: (t?.color ?? "#666") + "26", color: theme.colors.textBody }}>
+            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: t?.color, marginRight: 5 }} />{t?.name ?? tid}
+          </span>;
+        })}
+        {tech.platforms.length > 0 && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, alignSelf: "center" }}>{tech.platforms.join(" · ")}</span>}
       </div>
 
-      <div style={{ marginBottom: theme.spacing.xl }}>
-        <label style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted, display: "block", marginBottom: theme.spacing.sm }}>
-          Adjust Exposure ({selectedTech})
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: theme.spacing.md, marginBottom: theme.spacing.lg }}>
+        <MetricBox label="Residual success" value={m ? (m.success * 100).toFixed(0) : "–"} unit="%" color={ENCODING.success} />
+        <MetricBox label="Detection coverage" value={m ? (m.detection * 100).toFixed(0) : "–"} unit="%" color={ENCODING.detection} />
+        <MetricBox label="Actors using" value={m?.actors ?? 0} unit={"/" + (rm.model?.actors.length ?? 0)} color={theme.colors.textBody} />
+        <MetricBox label="Risk if blocked" value={isBlocked ? "blocked" : "−" + (blockImpact * 100).toFixed(1)} unit={isBlocked ? "" : "%"} color={theme.colors.textBody} />
+      </div>
+      {family.length > 1 && <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: -6, marginBottom: 10 }}>Figures include {family.length - 1} sub-techniques (shown rolled up).</div>}
+
+      <div style={{ display: "flex", gap: theme.spacing.lg, alignItems: "center", flexWrap: "wrap", marginBottom: theme.spacing.xl }}>
+        <SmallButton onClick={() => p.toggleBlocked(tech.id)} color={isBlocked ? ENCODING.cut : theme.colors.textSecondary}
+          title="What-if: treat this technique and its sub-techniques as fully blocked">
+          {isBlocked ? "✓ ASSUMED BLOCKED — UNDO" : "ASSUME FULLY BLOCKED"}
+        </SmallButton>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, flex: 1, minWidth: 220 }}>
+          Base exposure
+          <input type="range" min={0} max={100} value={Math.round(p.exposure * 100)} onChange={e => p.setExposure(tech.id, Number(e.target.value) / 100)}
+            style={{ flex: 1, accentColor: ENCODING.success }} aria-label="Base exposure" />
+          <span style={{ width: 34, color: theme.colors.textBody, fontVariantNumeric: "tabular-nums" }}>{fmtPct(p.exposure)}</span>
+          {p.exposureOverridden && <button onClick={() => p.setExposure(tech.id, undefined)} style={{ ...linkButton, color: theme.colors.blue }}>reset</button>}
         </label>
-        <input type="range" min={0} max={100} value={((exposures[selectedTech!] ?? 1) * 100)}
-          onChange={e => handleExposureChange(selectedTech!, (e.target as any).value / 100)}
-          style={{ width: "100%", accentColor: theme.colors.orange }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>
-          <span>Fully Mitigated</span><span>Fully Exposed</span>
-        </div>
-        {deployedControls.size > 0 && (exposures[selectedTech!] ?? 1) !== (effectiveExposures[selectedTech!] ?? 1) && (
-          <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.teal, marginTop: theme.spacing.xs }}>
-            Control-adjusted: {((effectiveExposures[selectedTech!] ?? 1) * 100).toFixed(0)}%
-          </div>
-        )}
       </div>
 
-      {/* Control Impact Breakdown */}
-      {(() => {
-        const applied = fwConfig.securityControls.filter((c: any) => deployedControls.has(c.id) && c.coverage[selectedTech!]);
-        if (applied.length === 0) return null;
-        const baseExp = exposures[selectedTech!] ?? 1;
-        const effExp = effectiveExposures[selectedTech!] ?? 1;
-        const netReduction = baseExp > 0 ? ((1 - effExp / baseExp) * 100).toFixed(0) : 0;
+      {/* MITRE mitigations */}
+      <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.sm }}>
+        <span style={{ color: ENCODING.prevention }}>{"⛨"}</span> MITRE mitigations ({mitigations.length})
+      </div>
+      {mitigations.length === 0 && <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted, marginBottom: 12 }}>MITRE lists no mitigation for this technique — detection is the only lever.</div>}
+      {mitigations.map(x => {
+        const n = note(x.id);
+        const open = openNote === x.id;
+        const inherited = !x.techniques.includes(tech.id);
         return (
-          <div style={{ marginBottom: theme.spacing.xl, padding: theme.spacing.lg, background: "#14b8a608", border: "1px solid #14b8a620", borderRadius: theme.radii.sm }}>
-            <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>Applied Controls</div>
-            {applied.map((ctrl: any) => {
-              const cat = CONTROL_CATEGORIES.find((c: any) => c.id === ctrl.category);
-              return (
-                <div key={ctrl.id} style={{ display: "flex", alignItems: "center", gap: theme.spacing.md, marginBottom: theme.spacing.xs }}>
-                  <span style={{
-                    fontSize: theme.fontSizes.micro, padding: "2px 6px", borderRadius: theme.radii.sm,
-                    background: (cat?.color || theme.colors.textMuted) + "20", color: cat?.color || theme.colors.textMuted,
-                  }}>{cat?.name?.split(" / ")[0] || ctrl.category}</span>
-                  <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody, flex: 1 }}>{ctrl.name}</span>
-                  <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.teal, fontWeight: 700 }}>
-                    {(ctrl.coverage[selectedTech!] * 100).toFixed(0)}%
-                  </span>
-                </div>
-              );
-            })}
-            <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.teal, marginTop: theme.spacing.sm, borderTop: "1px solid #14b8a615", paddingTop: theme.spacing.sm }}>
-              Net reduction: {netReduction}% (multiplicative)
+          <div key={x.id} style={{ padding: "4px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" disabled={!x.actionable} checked={posture.mitigations.has(x.id)} onChange={() => p.toggleMitigation(x.id)} aria-label={"In place: " + x.name} />
+              <span style={{ ...mono, fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, width: 44 }}>{x.id}</span>
+              <button onClick={() => setOpenNote(open ? null : x.id)} style={{ ...linkButton, flex: 1, textAlign: "left", fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>
+                {x.name}{inherited && <span style={{ color: theme.colors.textFaint }}> (via {parent})</span>}
+                {!x.actionable && <span style={{ color: theme.colors.textFaint }}> — not deployable</span>}
+                <span style={{ color: theme.colors.textFaint, marginLeft: 6, fontSize: theme.fontSizes.micro }}>{open ? "▲" : "▼"}</span>
+              </button>
             </div>
-          </div>
-        );
-      })()}
-
-      {/* Environment Profile Coverage Sources */}
-      {profileExposures && profileExposures[selectedTech!] && profileExposures[selectedTech!].coverageSources.length > 0 && (
-        <div style={{ marginBottom: theme.spacing.xl, padding: theme.spacing.lg, background: "#3b82f608", border: "1px solid #3b82f620", borderRadius: theme.radii.sm }}>
-          <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>
-            Environment Coverage Sources
-          </div>
-          {profileExposures[selectedTech!].coverageSources.map((src: any) => (
-            <div key={src.toolId} style={{ display: "flex", alignItems: "center", gap: theme.spacing.md, marginBottom: theme.spacing.xs }}>
-              <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody, flex: 1 }}>{src.name}</span>
-              <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.blue }}>
-                Detect: {(src.detect * 100).toFixed(0)}%
-              </span>
-              {src.prevent > 0 && (
-                <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.green }}>
-                  Prevent: {(src.prevent * 100).toFixed(0)}%
-                </span>
-              )}
-            </div>
-          ))}
-          <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.blue, marginTop: theme.spacing.sm, borderTop: "1px solid #3b82f615", paddingTop: theme.spacing.sm }}>
-            Combined coverage: {(profileExposures[selectedTech!].coverageReduction * 100).toFixed(0)}%
-            {profileExposures[selectedTech!].actorWeight > 1 && (
-              <span style={{ color: theme.colors.orange, marginLeft: theme.spacing.lg }}>
-                Threat actor weight: {profileExposures[selectedTech!].actorWeight.toFixed(2)}x
-              </span>
+            {open && (
+              <div style={{ marginLeft: 60, marginTop: 4, padding: 10, background: theme.colors.bgCard, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, lineHeight: 1.6 }}>
+                {n || x.description}
+                <div><a href={"https://attack.mitre.org/mitigations/" + x.id + "/"} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue, fontSize: theme.fontSizes.micro }}>MITRE {x.id} ↗</a></div>
+              </div>
             )}
           </div>
+        );
+      })}
+
+      {/* MITRE detection strategy */}
+      <div style={{ ...theme.sectionLabel, margin: "18px 0 6px" }}>
+        <span style={{ color: ENCODING.detection }}>{"◉"}</span> MITRE detection
+      </div>
+      {!strategy && <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>No detection strategy in ATT&CK v{cfg.attackVersion} for this technique.</div>}
+      {strategy && (
+        <>
+          <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody, marginBottom: 6 }}>
+            <a href={"https://attack.mitre.org/detectionstrategies/" + strategy.id + "/"} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue }}>{strategy.id}</a> {strategy.name}
+            {subStrategies > 0 && <span style={{ color: theme.colors.textMuted }}> · sub-techniques have {subStrategies} more strategies</span>}
+          </div>
+          {strategy.analytics.map(a => {
+            const outside = !!p.platforms && p.platforms.size > 0 && a.platforms.length > 0 && !a.platforms.some(x => p.platforms!.has(x));
+            const have = a.dataComponents.filter(d => posture.dataComponents.has(d)).length;
+            const open = openNote === a.id;
+            return (
+              <div key={a.id} style={{ padding: "6px 8px", marginBottom: 4, background: theme.colors.bgCard, borderRadius: theme.radii.sm, opacity: outside ? 0.5 : 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ ...mono, fontSize: theme.fontSizes.micro, color: theme.colors.textMuted }}>{a.id}</span>
+                  <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>{a.platforms.join(", ") || "All platforms"}</span>
+                  {outside && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted }}>outside selected platforms</span>}
+                  <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Meter value={a.dataComponents.length ? have / a.dataComponents.length : 0} color={ENCODING.detection} width={50} label="Telemetry collected for this analytic" />
+                    <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textBody, fontVariantNumeric: "tabular-nums" }}>{have}/{a.dataComponents.length}</span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                  {a.dataComponents.map(d => {
+                    const on = posture.dataComponents.has(d);
+                    return (
+                      <button key={d} onClick={() => p.setDataComponents([d], !on)} title={(on ? "Collected — click to remove" : "Not collected — click to mark collected") + " (" + d + ")"}
+                        style={{ ...linkButton, fontSize: theme.fontSizes.micro, padding: "2px 6px", borderRadius: theme.radii.sm,
+                          background: on ? ENCODING.detection + "26" : "transparent", border: "1px solid " + (on ? ENCODING.detection : theme.colors.border), color: theme.colors.textBody }}>
+                        {on ? "✓ " : ""}{dcName(d)}
+                      </button>
+                    );
+                  })}
+                  {a.dataComponents.length === 0 && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint }}>No log sources listed</span>}
+                  {a.description && (
+                    <button onClick={() => setOpenNote(open ? null : a.id)} style={{ ...linkButton, fontSize: theme.fontSizes.micro, color: theme.colors.blue }}>{open ? "hide logic" : "show logic"}</button>
+                  )}
+                </div>
+                {open && <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary, lineHeight: 1.5, marginTop: 4 }}>{a.description}</div>}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {assess && assess.sources.length > 0 && (
+        <div style={{ marginTop: theme.spacing.lg, padding: 10, background: theme.colors.bgCard, borderRadius: theme.radii.sm }}>
+          <div style={{ ...theme.sectionLabel, marginBottom: 4 }}>Your tools (estimated coverage)</div>
+          {assess.sources.map(s => (
+            <div key={s.toolId} style={{ display: "flex", gap: 10, fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>
+              <span style={{ flex: 1 }}>{s.name}</span>
+              <span style={{ color: theme.colors.textSecondary }}>detect ~{fmtPct(s.detect)}</span>
+              <span style={{ color: theme.colors.textSecondary }}>prevent ~{fmtPct(s.prevent)}</span>
+            </div>
+          ))}
+          <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, marginTop: 4 }}>Author estimates, not MITRE Evaluations results.</div>
         </div>
       )}
 
-      <button onClick={() => toggleRemediate(selectedTech!)}
-        style={{
-          width: "100%", padding: "10px",
-          background: remediated.has(selectedTech!) ? "#22c55e20" : theme.colors.orange,
-          color: remediated.has(selectedTech!) ? theme.colors.green : theme.colors.bg,
-          border: remediated.has(selectedTech!) ? "1px solid " + theme.colors.green : "none",
-          borderRadius: theme.radii.sm, fontSize: theme.fontSizes.body, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-        }}>
-        {remediated.has(selectedTech!) ? "\u2713 REMEDIATED \u2014 UNDO" : "MARK AS REMEDIATED"}
-      </button>
-
-      <div style={{ marginTop: theme.spacing.xl }}>
-        <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted, marginBottom: theme.spacing.sm }}>Appears in chains:</div>
-        {filteredChains.filter((c: any) => c.path.includes(selectedTech)).map((c: any, i: number) => (
-          <div key={i} style={{
-            fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, padding: "4px 0",
-            cursor: "pointer", textDecoration: chainStatus[filteredChains.indexOf(c)]?.broken ? "line-through" : "none",
-            opacity: chainStatus[filteredChains.indexOf(c)]?.broken ? 0.5 : 1,
-          }} onClick={() => toggleHighlightedChain(c)}>
-            {"\u2192"} {c.name}
-          </div>
-        ))}
-      </div>
-
-      {/* Contextual Technique Examples */}
-      <div style={{ marginTop: theme.spacing.xxl }}>
-        {(() => {
-          const TRUNC = 150;
-          const truncate = (text: string) => {
-            if (!text || text.length <= TRUNC || expandedExamples) return text;
-            return text.slice(0, text.lastIndexOf(' ', TRUNC) || TRUNC) + '...';
-          };
-          const chainsWithTech = highlightedChains.filter((c: any) => c.path.includes(selectedTech));
-          const anyLong = (() => {
-            if (chainsWithTech.length > 0) {
-              for (const c of chainsWithTech) {
-                const ctx = getChainTechContext(c.name, selectedTech!);
-                if (ctx && ctx.length > TRUNC) return true;
-              }
-              if (techExamples?.summary?.length > TRUNC) return true;
-              return false;
-            }
-            return techExamples?.summary?.length > TRUNC;
-          })();
-          if (chainsWithTech.length > 0) {
-            return (
-              <>
-                <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>Threat Actor Context</div>
-                {chainsWithTech.map((c: any, i: number) => {
-                  const colorIdx = highlightedChains.indexOf(c);
-                  const chainColor = CHAIN_COLORS[colorIdx % CHAIN_COLORS.length].color;
-                  const ctx = getChainTechContext(c.name, selectedTech!);
-                  return (
-                    <div key={i} style={{
-                      borderLeft: "3px solid " + chainColor,
-                      paddingLeft: theme.spacing.lg,
-                      marginBottom: theme.spacing.lg,
-                    }}>
-                      <div style={{ fontSize: theme.fontSizes.small, fontWeight: 700, color: chainColor, marginBottom: theme.spacing.xs }}>{c.name}</div>
-                      <div style={{ fontSize: theme.fontSizes.small, color: ctx ? "#cbd5e1" : theme.colors.textFaint, fontStyle: ctx ? "normal" : "italic", lineHeight: "1.5" }}>
-                        {ctx ? truncate(ctx) : "No specific context available for this technique"}
-                      </div>
-                    </div>
-                  );
-                })}
-                {techExamples && (
-                  <div style={{ marginTop: theme.spacing.lg, opacity: 0.5 }}>
-                    <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginBottom: theme.spacing.xs }}>General usage:</div>
-                    <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary, lineHeight: "1.5" }}>{truncate(techExamples.summary)}</div>
-                  </div>
-                )}
-                {anyLong && (
-                  <div style={{ marginTop: theme.spacing.sm, textAlign: "right" }}>
-                    <span onClick={() => setExpandedExamples(prev => !prev)} style={{
-                      fontSize: theme.fontSizes.tiny, color: theme.colors.blue, cursor: "pointer", userSelect: "none",
-                    }}>{expandedExamples ? "\u25B2 LESS" : "\u25BC MORE"}</span>
-                  </div>
-                )}
-              </>
-            );
-          }
-          if (techExamples) {
-            return (
-              <>
-                <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>Real-World Usage</div>
-                <div style={{ fontSize: theme.fontSizes.small, color: "#cbd5e1", lineHeight: "1.5", marginBottom: theme.spacing.md }}>{truncate(techExamples.summary)}</div>
-                {(expandedExamples || techExamples.summary.length <= TRUNC) && techExamples.examples.length > 0 && (
-                  <ul style={{ margin: "0", paddingLeft: "16px" }}>
-                    {techExamples.examples.map((ex: string, i: number) => (
-                      <li key={i} style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary, lineHeight: "1.6", marginBottom: theme.spacing.xs }}>{ex}</li>
-                    ))}
-                  </ul>
-                )}
-                {anyLong && (
-                  <div style={{ marginTop: theme.spacing.sm, textAlign: "right" }}>
-                    <span onClick={() => setExpandedExamples(prev => !prev)} style={{
-                      fontSize: theme.fontSizes.tiny, color: theme.colors.blue, cursor: "pointer", userSelect: "none",
-                    }}>{expandedExamples ? "\u25B2 LESS" : "\u25BC MORE"}</span>
-                  </div>
-                )}
-              </>
-            );
-          }
-          return (
-            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textFaint, fontStyle: "italic" }}>No usage examples available for this technique</div>
-          );
-        })()}
-      </div>
-
-      {/* MITRE Mitigations */}
-      {(() => {
-        const mits = activeMitigations[selectedTech!];
-        if (!mits || mits.length === 0) return null;
+      {/* Actors */}
+      <div style={{ ...theme.sectionLabel, margin: "18px 0 6px" }}>Used by {users.length} modeled actors</div>
+      {shownUsers.map(({ c, v }) => {
+        const hi = p.colorOf(c.id) ?? -1;
+        const usage = family.map(t => dataset.usageNotes[c.id]?.[t]).find(Boolean);
         return (
-          <div style={{ marginTop: theme.spacing.xxl }}>
-            <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>MITRE Mitigations</div>
-            {mits.map((m: any, i: number) => {
-              const mappedCtrl = fwConfig.mitigationControlMap[m.name];
-              const isDeployed = mappedCtrl && deployedControls.has(mappedCtrl);
-              const desc = m.description || MITIGATION_DESCRIPTIONS[m.mitreId];
-              const isExpanded = expandedMitigation === m.mitreId;
-              return (
-                <div key={i} style={{ marginBottom: theme.spacing.sm }}>
-                  <div
-                    onClick={() => desc && setExpandedMitigation(isExpanded ? null : m.mitreId)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: theme.spacing.md,
-                      cursor: desc ? "pointer" : "default",
-                      padding: "4px 0",
-                    }}>
-                    <span style={{ fontSize: theme.fontSizes.base, color: isDeployed ? theme.colors.green : theme.colors.textMuted }}>{isDeployed ? "\u2713" : "\u25CB"}</span>
-                    <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint, minWidth: "42px", fontFamily: '"JetBrains Mono", monospace' }}>{m.mitreId}</span>
-                    <span style={{ fontSize: theme.fontSizes.small, color: isDeployed ? theme.colors.green : theme.colors.textBody }}>{m.name}</span>
-                    {desc && (
-                      <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, marginLeft: 4 }}>
-                        {isExpanded ? "\u25B2" : "\u25BC"}
-                      </span>
-                    )}
-                    {mappedCtrl && (
-                      <span style={{ fontSize: theme.fontSizes.micro, color: isDeployed ? theme.colors.green : theme.colors.orange, marginLeft: "auto" }}>
-                        {isDeployed ? "deployed" : "available"}
-                      </span>
-                    )}
-                  </div>
-                  {isExpanded && desc && (
-                    <div style={{
-                      marginLeft: "34px", marginTop: theme.spacing.xs, padding: theme.spacing.lg,
-                      background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle,
-                      borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small,
-                      color: theme.colors.textSecondary, lineHeight: "1.6",
-                    }}>
-                      {desc}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div key={c.id} style={{ padding: "3px 0", borderLeft: hi >= 0 ? "3px solid " + CHAIN_COLORS[hi].color : "3px solid transparent", paddingLeft: 8 }}>
+            <button onClick={() => p.toggleHighlighted(c.id)} style={{ ...linkButton, display: "flex", width: "100%", alignItems: "center", gap: 8, fontSize: theme.fontSizes.small, color: theme.colors.textBody, textAlign: "left" }}>
+              <span style={{ flex: 1 }}>{c.name}{c.viaSoftware.some(t => family.includes(t)) && !c.path.some(t => family.includes(t) && !c.viaSoftware.includes(t)) && <span style={{ color: theme.colors.textFaint }}> (via software)</span>}</span>
+              <Meter value={v} color={ENCODING.success} width={40} height={4} label="Viability" />
+              <span style={{ width: 34, textAlign: "right", fontSize: theme.fontSizes.micro, fontVariantNumeric: "tabular-nums" }}>{fmtPct(v)}</span>
+            </button>
+            {hi >= 0 && usage && <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary, lineHeight: 1.5, margin: "2px 0 4px" }}>{usage}</div>}
           </div>
         );
-      })()}
+      })}
+      {users.length > 8 && (
+        <button onClick={() => setShowAllActors(v => !v)} style={{ ...linkButton, color: theme.colors.blue, fontSize: theme.fontSizes.tiny, marginTop: 4 }}>
+          {showAllActors ? "Show fewer" : "Show all " + users.length}
+        </button>
+      )}
+
+      {tech.description && (
+        <>
+          <div style={{ ...theme.sectionLabel, margin: "18px 0 6px" }}>About this technique</div>
+          <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, lineHeight: 1.6, whiteSpace: "pre-line" }}>{tech.description}</div>
+          <a href={"https://attack.mitre.org/techniques/" + tech.id.replace('.', '/') + "/"} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue, fontSize: theme.fontSizes.micro }}>MITRE {tech.id} ↗</a>
+        </>
+      )}
     </>
   );
 }

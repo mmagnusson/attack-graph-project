@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Type check (app, tooling, tests)
+        run: npx tsc -b
+      - name: Lint
+        run: npm run lint
+      - name: Unit + golden tests
+        run: npm test
+      - name: Production build
+        run: npx vite build
+
+  # Manual: confirm public/data matches what the current parser produces from the pinned ATT&CK release
+  data-freshness:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run data
+      - name: Bundled datasets are up to date
+        run: git diff --exit-code --stat public/data

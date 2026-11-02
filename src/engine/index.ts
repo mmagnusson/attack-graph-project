@@ -1,41 +1,40 @@
 // ─── Engine Barrel Export ─────────────────────────────────────────────────────
 
 export {
-  computeExposureScores,
-  buildActorTechMap,
+  assessEnvironment,
+  assessmentToModelInputs,
+  actorWeightsFor,
   getKBToolsByCategory,
   getKBInfraByCategory,
+  ACTOR_OF_CONCERN_WEIGHT,
 } from './exposureEngine';
+export type { GroupedTool, GroupedInfra, GroupedToolCategory, GroupedInfraCategory } from './exposureEngine';
 
-export type {
-  ActorTechMap,
-  GroupedTool,
-  GroupedInfra,
-  GroupedToolCategory,
-  GroupedInfraCategory,
-} from './exposureEngine';
+export { layoutNodes, rollupId, chainByPhase, buildCooccurrenceEdges, chainFanEdges } from './graphModel';
+export type { NodePosition, PhaseCenter, LayoutResult } from './graphModel';
+
+export { detectFramework, parseStixBundle, cleanDescription, PARSER_VERSION } from './stixParser';
+export type { StixBundle, ParserConfig } from './stixParser';
 
 export {
-  computeBetweenness,
-  computeChainCoverage,
-  findOptimalRemediation,
-  layoutNodes,
-  sanitizeCSVCell,
-} from './graphModel';
-
-export type {
-  NodePosition,
-  PhaseCenter,
-  LayoutResult,
-  RemediationResult,
-} from './graphModel';
+  compileModel, evaluateModel, simulateAddition, applyAddition, actorBreakdown, viabilityParts,
+  techniqueActivity, gateValue, telemetryCoverage, stackedMitigation, clamp01,
+  DEFAULT_MODEL_PARAMS, SENSITIVITY_BOUNDS,
+} from './riskModel';
+export type { CompileInputs, CompiledModel, CompiledActor, ModelState, Addition } from './riskModel';
 
 export {
-  detectFramework,
-  parseStixBundle,
-} from './stixParser';
+  buildCatalog, marginalValues, optimizePortfolio, evaluateItems, withItems, defaultCost, fullCost,
+  TIER_COSTS, ORG_SIZES,
+} from './portfolioOptimizer';
+export type { CostModel, OrgSize, OptimizeOptions } from './portfolioOptimizer';
 
-export type {
-  StixBundle,
-  ParsedStixData,
-} from './stixParser';
+export { rollupMetrics, defenseFootprint, nodeDefenses, findBlindSpots, fmtPct, fmtUsd } from './displayMetrics';
+export type { NodeMetrics, NodeDefenses, BlindSpot } from './displayMetrics';
+
+export { buildBoardReport, esc } from './boardReport';
+export type { BoardReportInput } from './boardReport';
+
+export { tagSectors, tagCountry, SECTORS } from './actorTags';
+
+export { sanitizeCSVCell, csvRow, downloadFile, today } from './csv';

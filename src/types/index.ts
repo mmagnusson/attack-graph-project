@@ -1,38 +1,39 @@
 // ─── AttackBreaker — Type Barrel ────────────────────────────────────
 // Re-exports all types from domain-specific modules.
 
-// Graph core types
 export type {
+  FrameworkId,
   Tactic,
   Technique,
   Edge,
+  ChainKind,
   AttackChain,
-  ChainColor,
-  ControlCategory,
-  ControlCategoryInfo,
-  SecurityControl,
-  ControlPreset,
+  MitigationDef,
+  AnalyticDef,
+  DetectionStrategyDef,
+  DataComponentDef,
+  AttackDataset,
+  CostTier,
+  DefenseKind,
+  TelemetrySource,
+  PosturePreset,
+  GateDef,
   EnvPreset,
-  ChainProfile,
-  TechniqueExample,
-  ChainTechniqueContext,
-  Mitigation,
-  EnterprisePlatformId,
-  IcsPlatformId,
-  PlatformId,
-  FrameworkId,
-  DataSourceId,
-  SectorFilter,
-  PhaseWeights,
-  StixTacticMap,
-  TacticPhase,
-  TacticToPhase,
-  MitigationControlMap,
+  ChainColor,
   FrameworkConfig,
-  ParsedStixData,
 } from "./graph";
 
-// Coverage knowledge base types
+export type {
+  ModelParams,
+  DefensePosture,
+  ToolCoverage,
+  GateResult,
+  GateOption,
+  CatalogItem,
+  PlanStep,
+  PlanResult,
+} from "./model";
+
 export type {
   ToolTechniqueScore,
   CoverageTool,
@@ -43,10 +44,9 @@ export type {
   CoverageKB,
 } from "./coverageKb";
 
-// Environment profile and exposure types
 export type {
   OrganizationContext,
   EnvironmentProfile,
   CoverageSource,
-  TechniqueExposure,
+  TechniqueAssessment,
 } from "./environment";

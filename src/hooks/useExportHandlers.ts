@@ -1,191 +1,139 @@
-// ─── useExportHandlers — CSV, Navigator layer, remediation plan, coverage exports ──
+// ─── useExportHandlers — CSV, Navigator layer, plan, board report ───────────
 
 import { useCallback } from 'react';
-import { sanitizeCSVCell } from '../engine/graphModel';
+import type {
+  AttackDataset, DefensePosture, FrameworkConfig, GateDef, ModelParams, PlanResult, TechniqueAssessment,
+} from '../types';
+import { evaluateModel, type CompiledModel, type ModelState } from '../engine/riskModel';
+import { withItems } from '../engine/portfolioOptimizer';
+import { buildBoardReport } from '../engine/boardReport';
+import { csvRow, downloadFile, today } from '../engine/csv';
+import { SECTORS } from '../engine/actorTags';
 
 interface UseExportHandlersArgs {
-  displayTechniques: any[];
-  effectiveExposures: Record<string, number>;
-  betweenness: Record<string, number>;
-  chainCoverage: Record<string, number>;
-  filteredChains: any[];
-  remediated: Set<string>;
-  optimal: { selected: string[]; chainsDisrupted: number; chainsTotal: number };
-  chainStatus: any[];
-  fwConfig: any;
-  deployedControls: Set<string>;
-  profileExposures: Record<string, any> | null;
-  gapAnalysis: { gaps: any[]; noCoverageCount: number; notDeployedCount: number };
-  exposures: Record<string, number>;
-  activeTechniques: any[];
-  phaseWeighting: boolean;
+  cfg: FrameworkConfig;
+  dataset: AttackDataset | null;
+  model: CompiledModel | null;
+  state: ModelState | null;
+  activity: Float64Array | null;
+  params: ModelParams;
+  plan: PlanResult | null;
+  frontier: PlanResult | null;
+  sensitivity: { low: number; high: number } | null;
+  posture: DefensePosture;
+  budget: number;
+  sector: string;
+  gates: GateDef[];
+  includeSoftware: boolean;
+  includeCampaigns: boolean;
+  assessment: Record<string, TechniqueAssessment> | null;
 }
 
-export function useExportHandlers({
-  displayTechniques, effectiveExposures, betweenness, chainCoverage,
-  filteredChains, remediated, optimal, chainStatus, fwConfig,
-  deployedControls, profileExposures, gapAnalysis,
-}: UseExportHandlersArgs) {
+export function useExportHandlers(a: UseExportHandlersArgs) {
+  const { cfg, dataset, model, state, activity, params, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, assessment } = a;
 
   const exportCSV = useCallback(() => {
-    let csv = "Rank,Technique ID,Name,Tactic,Exposure%,Betweenness%,Chain Count,Priority Score,Remediated,In Optimal Set\n";
-    displayTechniques
-      .map((t: any) => ({
-        ...t,
-        exposure: effectiveExposures[t.id] ?? 1.0,
-        bc: betweenness[t.id] ?? 0,
-        cc: chainCoverage[t.id] ?? 0,
-        priority: (betweenness[t.id] ?? 0) * (effectiveExposures[t.id] ?? 1.0) * (chainCoverage[t.id] ?? 0) / Math.max(filteredChains.length, 1),
-      }))
-      .sort((a: any, b: any) => b.priority - a.priority)
-      .forEach((t: any, i: number) => {
-        const tactic = fwConfig.tactics.find((ta: any) => ta.id === t.tactic);
-        csv += [
-          i + 1, sanitizeCSVCell(t.id), '"' + sanitizeCSVCell(t.name).replace(/"/g, '""') + '"', sanitizeCSVCell(tactic?.name || ""),
-          (t.exposure * 100).toFixed(1), (t.bc * 100).toFixed(1), t.cc,
-          (t.priority * 100).toFixed(1),
-          remediated.has(t.id) ? "Y" : "N",
-          optimal.selected.includes(t.id) ? "Y" : "N",
-        ].join(",") + "\n";
-      });
-    csv += "\nChain Name,Severity%,Disrupted,Break Points,Avg Exposure%,Sector\n";
-    chainStatus.forEach((c: any) => {
-      csv += [
-        '"' + sanitizeCSVCell(c.name).replace(/"/g, '""') + '"',
-        (c.severity * 100).toFixed(0),
-        c.broken ? "Y" : "N",
-        '"' + sanitizeCSVCell(c.breakpoints.join("; ")) + '"',
-        (c.avgExposure * 100).toFixed(1),
-        sanitizeCSVCell(c.sector),
-      ].join(",") + "\n";
+    if (!dataset || !model || !state || !activity) return;
+    const tacticName = (id: string) => cfg.tactics.find(t => t.id === id)?.name ?? id;
+    const totalAct = activity.reduce((s, x) => s + x, 0) || 1;
+    let csv = csvRow(['Technique ID', 'Name', 'Tactics', 'Actors', 'Residual success %', 'Detection coverage %', 'Activity share %', 'Mitigations in place', 'Assumed blocked', 'Detection strategy']);
+    dataset.techniques.forEach(t => {
+      const i = model.techIndex.get(t.id)!;
+      const det = 1 - (1 - state.telemetry[i]) * (1 - model.toolDetect[i]);
+      csv += csvRow([t.id, t.name, t.tactics.map(tacticName).join('; '), model.techActors[i].length,
+        +(state.p[i] * 100).toFixed(1), +(det * 100).toFixed(1), +(activity[i] / totalAct * 100).toFixed(2),
+        state.mitCount[i], state.blocked[i] ? 'Y' : 'N', dataset.detections[t.id]?.id ?? '']);
     });
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "attack-path-analysis-" + new Date().toISOString().split("T")[0] + ".csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [displayTechniques, effectiveExposures, betweenness, chainCoverage, filteredChains, remediated, optimal, chainStatus, fwConfig]);
+    csv += '\n' + csvRow(['Actor ID', 'Name', 'Kind', 'Viability %', 'Weight', 'Sectors', 'Techniques']);
+    model.actors.forEach((act, i) => {
+      csv += csvRow([act.chain.id, act.chain.name, act.chain.kind, +(state.viability[i] * 100).toFixed(1), act.weight, act.chain.sectors.join('; '), act.chain.path.length]);
+    });
+    downloadFile(csv, 'attackbreaker-analysis-' + today() + '.csv', 'text/csv');
+  }, [cfg, dataset, model, state, activity]);
+
+  const exportPlanCSV = useCallback(() => {
+    if (!plan) return;
+    const w = plan.totalWeight || 1;
+    let csv = csvRow(['Step', 'Defense ID', 'Defense', 'Type', 'Est. annual cost (USD)', 'Cumulative cost', 'Risk removed (pts)', 'Residual risk %']);
+    plan.steps.forEach((s, i) => {
+      csv += csvRow([i + 1, s.item.id, s.item.name, s.item.kind, s.item.cost, s.cumulativeCost, +(s.delta / w * 100).toFixed(2), +(s.risk / w * 100).toFixed(1)]);
+    });
+    csv += '\n' + csvRow(['Budget', budget]) + csvRow(['Baseline residual %', +(plan.baselineRisk / w * 100).toFixed(1)]) + csvRow(['Final residual %', +(plan.finalRisk / w * 100).toFixed(1)]);
+    csv += csvRow(['Note', 'Costs are placeholder estimates unless edited in AttackBreaker'] );
+    downloadFile(csv, 'attackbreaker-plan-' + today() + '.csv', 'text/csv');
+  }, [plan, budget]);
 
   const exportNavigatorLayer = useCallback(() => {
-    const techniques = displayTechniques.map((t: any) => {
-      const exposure = effectiveExposures[t.id] ?? 1.0;
-      const isRemediated = remediated.has(t.id);
-      const bc = betweenness[t.id] ?? 0;
-      const cc = chainCoverage[t.id] ?? 0;
-      const score = Math.round(exposure * 100);
-      const color = isRemediated ? "#22c55e" : exposure > 0.7 ? "#ef4444" : exposure > 0.4 ? "#f59e0b" : "#22c55e";
-      const deployedForTech = fwConfig.securityControls.filter((c: any) => deployedControls.has(c.id) && c.coverage[t.id]);
-      const commentParts: string[] = [];
-      commentParts.push(isRemediated ? "REMEDIATED" : "Exposure: " + (exposure * 100).toFixed(0) + "%");
-      commentParts.push("Betweenness: " + (bc * 100).toFixed(1) + "%");
-      commentParts.push("Chain count: " + cc);
-      if (deployedForTech.length > 0) commentParts.push("Controls: " + deployedForTech.map((c: any) => c.name).join(", "));
-      if (profileExposures && profileExposures[t.id]) {
-        const pe = profileExposures[t.id];
-        if (pe.coverageSources.length > 0) {
-          commentParts.push("Covered by: " + pe.coverageSources.map((s: any) => s.name + " (" + (s.detect * 100).toFixed(0) + "%)").join(", "));
-        }
-        commentParts.push("Base exposure: " + (pe.baseExposure * 100).toFixed(0) + "% | Coverage: " + (pe.coverageReduction * 100).toFixed(0) + "%");
-      }
+    if (!dataset || !model || !state) return;
+    const techniques = dataset.techniques.map(t => {
+      const i = model.techIndex.get(t.id)!;
+      const det = 1 - (1 - state.telemetry[i]) * (1 - model.toolDetect[i]);
       return {
         techniqueID: t.id,
-        tactic: fwConfig.tacticToPhase[t.tactic] || "",
-        score,
-        color,
-        comment: commentParts.join(" | "),
-        enabled: !isRemediated,
+        tactic: cfg.tacticToPhase[t.tactic] || "",
+        score: Math.round(state.p[i] * 100),
+        comment: [
+          state.blocked[i] ? 'Assumed blocked' : 'Residual success ' + Math.round(state.p[i] * 100) + '%',
+          'Detection coverage ' + Math.round(det * 100) + '%',
+          'Actors ' + model.techActors[i].length,
+          'Mitigations in place ' + state.mitCount[i],
+        ].join(' | '),
+        enabled: !state.blocked[i],
       };
     });
     const layer = {
-      name: "ATT&CK Path Optimizer Export",
-      domain: fwConfig.navigatorDomain,
-      versions: { attack: "19", navigator: "4.9.1", layer: "4.5" },
+      name: "AttackBreaker — residual technique success",
+      domain: cfg.navigatorDomain,
+      versions: { attack: cfg.attackVersion.split('.')[0], navigator: "4.9.1", layer: "4.5" },
       techniques,
-      gradient: { colors: ["#22c55e", "#f59e0b", "#ef4444"], minValue: 0, maxValue: 100 },
-      description: "Exported from ATT&CK Path Optimizer on " + new Date().toISOString().split("T")[0],
+      gradient: { colors: ["#fcfcfb", "#d95926"], minValue: 0, maxValue: 100 },
+      description: "Residual chance each technique succeeds after modeled mitigations. Exported " + today(),
     };
-    const blob = new Blob([JSON.stringify(layer, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "attack-navigator-layer-" + new Date().toISOString().split("T")[0] + ".json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [displayTechniques, effectiveExposures, betweenness, chainCoverage, remediated, deployedControls, profileExposures, fwConfig]);
-
-  const exportRemediationPlan = useCallback(() => {
-    if (gapAnalysis.gaps.length === 0) return;
-    const tierOf = (g: any) => {
-      const s = g.riskScore;
-      if (s > 0.5) return "Critical";
-      if (s > 0.2) return "High";
-      if (s > 0.05) return "Medium";
-      return "Low";
-    };
-    let csv = "Priority Tier,Technique ID,Name,Tactic,Gap Type,Exposure%,Betweenness%,Chain Count,Risk Score,Recommended Controls\n";
-    gapAnalysis.gaps.forEach((g: any) => {
-      const tactic = fwConfig.tactics.find((ta: any) => ta.id === g.tactic);
-      const recCtrls = g.availableControls.map((c: any) => c.name + " (" + c.cost + ")").join("; ") || "None available";
-      csv += [
-        tierOf(g), sanitizeCSVCell(g.id), '"' + sanitizeCSVCell(g.name).replace(/"/g, '""') + '"', sanitizeCSVCell(tactic?.name || ""),
-        g.gapType === "no-coverage" ? "No Coverage" : "Not Deployed",
-        (g.exposure * 100).toFixed(1), (g.bc * 100).toFixed(1), g.cc,
-        (g.riskScore * 100).toFixed(2), '"' + sanitizeCSVCell(recCtrls) + '"',
-      ].join(",") + "\n";
-    });
-    const tiers: Record<string, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
-    gapAnalysis.gaps.forEach((g: any) => { tiers[tierOf(g)]++; });
-    const undeployedNeeded = new Set<string>();
-    gapAnalysis.gaps.forEach((g: any) => g.availableControls.forEach((c: any) => { if (!deployedControls.has(c.id)) undeployedNeeded.add(c.id); }));
-    const costMap: Record<string, number> = { "$": 1, "$$": 2, "$$$": 3, "$$$$": 4 };
-    let minCost = 0, maxCost = 0;
-    undeployedNeeded.forEach((cid: string) => {
-      const ctrl = fwConfig.securityControls.find((c: any) => c.id === cid);
-      if (ctrl) { const cv = costMap[(ctrl as any).cost] || 0; minCost += cv; maxCost += cv * 2; }
-    });
-    csv += "\n--- SUMMARY ---\n";
-    csv += "Critical Gaps," + tiers.Critical + "\nHigh Gaps," + tiers.High + "\nMedium Gaps," + tiers.Medium + "\nLow Gaps," + tiers.Low + "\n";
-    csv += "Total Gaps," + gapAnalysis.gaps.length + "\n";
-    csv += "Undeployed Controls Needed," + undeployedNeeded.size + "\n";
-    csv += "Estimated Cost Range," + "$".repeat(Math.ceil(minCost / undeployedNeeded.size) || 1) + " - " + "$".repeat(Math.ceil(maxCost / undeployedNeeded.size) || 1) + " per control\n";
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "gap-remediation-plan-" + new Date().toISOString().split("T")[0] + ".csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [gapAnalysis, deployedControls, fwConfig]);
+    downloadFile(JSON.stringify(layer, null, 2), 'attackbreaker-navigator-' + today() + '.json', 'application/json');
+  }, [cfg, dataset, model, state]);
 
   const exportCoverageCSV = useCallback(() => {
-    if (!profileExposures) return;
-    let csv = "Technique ID,Name,Tactic,Base Exposure%,Coverage%,Actor Weight,Final Exposure%,Coverage Sources\n";
-    displayTechniques.forEach((t: any) => {
-      const pe = profileExposures[t.id];
-      if (!pe) return;
-      const tactic = fwConfig.tactics.find((ta: any) => ta.id === t.tactic);
-      const sources = pe.coverageSources.map((s: any) => s.name + " (" + (s.detect * 100).toFixed(0) + "%)").join("; ") || "None";
-      csv += [
-        sanitizeCSVCell(t.id),
-        '"' + sanitizeCSVCell(t.name).replace(/"/g, '""') + '"',
-        sanitizeCSVCell(tactic?.name || ""),
-        (pe.baseExposure * 100).toFixed(1),
-        (pe.coverageReduction * 100).toFixed(1),
-        pe.actorWeight.toFixed(2),
-        (pe.finalExposure * 100).toFixed(1),
-        '"' + sanitizeCSVCell(sources) + '"',
-      ].join(",") + "\n";
+    if (!dataset || !assessment) return;
+    let csv = csvRow(['Technique ID', 'Name', 'Base exposure %', 'Est. detect %', 'Est. prevent %', 'Tools (estimates)']);
+    dataset.techniques.forEach(t => {
+      const x = assessment[t.id];
+      if (!x) return;
+      csv += csvRow([t.id, t.name, +(x.baseExposure * 100).toFixed(0), +(x.detect * 100).toFixed(0), +(x.prevent * 100).toFixed(0),
+        x.sources.map(s => s.name + ' (d' + Math.round(s.detect * 100) + '/p' + Math.round(s.prevent * 100) + ')').join('; ') || 'None']);
     });
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "coverage-analysis-" + new Date().toISOString().split("T")[0] + ".csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [profileExposures, displayTechniques, fwConfig]);
+    downloadFile(csv, 'attackbreaker-coverage-' + today() + '.csv', 'text/csv');
+  }, [dataset, assessment]);
 
-  return { exportCSV, exportNavigatorLayer, exportRemediationPlan, exportCoverageCSV };
+  const exportBoardReport = useCallback(() => {
+    if (!dataset || !model || !plan || !frontier) return;
+    const w = model.totalWeight || 1;
+    const afterPlan = evaluateModel(model, params, withItems(posture, plan.steps.map(s => s.item)));
+    const frontierPts = [{ cost: 0, residual: frontier.baselineRisk / w }, ...frontier.steps.map(s => ({ cost: s.cumulativeCost, residual: s.risk / w }))];
+    const html = buildBoardReport({
+      generatedAt: today(),
+      frameworkLabel: cfg.label + ' ATT&CK',
+      attackVersion: cfg.attackVersion,
+      dataLabel: dataset.sourceLabel,
+      scope: {
+        actors: model.actors.length,
+        sector: sector === 'all' ? 'all' : (SECTORS.find(s => s.id === sector)?.label ?? sector),
+        gates: gates.map(g => g.label), includeSoftware, includeCampaigns,
+      },
+      posture: { mitigations: posture.mitigations.size, dataComponents: posture.dataComponents.size, totalDataComponents: dataset.dataComponents.length },
+      currentResidual: plan.baselineRisk / w,
+      planResidual: plan.finalRisk / w,
+      budget, spend: plan.totalCost,
+      sensitivity: sensitivity ?? { low: 0, high: 0 },
+      plan: plan.steps.map(s => ({ id: s.item.id, name: s.item.name, kind: s.item.kind, cost: s.item.cost, removed: s.delta / w, residualAfter: s.risk / w })),
+      frontier: frontierPts,
+      topActors: model.actors
+        .map((act, i) => ({ name: act.chain.name, kind: act.chain.kind, viability: afterPlan.viability[i], sectors: act.chain.sectors }))
+        .sort((x, y) => y.viability - x.viability)
+        .slice(0, 8),
+      params,
+    });
+    downloadFile(html, 'attackbreaker-board-report-' + today() + '.html', 'text/html');
+  }, [cfg, dataset, model, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, params]);
+
+  return { exportCSV, exportPlanCSV, exportNavigatorLayer, exportCoverageCSV, exportBoardReport };
 }

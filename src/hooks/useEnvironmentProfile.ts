@@ -1,88 +1,49 @@
-// ─── useEnvironmentProfile — environment profiling, exposure scoring ─────────
+// ─── useEnvironmentProfile — profile wizard state + KB assessment ────────────
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { computeExposureScores, buildActorTechMap } from '../engine/exposureEngine';
+import { useMemo, useState } from 'react';
+import type { AttackChain, EnvironmentProfile, FrameworkConfig, Technique, TechniqueAssessment } from '../types';
+import { actorWeightsFor, assessEnvironment, assessmentToModelInputs } from '../engine/exposureEngine';
+import { STORAGE_PREFIX, usePersistentState } from './usePersistentState';
 
-interface UseEnvironmentProfileArgs {
-  fwConfig: any;
-  displayTechniques: any[];
-  activeChains: any[];
-  betweenness: Record<string, number>;
-  chainCoverage: Record<string, number>;
-  setExposures: React.Dispatch<React.SetStateAction<Record<string, number>>>;
-}
+const isProfile = (v: unknown) => v === null || (!!v && typeof v === 'object' && Array.isArray((v as EnvironmentProfile).infrastructure));
 
-export function useEnvironmentProfile({
-  fwConfig, displayTechniques, activeChains,
-  betweenness, chainCoverage, setExposures,
-}: UseEnvironmentProfileArgs) {
-  const [environmentProfile, setEnvironmentProfile] = useState<any>(() => {
-    try {
-      const s = localStorage.getItem("attackBreaker_envProfile");
-      return s ? JSON.parse(s) : null;
-    } catch { return null; }
-  });
+export function useEnvironmentProfile(cfg: FrameworkConfig, techniques: Technique[], chains: AttackChain[]) {
+  const [environmentProfile, setEnvironmentProfile] = usePersistentState<EnvironmentProfile | null>(
+    STORAGE_PREFIX + 'envProfile.' + cfg.id, null, isProfile,
+  );
   const [showProfileWizard, setShowProfileWizard] = useState(false);
-  const [profileExposures, setProfileExposures] = useState<Record<string, any> | null>(null);
 
-  const actorTechMap = useMemo(() => buildActorTechMap(activeChains), [activeChains]);
+  const hasSelections = !!environmentProfile &&
+    ((environmentProfile.infrastructure?.length ?? 0) > 0 || (environmentProfile.securityTools?.length ?? 0) > 0);
 
-  // Compute exposure scores when profile changes
-  useEffect(() => {
-    if (!environmentProfile) { setProfileExposures(null); return; }
-    const hasSelections = (environmentProfile.infrastructure?.length > 0) || (environmentProfile.securityTools?.length > 0);
-    if (!hasSelections) { setProfileExposures(null); return; }
-    const scores = computeExposureScores(environmentProfile, fwConfig.coverageKB, displayTechniques, actorTechMap);
-    setProfileExposures(scores);
-    const newExposures: Record<string, number> = {};
-    for (const [tid, data] of Object.entries(scores) as [string, any][]) {
-      newExposures[tid] = data.finalExposure;
-    }
-    setExposures((prev: Record<string, number>) => {
-      const merged = { ...prev };
-      for (const [tid, val] of Object.entries(newExposures)) {
-        merged[tid] = val;
-      }
-      return merged;
-    });
-  }, [environmentProfile, fwConfig, displayTechniques, actorTechMap, setExposures]);
+  const assessment: Record<string, TechniqueAssessment> | null = useMemo(
+    () => (hasSelections ? assessEnvironment(environmentProfile!, cfg.coverageKB, techniques) : null),
+    [hasSelections, environmentProfile, cfg.coverageKB, techniques],
+  );
+  const modelInputs = useMemo(
+    () => assessmentToModelInputs(assessment, (environmentProfile?.infrastructure?.length ?? 0) > 0),
+    [assessment, environmentProfile],
+  );
+  const actorWeights = useMemo(() => actorWeightsFor(environmentProfile, chains), [environmentProfile, chains]);
 
-  // Persist environment profile to localStorage
-  useEffect(() => {
-    if (environmentProfile) {
-      localStorage.setItem("attackBreaker_envProfile", JSON.stringify(environmentProfile));
-    } else {
-      localStorage.removeItem("attackBreaker_envProfile");
-    }
-  }, [environmentProfile]);
-
-  // Exposure summary computed from profile exposures
   const exposureSummary = useMemo(() => {
-    if (!profileExposures) return null;
-    const entries = Object.entries(profileExposures);
+    if (!assessment) return null;
+    const entries = techniques.filter(t => !t.parentId).map(t => assessment[t.id]).filter(Boolean);
     if (entries.length === 0) return null;
-    const highExposed = entries.filter(([, pe]: [string, any]) => pe.finalExposure > 0.7);
-    const wellCovered = entries.filter(([, pe]: [string, any]) => pe.finalExposure < 0.3);
-    const totalCoverage = entries.reduce((s: number, [, pe]: [string, any]) => s + pe.coverageReduction, 0) / entries.length;
-    const avgExposure = entries.reduce((s: number, [, pe]: [string, any]) => s + pe.finalExposure, 0) / entries.length;
-    const uncoveredChokepoints = entries
-      .map(([tid, pe]: [string, any]) => ({ tid, exposure: pe.finalExposure, bc: betweenness[tid] ?? 0, cc: chainCoverage[tid] ?? 0 }))
-      .filter((x: any) => x.exposure > 0.5)
-      .sort((a: any, b: any) => (b.bc * b.exposure) - (a.bc * a.exposure))
-      .slice(0, 5);
-    return { highExposed: highExposed.length, wellCovered: wellCovered.length, totalCoverage, avgExposure, uncoveredChokepoints, totalTechniques: entries.length };
-  }, [profileExposures, betweenness, chainCoverage]);
-
-  const resetProfile = useCallback(() => {
-    setEnvironmentProfile(null);
-    setProfileExposures(null);
-    setShowProfileWizard(false);
-  }, []);
+    const covered = entries.filter(a => a.sources.length > 0).length;
+    const avg = (f: (a: TechniqueAssessment) => number) => entries.reduce((s, a) => s + f(a), 0) / entries.length;
+    return {
+      techniques: entries.length,
+      covered,
+      avgDetect: avg(a => a.detect),
+      avgPrevent: avg(a => a.prevent),
+      avgExposure: avg(a => a.baseExposure),
+    };
+  }, [assessment, techniques]);
 
   return {
     environmentProfile, setEnvironmentProfile,
     showProfileWizard, setShowProfileWizard,
-    profileExposures, setProfileExposures,
-    actorTechMap, exposureSummary, resetProfile,
+    assessment, modelInputs, actorWeights, exposureSummary,
   };
 }

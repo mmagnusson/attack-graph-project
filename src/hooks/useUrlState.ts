@@ -1,122 +1,97 @@
-// ─── URL State Encoding / Decoding & CSV Sanitisation ─────────────────────────
-//
-// Extracted from attack-path-optimizer.html (lines ~3182-3229).
-// Pure utility functions for encoding/decoding shareable app state to/from
-// URL hash parameters, plus a CSV injection prevention helper.
+// ─── URL State Encoding / Decoding ───────────────────────────────────────────
+// Pure functions for sharing app state through the URL hash. Every decoded
+// value is format-validated; anything malformed is dropped silently and the
+// app falls back to defaults.
 
-import type { FrameworkId, DataSourceId, SectorFilter } from '../types';
-
-// ─── Shareable state shape (matches the URL hash params) ──────────────────────
+import type { FrameworkId, ModelParams } from '../types';
+import { ORG_SIZES, type OrgSize } from '../engine/portfolioOptimizer';
+import { SECTORS } from '../engine/actorTags';
 
 export interface ShareableState {
   framework?: FrameworkId;
-  dataSource?: DataSourceId;
+  sector?: string;
+  budget?: number;
+  orgSize?: OrgSize;
   envPreset?: string;
-  sectorFilter?: SectorFilter;
-  remediationBudget?: number;
-  remediated?: string[];
-  deployedControls?: string[];
+  mitigations?: string[];
+  dataComponents?: string[];
+  blocked?: string[];
   chains?: string[];
-  phaseWeighting?: boolean;
-  selectedPlatforms?: string[];
-  controlPreset?: string;
+  platforms?: string[];
+  params?: ModelParams;
+  gates?: string[];
+  includeSoftware?: boolean;
+  includeCampaigns?: boolean;
 }
 
-// ─── Validation sets ──────────────────────────────────────────────────────────
+const VALID_FW = new Set<string>(['enterprise', 'ics']);
+const VALID_SECTOR = new Set<string>(['all', ...SECTORS.map(s => s.id)]);
+const RE_MIT = /^M\d{4}$/;
+const RE_DC = /^DC\d{4}$/;
+const RE_TECH = /^T\d{4}(\.\d{3})?$/;
+const RE_CHAIN = /^[A-Za-z0-9-]{1,48}$/;
+const RE_WORD = /^[A-Za-z0-9 -]{1,32}$/;
+const MAX_LIST = 400;
 
-const VALID_FW: ReadonlySet<string> = new Set<FrameworkId>(['enterprise', 'ics']);
-const VALID_DS: ReadonlySet<string> = new Set<DataSourceId>(['stix', 'builtin']);
-const VALID_SECTOR: ReadonlySet<string> = new Set<SectorFilter>(['all', 'government', 'financial']);
+const list = (v: string | null, sep: string, re: RegExp) =>
+  (v ?? '').split(sep).filter(x => re.test(x)).slice(0, MAX_LIST);
 
-// NOTE: sanitizeCSVCell already lives in ../engine/graphModel.ts — import from there.
-
-// ─── Encode ───────────────────────────────────────────────────────────────────
-
-/**
- * Encodes application state into a URL-safe hash string (without the leading `#`).
- * Only non-default values are included to keep the URL compact.
- */
-export function encodeStateToHash(state: ShareableState): string {
+/** Encodes application state into a URL-safe hash string (without the leading `#`) */
+export function encodeStateToHash(s: ShareableState): string {
   const p = new URLSearchParams();
-
-  if (state.framework && state.framework !== 'enterprise') p.set('fw', state.framework);
-  if (state.dataSource && state.dataSource !== 'stix') p.set('ds', state.dataSource);
-  if (state.envPreset && state.envPreset !== 'government') p.set('env', state.envPreset);
-  if (state.sectorFilter && state.sectorFilter !== 'all') p.set('sec', state.sectorFilter);
-  if (state.remediationBudget !== undefined && state.remediationBudget !== 5) {
-    p.set('budget', String(state.remediationBudget));
+  if (s.framework && s.framework !== 'enterprise') p.set('fw', s.framework);
+  if (s.sector && s.sector !== 'all') p.set('sec', s.sector);
+  if (s.budget !== undefined) p.set('bud', String(Math.round(s.budget)));
+  if (s.orgSize && s.orgSize !== 'medium') p.set('org', s.orgSize);
+  if (s.envPreset && s.envPreset !== 'default') p.set('env', s.envPreset);
+  if (s.mitigations?.length) p.set('mit', s.mitigations.join(','));
+  if (s.dataComponents?.length) p.set('dc', s.dataComponents.join(','));
+  if (s.blocked?.length) p.set('blk', s.blocked.join(','));
+  if (s.chains?.length) p.set('ch', s.chains.join('|'));
+  if (s.platforms?.length) p.set('plat', s.platforms.join(','));
+  if (s.params) {
+    const { mitigationEffectiveness: m, detectionEffectiveness: d, responseEffectiveness: r, substitutionRate: f, adversaryAdaptiveness: a } = s.params;
+    p.set('p', [m, d, r, f, a].map(x => x.toFixed(2)).join(','));
   }
-  if (state.remediated && state.remediated.length > 0) p.set('rem', state.remediated.join(','));
-  if (state.deployedControls && state.deployedControls.length > 0) {
-    p.set('ctrl', state.deployedControls.join(','));
-  }
-  if (state.chains && state.chains.length > 0) p.set('chains', state.chains.join('|'));
-  if (state.phaseWeighting) p.set('pw', '1');
-  if (state.selectedPlatforms && state.selectedPlatforms.length > 0) {
-    p.set('plat', state.selectedPlatforms.join(','));
-  }
-  if (state.controlPreset && state.controlPreset !== 'none') p.set('cp', state.controlPreset);
-
+  if (s.gates?.length) p.set('g', s.gates.join(','));
+  if (s.includeSoftware === false) p.set('sw', '0');
+  if (s.includeCampaigns) p.set('camp', '1');
   return p.toString();
 }
 
-// ─── Decode ───────────────────────────────────────────────────────────────────
-
-/**
- * Decodes a URL hash string (with or without the leading `#`) back into a
- * partial `ShareableState`. Returns `null` when the hash is empty or contains
- * no recognised parameters.
- *
- * All values are validated / sanitised before being included in the result.
- */
+/** Decodes a URL hash back into a partial, validated ShareableState (null if nothing usable) */
 export function decodeHashToState(hash: string): ShareableState | null {
   if (!hash || hash.length < 2) return null;
   try {
     const p = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-    const state: ShareableState = {};
-
-    if (p.has('fw')) {
-      const v = p.get('fw')!;
-      if (VALID_FW.has(v)) state.framework = v as FrameworkId;
+    const s: ShareableState = {};
+    const fw = p.get('fw');
+    if (fw && VALID_FW.has(fw)) s.framework = fw as FrameworkId;
+    const sec = p.get('sec');
+    if (sec && VALID_SECTOR.has(sec)) s.sector = sec;
+    if (p.has('bud')) {
+      const b = Number(p.get('bud'));
+      if (Number.isFinite(b) && b >= 0 && b <= 1e10) s.budget = b;
     }
-    if (p.has('ds')) {
-      const v = p.get('ds')!;
-      if (VALID_DS.has(v)) state.dataSource = v as DataSourceId;
+    const org = p.get('org');
+    if (org && org in ORG_SIZES) s.orgSize = org as OrgSize;
+    const env = p.get('env');
+    if (env && RE_WORD.test(env)) s.envPreset = env;
+    if (p.has('mit')) s.mitigations = list(p.get('mit'), ',', RE_MIT);
+    if (p.has('dc')) s.dataComponents = list(p.get('dc'), ',', RE_DC);
+    if (p.has('blk')) s.blocked = list(p.get('blk'), ',', RE_TECH);
+    if (p.has('ch')) s.chains = list(p.get('ch'), '|', RE_CHAIN).slice(0, 3);
+    if (p.has('plat')) s.platforms = list(p.get('plat'), ',', RE_WORD);
+    if (p.has('p')) {
+      const v = (p.get('p') ?? '').split(',').map(Number);
+      if (v.length === 5 && v.every(x => Number.isFinite(x) && x >= 0 && x <= 1)) {
+        s.params = { mitigationEffectiveness: v[0], detectionEffectiveness: v[1], responseEffectiveness: v[2], substitutionRate: v[3], adversaryAdaptiveness: v[4] };
+      }
     }
-    if (p.has('env')) {
-      const v = p.get('env')!;
-      if (v) state.envPreset = v;
-    }
-    if (p.has('sec')) {
-      const v = p.get('sec')!;
-      if (VALID_SECTOR.has(v)) state.sectorFilter = v as SectorFilter;
-    }
-    if (p.has('budget')) {
-      const v = parseInt(p.get('budget')!, 10);
-      if (v >= 1 && v <= 10) state.remediationBudget = v;
-    }
-    if (p.has('rem')) {
-      state.remediated = p.get('rem')!.split(',').filter(Boolean);
-    }
-    if (p.has('ctrl')) {
-      state.deployedControls = p.get('ctrl')!.split(',').filter(Boolean);
-    }
-    if (p.has('chains')) {
-      state.chains = p.get('chains')!.split('|').filter(Boolean);
-    }
-    if (p.has('pw')) {
-      state.phaseWeighting = true;
-    }
-    if (p.has('plat')) {
-      const v = p.get('plat')!.split(',').filter(Boolean);
-      if (v.length > 0) state.selectedPlatforms = v;
-    }
-    if (p.has('cp')) {
-      const v = p.get('cp')!;
-      if (v) state.controlPreset = v;
-    }
-
-    return Object.keys(state).length > 0 ? state : null;
+    if (p.has('g')) s.gates = list(p.get('g'), ',', /^[A-Za-z0-9]{1,16}$/);
+    if (p.get('sw') === '0') s.includeSoftware = false;
+    if (p.get('camp') === '1') s.includeCampaigns = true;
+    return Object.keys(s).length > 0 ? s : null;
   } catch {
     return null;
   }

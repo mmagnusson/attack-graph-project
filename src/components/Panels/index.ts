@@ -1,7 +1,10 @@
 export { ChainsPanel } from './ChainsPanel';
-export { PriorityPanel } from './PriorityPanel';
+export type { KindFilter } from './ChainsPanel';
+export { HotspotsPanel } from './HotspotsPanel';
 export { DetailPanel } from './DetailPanel';
-export { ControlsPanel } from './ControlsPanel';
-export { AnalysisPanel } from './AnalysisPanel';
-export { GapAnalysisPanel } from './GapAnalysisPanel';
+export { PlanPanel } from './PlanPanel';
+export { DefensesPanel } from './DefensesPanel';
+export type { DefenseHover } from './DefensesPanel';
+export { ModelPanel } from './ModelPanel';
+export { BlindSpotsPanel } from './BlindSpotsPanel';
 export { ExposureSummaryPanel } from './ExposureSummaryPanel';
