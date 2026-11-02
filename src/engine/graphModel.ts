@@ -1,12 +1,6 @@
-// ─── Graph Algorithms ─────────────────────────────────────────────────────────
+// ─── Graph Layout & Display Edges ────────────────────────────────────────────
 
-import type {
-  Technique,
-  Edge,
-  AttackChain,
-  Tactic,
-  FrameworkConfig,
-} from '../types';
+import type { AttackChain, Edge, Tactic, Technique } from '../types';
 
 // ─── Layout Return Type ──────────────────────────────────────────────────────
 
@@ -29,149 +23,90 @@ export interface LayoutResult {
   phaseCenters: PhaseCenter[];
 }
 
-// ─── Remediation Return Type ─────────────────────────────────────────────────
+// ─── Roll-up ─────────────────────────────────────────────────────────────────
 
-export interface RemediationResult {
-  selected: string[];
-  chainsDisrupted: number;
-  chainsTotal: number;
+/** The displayed node a technique maps to: itself, its parent when sub-techniques are hidden, or null */
+export function rollupId(techId: string, display: ReadonlySet<string>): string | null {
+  if (display.has(techId)) return techId;
+  const dot = techId.indexOf('.');
+  if (dot > 0) {
+    const parent = techId.slice(0, dot);
+    if (display.has(parent)) return parent;
+  }
+  return null;
 }
 
-// ─── Algorithms ──────────────────────────────────────────────────────────────
+/** A chain's technique IDs projected onto the displayed nodes, grouped by phase (ascending) */
+export function chainByPhase(chain: AttackChain, display: ReadonlySet<string>, techPhase: Record<string, number>): string[][] {
+  const groups = new Map<number, string[]>();
+  const seen = new Set<string>();
+  for (const tid of chain.path) {
+    const id = rollupId(tid, display);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const ph = techPhase[id] ?? 99;
+    let g = groups.get(ph);
+    if (!g) groups.set(ph, g = []);
+    g.push(id);
+  }
+  return [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([, g]) => g);
+}
 
-/** Betweenness centrality computation (Brandes' algorithm) */
-export function computeBetweenness(
-  techniques: Technique[],
-  edges: Edge[],
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  techniques.forEach(t => counts[t.id] = 0);
+// ─── Edges ───────────────────────────────────────────────────────────────────
 
-  const adj: Record<string, string[]> = {};
-  techniques.forEach(t => adj[t.id] = []);
-  edges.forEach(e => {
-    if (adj[e.from]) adj[e.from].push(e.to);
-  });
-
-  const ids = techniques.map(t => t.id);
-  for (let s = 0; s < ids.length; s++) {
-    const dist: Record<string, number> = {};
-    const sigma: Record<string, number> = {};
-    const pred: Record<string, string[]> = {};
-    ids.forEach(id => { dist[id] = -1; sigma[id] = 0; pred[id] = []; });
-    dist[ids[s]] = 0;
-    sigma[ids[s]] = 1;
-    const queue: string[] = [ids[s]];
-    const stack: string[] = [];
-    let qi = 0;
-    while (qi < queue.length) {
-      const v = queue[qi++];
-      stack.push(v);
-      (adj[v] || []).forEach(w => {
-        if (dist[w] < 0) {
-          dist[w] = dist[v] + 1;
-          queue.push(w);
-        }
-        if (dist[w] === dist[v] + 1) {
-          sigma[w] += sigma[v];
-          pred[w].push(v);
-        }
-      });
-    }
-    const delta: Record<string, number> = {};
-    ids.forEach(id => delta[id] = 0);
-    while (stack.length > 0) {
-      const w = stack.pop()!;
-      pred[w].forEach(v => {
-        delta[v] += (sigma[v] / sigma[w]) * (1 + delta[w]);
-      });
-      if (w !== ids[s]) counts[w] += delta[w];
+/**
+ * Background edges: technique pairs in *adjacent* phases of the same actor's
+ * known set, weighted by how many actors share the pair. ATT&CK does not record
+ * step order, so an edge means "commonly used together in consecutive stages",
+ * never "A leads to B". Only the strongest `maxEdges` are kept.
+ */
+export function buildCooccurrenceEdges(
+  chains: AttackChain[], display: ReadonlySet<string>, techPhase: Record<string, number>, maxEdges = 300,
+): Edge[] {
+  const counts = new Map<string, number>();
+  for (const chain of chains) {
+    const groups = chainByPhase(chain, display, techPhase);
+    for (let g = 0; g < groups.length - 1; g++) {
+      for (const a of groups[g]) for (const b of groups[g + 1]) {
+        const k = a + '>' + b;
+        counts.set(k, (counts.get(k) || 0) + 1);
+      }
     }
   }
-
-  const maxVal = Math.max(...Object.values(counts), 1);
-  const result: Record<string, number> = {};
-  Object.keys(counts).forEach(k => result[k] = counts[k] / maxVal);
-  return result;
-}
-
-/** Chain coverage: count how many chains each technique appears in */
-export function computeChainCoverage(
-  techniques: Technique[],
-  chains: AttackChain[],
-): Record<string, number> {
-  const coverage: Record<string, number> = {};
-  techniques.forEach(t => {
-    coverage[t.id] = chains.filter(c => c.path.includes(t.id)).length;
-  });
-  return coverage;
-}
-
-/** Greedy set cover algorithm for optimal remediation selection */
-export function findOptimalRemediation(
-  techniques: Technique[],
-  chains: AttackChain[],
-  exposures: Record<string, number>,
-  budget: number,
-  phaseWeighting: boolean,
-  fwConfig: FrameworkConfig | null,
-): RemediationResult {
-  const remaining = new Set<number>(chains.map((_, i) => i));
-  const selected: string[] = [];
-  const costPerTech = 1;
-
-  for (let step = 0; step < budget && remaining.size > 0; step++) {
-    let bestTech: string | null = null;
-    let bestScore = -1;
-
-    techniques.forEach(t => {
-      if (selected.includes(t.id)) return;
-      const exposure = exposures[t.id] ?? 1.0;
-      if (exposure < 0.1) return;
-
-      let chainsCovered = 0;
-      let severitySum = 0;
-      chains.forEach((c, i) => {
-        if (remaining.has(i) && c.path.includes(t.id)) {
-          chainsCovered++;
-          severitySum += c.severity;
-        }
-      });
-
-      let score = chainsCovered > 0
-        ? (chainsCovered * (severitySum / chainsCovered) * exposure) / costPerTech
-        : 0;
-      // F4: Apply phase weight when enabled
-      if (phaseWeighting && score > 0 && fwConfig) {
-        const phase = fwConfig.tacticPhase[t.tactic] ?? 99;
-        const pw = fwConfig.phaseWeights[phase] ?? 1.0;
-        score *= pw;
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestTech = t.id;
-      }
+  return [...counts.entries()]
+    .sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1))
+    .slice(0, maxEdges)
+    .map(([k, w]) => {
+      const [from, to] = k.split('>');
+      return { from, to, weight: w };
     });
-
-    if (bestTech) {
-      selected.push(bestTech);
-      chains.forEach((c, i) => {
-        if (c.path.includes(bestTech!)) remaining.delete(i);
-      });
-    }
-  }
-
-  return { selected, chainsDisrupted: chains.length - remaining.size, chainsTotal: chains.length };
 }
+
+/**
+ * Edges for a highlighted chain: from the actor's most-used technique in each
+ * phase to every option it has in the next phase — a fan that shows the
+ * alternatives the actor can switch between at each step.
+ */
+export function chainFanEdges(
+  chain: AttackChain, display: ReadonlySet<string>, techPhase: Record<string, number>, score: (id: string) => number,
+): Edge[] {
+  const groups = chainByPhase(chain, display, techPhase);
+  const edges: Edge[] = [];
+  for (let g = 0; g < groups.length - 1; g++) {
+    const hub = groups[g].reduce((best, id) => (score(id) > score(best) ? id : best), groups[g][0]);
+    for (const b of groups[g + 1]) edges.push({ from: hub, to: b });
+  }
+  return edges;
+}
+
+// ─── Layout ──────────────────────────────────────────────────────────────────
 
 /** Graph layout algorithm: positions nodes in tactic columns */
 export function layoutNodes(
   techniques: Technique[],
   tactics: Tactic[],
 ): LayoutResult {
-  // Node max visual radius: base 8 + priority*10 (max 18) + optimal ring 7 = 25
-  // Two adjacent max-size nodes need 50 between centers
+  // Node max visual radius: base 8 + activity*12 + detection ring 7 ≈ 27
   // nodeW/nodeH: intra-cluster spacing; tacticGap/phaseGap: inter-cluster spacing
   const nodeW = 52, nodeH = 48, phaseGap = 64, tacticGap = 52, topMargin = 34, marginX = 40;
 
@@ -195,7 +130,6 @@ export function layoutNodes(
     return 10;
   }
 
-  // Compute cluster dimensions per tactic
   interface ClusterInfo {
     techs: Technique[];
     cols: number;
@@ -219,7 +153,6 @@ export function layoutNodes(
     clusterInfo[tac.id] = { techs, cols, rows, w, h, phase: tac.phase };
     totalClusterWidth += w;
     if (h > maxClusterHeight) maxClusterHeight = h;
-    // Count gaps: larger gap between phases, smaller within same phase
     if (ti > 0) {
       const prevPhase = tacticOrder[ti - 1].phase;
       totalGaps += tac.phase !== prevPhase ? phaseGap : tacticGap;
@@ -256,12 +189,4 @@ export function layoutNodes(
   });
 
   return { positions, viewHeight, viewWidth, phaseCenters };
-}
-
-// ─── CSV Sanitization ─────────────────────────────────────────────────────────
-
-/** Prevent CSV injection by prefixing dangerous characters */
-export function sanitizeCSVCell(value: string): string {
-  if (/^[=+\-@\t\r]/.test(value)) return "'" + value;
-  return value;
 }

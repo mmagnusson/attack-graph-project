@@ -1,144 +1,105 @@
-// ─── Exposure Weighting Engine (Environment Profiling — Phase 3) ─────────────
-// Computes per-technique exposure scores from an environment profile + coverage KB.
-// Profile shape: { infrastructure: string[], securityTools: string[], threatActors?: string[] }
-// Returns: Record of techniqueId → TechniqueExposure
+// ─── Environment Assessment (profile × coverage KB) ──────────────────────────
+// Turns the ProfileWizard selections into model inputs:
+//   • base exposure per technique from infrastructure (only when infra is selected)
+//   • estimated tool detection and prevention per technique (complementary product)
+//   • actor weights for threat actors of concern
+// Parent-technique scores apply to sub-techniques that have no score of their own.
 
 import type {
-  EnvironmentProfile,
+  AttackChain,
   CoverageKB,
+  CoverageSource,
   CoverageTool,
+  EnvironmentProfile,
+  InfraCategory,
   InfrastructureItem,
   Technique,
-  AttackChain,
-  CoverageSource,
-  TechniqueExposure,
+  TechniqueAssessment,
   ToolCategory,
-  InfraCategory,
+  ToolCoverage,
 } from '../types';
 
-/** Actor name → Set of technique IDs used by that actor */
-export type ActorTechMap = Record<string, Set<string>>;
+/** Weight multiplier for threat actors the user marked as being of particular concern */
+export const ACTOR_OF_CONCERN_WEIGHT = 3;
 
-/** Tool entry enriched with its KB key */
-export interface GroupedTool extends CoverageTool {
-  id: string;
-}
+/** Base exposure for techniques none of the selected infrastructure exposes */
+const DEFAULT_INFRA_EXPOSURE = 0.3;
 
-/** Infrastructure entry enriched with its KB key */
-export interface GroupedInfra extends InfrastructureItem {
-  id: string;
-}
-
-/** Tool category with resolved tool entries */
-export interface GroupedToolCategory extends ToolCategory {
-  tools: GroupedTool[];
-}
-
-/** Infrastructure category with resolved infra entries */
-export interface GroupedInfraCategory extends InfraCategory {
-  items: GroupedInfra[];
-}
-
-export function computeExposureScores(
+export function assessEnvironment(
   profile: EnvironmentProfile,
-  coverageKB: CoverageKB,
+  kb: CoverageKB,
   techniques: Technique[],
-  actorTechMap: ActorTechMap | null,
-): Record<string, TechniqueExposure> {
-  const results: Record<string, TechniqueExposure> = {};
-  const techIds = techniques.map(t => t.id);
+): Record<string, TechniqueAssessment> {
+  const infra = (profile.infrastructure || []).map(id => kb.infrastructure[id]).filter(Boolean);
+  const tools = (profile.securityTools || []).map(id => [id, kb.tools[id]] as const).filter(([, t]) => !!t);
+  const out: Record<string, TechniqueAssessment> = {};
 
-  // Step 1: Base exposure from infrastructure
-  const baseExposure: Record<string, number> = {};
-  for (const tid of techIds) {
-    let maxExposure = 0.3; // default for platform-relevant techniques
-    for (const infraId of (profile.infrastructure || [])) {
-      const infra = coverageKB.infrastructure[infraId];
-      if (infra && infra.exposes[tid] !== undefined) {
-        maxExposure = Math.max(maxExposure, infra.exposes[tid]);
-      }
-    }
-    baseExposure[tid] = maxExposure;
-  }
-
-  // Step 2: Coverage reduction from security tools (complementary product)
-  const coverage: Record<string, number> = {};
-  const coverageSources: Record<string, CoverageSource[]> = {};
-  for (const tid of techIds) {
-    let missProduct = 1.0; // product of (1 - detect) for each tool
-    const sources: CoverageSource[] = [];
-    for (const toolId of (profile.securityTools || [])) {
-      const tool = coverageKB.tools[toolId];
-      if (tool && tool.techniques[tid]) {
-        const det = tool.techniques[tid].detect || 0;
-        missProduct *= (1 - det);
-        sources.push({
-          toolId,
-          name: tool.display_name,
-          detect: det,
-          prevent: tool.techniques[tid].prevent || 0,
-        });
-      }
-    }
-    coverage[tid] = 1 - missProduct;
-    coverageSources[tid] = sources;
-  }
-
-  // Step 3: Threat actor overlay (optional)
-  const actorWeight: Record<string, number> = {};
-  if (profile.threatActors && profile.threatActors.length > 0 && actorTechMap) {
-    const totalActors = profile.threatActors.length;
-    for (const tid of techIds) {
-      let count = 0;
-      for (const actorId of profile.threatActors) {
-        if (actorTechMap[actorId] && actorTechMap[actorId].has(tid)) count++;
-      }
-      actorWeight[tid] = 1.0 + (0.5 * count / totalActors);
-    }
-  }
-
-  // Step 4: Final exposure = base * (1 - coverage) * actorWeight
-  for (const tid of techIds) {
-    const base = baseExposure[tid];
-    const cov = coverage[tid] || 0;
-    const aw = actorWeight[tid] || 1.0;
-    const finalExposure = Math.min(1.0, base * (1 - cov) * aw);
-    results[tid] = {
-      baseExposure: base,
-      coverageReduction: cov,
-      actorWeight: aw,
-      finalExposure,
-      coverageSources: coverageSources[tid] || [],
+  for (const t of techniques) {
+    const keys = t.parentId ? [t.id, t.parentId] : [t.id];
+    const lookup = <V,>(rec: Record<string, V>): V | undefined => {
+      for (const k of keys) if (rec[k] !== undefined) return rec[k];
+      return undefined;
     };
-  }
 
-  return results;
+    let baseExposure = 1;
+    if (infra.length > 0) {
+      baseExposure = DEFAULT_INFRA_EXPOSURE;
+      for (const item of infra) baseExposure = Math.max(baseExposure, lookup(item.exposes) ?? 0);
+    }
+
+    let missDetect = 1;
+    let missPrevent = 1;
+    const sources: CoverageSource[] = [];
+    for (const [toolId, tool] of tools) {
+      const s = lookup(tool.techniques);
+      if (!s) continue;
+      missDetect *= 1 - (s.detect || 0);
+      missPrevent *= 1 - (s.prevent || 0);
+      sources.push({ toolId, name: tool.display_name, detect: s.detect || 0, prevent: s.prevent || 0 });
+    }
+    out[t.id] = { baseExposure, detect: 1 - missDetect, prevent: 1 - missPrevent, sources };
+  }
+  return out;
 }
 
-/** Build actor -> technique set map from attack chain data */
-export function buildActorTechMap(chains: AttackChain[]): ActorTechMap {
-  const m: ActorTechMap = {};
-  for (const chain of chains) {
-    const actorId = chain.name;
-    if (!m[actorId]) m[actorId] = new Set();
-    for (const tid of chain.path) m[actorId].add(tid);
+/** Split an assessment into the risk model's exposure and tool-coverage inputs */
+export function assessmentToModelInputs(assessment: Record<string, TechniqueAssessment> | null, hasInfra: boolean): {
+  exposure?: Record<string, number>;
+  toolCoverage?: Record<string, ToolCoverage>;
+} {
+  if (!assessment) return {};
+  const toolCoverage: Record<string, ToolCoverage> = {};
+  const exposure: Record<string, number> = {};
+  for (const [tid, a] of Object.entries(assessment)) {
+    if (a.sources.length > 0) toolCoverage[tid] = { detect: a.detect, prevent: a.prevent };
+    exposure[tid] = a.baseExposure;
   }
-  return m;
+  return { exposure: hasInfra ? exposure : undefined, toolCoverage };
 }
+
+/** chainId → weight; actors of concern (matched by name) are weighted up */
+export function actorWeightsFor(profile: EnvironmentProfile | null, chains: AttackChain[]): Record<string, number> {
+  const concern = new Set(profile?.threatActors || []);
+  const w: Record<string, number> = {};
+  for (const c of chains) w[c.id] = concern.has(c.name) ? ACTOR_OF_CONCERN_WEIGHT : 1;
+  return w;
+}
+
+// ─── Wizard helpers ───────────────────────────────────────────────────────────
+
+export interface GroupedTool extends CoverageTool { id: string }
+export interface GroupedInfra extends InfrastructureItem { id: string }
+export interface GroupedToolCategory extends ToolCategory { tools: GroupedTool[] }
+export interface GroupedInfraCategory extends InfraCategory { items: GroupedInfra[] }
 
 /** Get all tool IDs from KB grouped by category */
 export function getKBToolsByCategory(coverageKB: CoverageKB): Record<string, GroupedToolCategory> {
   const grouped: Record<string, GroupedToolCategory> = {};
-  for (const cat of coverageKB.toolCategories) {
-    grouped[cat.id] = { ...cat, tools: [] };
-  }
+  for (const cat of coverageKB.toolCategories) grouped[cat.id] = { ...cat, tools: [] };
   for (const [id, tool] of Object.entries(coverageKB.tools)) {
     const cat = tool.category;
-    if (grouped[cat]) {
-      grouped[cat].tools.push({ id, ...tool });
-    } else {
-      grouped[cat] = { id: cat, name: cat, icon: '?', tools: [{ id, ...tool }] };
-    }
+    if (!grouped[cat]) grouped[cat] = { id: cat, name: cat, icon: '?', tools: [] };
+    grouped[cat].tools.push({ id, ...tool });
   }
   return grouped;
 }
@@ -146,16 +107,11 @@ export function getKBToolsByCategory(coverageKB: CoverageKB): Record<string, Gro
 /** Get all infra IDs from KB grouped by category */
 export function getKBInfraByCategory(coverageKB: CoverageKB): Record<string, GroupedInfraCategory> {
   const grouped: Record<string, GroupedInfraCategory> = {};
-  for (const cat of coverageKB.infraCategories) {
-    grouped[cat.id] = { ...cat, items: [] };
-  }
+  for (const cat of coverageKB.infraCategories) grouped[cat.id] = { ...cat, items: [] };
   for (const [id, infra] of Object.entries(coverageKB.infrastructure)) {
     const cat = infra.category;
-    if (grouped[cat]) {
-      grouped[cat].items.push({ id, ...infra });
-    } else {
-      grouped[cat] = { id: cat, name: cat, icon: '?', items: [{ id, ...infra }] };
-    }
+    if (!grouped[cat]) grouped[cat] = { id: cat, name: cat, icon: '?', items: [] };
+    grouped[cat].items.push({ id, ...infra });
   }
   return grouped;
 }
