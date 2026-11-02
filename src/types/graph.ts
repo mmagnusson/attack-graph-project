@@ -1,5 +1,11 @@
-// ─── AttackBreaker — Core Graph Types ──────────────────────────────
-// Extracted from attack-path-optimizer.html monolith data structures.
+// ─── AttackBreaker — Core Domain Types ──────────────────────────────
+// Single source of truth for dataset, defense-catalog, and framework types.
+// Data modules (src/data/*) import from here; they do not redefine shapes.
+
+import type { CoverageKB } from "./coverageKb";
+
+/** Framework discriminator */
+export type FrameworkId = "enterprise" | "ics";
 
 /** MITRE ATT&CK tactic (kill chain phase) */
 export interface Tactic {
@@ -9,35 +15,140 @@ export interface Tactic {
   color: string;
 }
 
-/** ATT&CK technique node in the graph */
+/** ATT&CK technique node */
 export interface Technique {
   id: string;
   name: string;
+  /** Primary tactic — the earliest-phase tactic this technique serves (used for layout) */
   tactic: string;
-  baseCriticality: number;
+  /** Every tactic this technique serves; ATT&CK allows several (e.g. Valid Accounts has four) */
+  tactics: string[];
   /** Present on sub-techniques (e.g. T1059.001 → parentId "T1059") */
   parentId?: string;
-  /** Populated from STIX parsing */
+  /** ATT&CK platform names as published (e.g. "Windows", "IaaS", "Network Devices") */
+  platforms: string[];
   description?: string;
-  /** Platforms populated from STIX or TECHNIQUE_PLATFORMS */
-  platforms?: string[];
 }
 
-/** Directed edge between two technique IDs */
+/** Directed edge between two technique IDs; weight = number of actors supporting it */
 export interface Edge {
   from: string;
   to: string;
+  weight?: number;
 }
 
-/** An attack chain (intrusion set / threat actor path) */
+export type ChainKind = "group" | "campaign" | "custom";
+
+/** An adversary's known technique set — a threat group, a campaign, or a user-built chain */
 export interface AttackChain {
+  /** ATT&CK ID (G0007, C0010) or a generated id for custom chains */
+  id: string;
   name: string;
+  kind: ChainKind;
   description: string;
-  sector: string;
+  /** Technique IDs sorted by kill-chain phase: direct use ∪ use through the actor's software */
   path: string[];
-  severity: number;
+  /** Subset of `path` attributed to the actor only through its malware/tools */
+  viaSoftware: string[];
+  /** Targeted sectors, keyword-derived from the MITRE description */
+  sectors: string[];
+  /** Attribution, keyword-derived from the MITRE description (conservative; may be empty) */
+  country?: string;
+  aliases: string[];
+  firstSeen?: string;
+  lastSeen?: string;
+  /** For campaigns: the group the campaign is attributed to */
+  attributedTo?: string;
   /** Assigned at runtime from CHAIN_COLORS */
   color?: string;
+}
+
+/** A MITRE mitigation (course-of-action) and the techniques it maps to */
+export interface MitigationDef {
+  id: string;
+  name: string;
+  description: string;
+  techniques: string[];
+  /** False for catalog entries MITRE marks as non-deployable ("Do Not Mitigate", "Pre-compromise") */
+  actionable: boolean;
+}
+
+/** One MITRE analytic: platform-specific detection logic and the telemetry it needs */
+export interface AnalyticDef {
+  id: string;
+  platforms: string[];
+  /** Data component IDs (DC####) the analytic's log sources come from */
+  dataComponents: string[];
+  description: string;
+}
+
+/** A MITRE detection strategy (DET####) for a technique */
+export interface DetectionStrategyDef {
+  id: string;
+  name: string;
+  analytics: AnalyticDef[];
+}
+
+/** A MITRE data component (DC####) — a kind of telemetry, e.g. "Process Creation" */
+export interface DataComponentDef {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/** Everything the app needs from one ATT&CK domain, produced by parseStixBundle() */
+export interface AttackDataset {
+  schemaVersion: number;
+  framework: FrameworkId;
+  sourceLabel: string;
+  techniques: Technique[];
+  chains: AttackChain[];
+  mitigations: MitigationDef[];
+  /** techniqueId → mitigationId → MITRE's note on how the mitigation applies */
+  mitigationNotes: Record<string, Record<string, string>>;
+  /** techniqueId → detection strategy */
+  detections: Record<string, DetectionStrategyDef>;
+  dataComponents: DataComponentDef[];
+  /** chainId → techniqueId → MITRE's procedure description */
+  usageNotes: Record<string, Record<string, string>>;
+}
+
+// ─── Defense catalog ────────────────────────────────────────────────────────
+
+/** Rough cost class used to derive default dollar estimates */
+export type CostTier = 1 | 2 | 3 | 4;
+
+export type DefenseKind = "mitigation" | "telemetry";
+
+/** A purchasable bundle of data components (e.g. endpoint process telemetry) */
+export interface TelemetrySource {
+  id: string;
+  name: string;
+  description: string;
+  dataComponents: string[];
+  tier: CostTier;
+}
+
+/** A named starting posture (approximate mapping of a framework to mitigations + telemetry) */
+export interface PosturePreset {
+  name: string;
+  description: string;
+  mitigations: string[];
+  telemetry: string[];
+}
+
+/** A required stage of an intrusion: the actor must pass one of these tactics */
+export interface GateDef {
+  id: string;
+  label: string;
+  tactics: string[];
+}
+
+/** Named environment preset with optional per-technique base exposure overrides */
+export interface EnvPreset {
+  name: string;
+  description?: string;
+  overrides?: Record<string, number>;
 }
 
 /** Visual styling config for a highlighted chain */
@@ -46,143 +157,31 @@ export interface ChainColor {
   label: string;
 }
 
-/** Security control category identifier */
-export type ControlCategory = "technical" | "detective" | "administrative" | "physical";
-
-/** Control category metadata */
-export interface ControlCategoryInfo {
-  id: ControlCategory;
-  name: string;
-  color: string;
-  icon: string;
-}
-
-/**
- * A security control with per-technique coverage reductions.
- * Coverage values are negative floats (e.g. -0.4 means 40% risk reduction).
- */
-export interface SecurityControl {
-  id: string;
-  name: string;
-  category: ControlCategory;
-  cost: string;
-  coverage: Record<string, number>;
-  /** Runtime state — whether the control is currently deployed */
-  deployed?: boolean;
-}
-
-/** A named preset of control IDs (e.g. NIST CSF, CIS v8) */
-export interface ControlPreset {
-  name: string;
-  controls: string[];
-}
-
-/** Named environment preset with optional per-technique exposure overrides */
-export interface EnvPreset {
-  name: string;
-  description?: string;
-  overrides?: Record<string, number>;
-}
-
-/** Threat actor / intrusion-set profile from CHAIN_PROFILES */
-export interface ChainProfile {
-  country: string;
-  aliases: string[];
-  firstSeen: string;
-  lastSeen: string;
-  sectors: string[];
-  description: string;
-}
-
-/** Per-technique contextual examples from TECHNIQUE_EXAMPLES */
-export interface TechniqueExample {
-  summary: string;
-  examples: string[];
-}
-
-/** Per-technique chain-specific context from CHAIN_TECHNIQUE_CONTEXT */
-export type ChainTechniqueContext = Record<string, Record<string, string>>;
-
-/** A MITRE mitigation reference */
-export interface Mitigation {
-  mitreId: string;
-  name: string;
-  description?: string;
-}
-
-/** Enterprise platform IDs */
-export type EnterprisePlatformId = "Windows" | "Linux" | "macOS" | "Cloud" | "Network" | "SaaS";
-
-/** ICS/OT platform IDs */
-export type IcsPlatformId =
-  | "Field Controller/RTU/PLC/IED"
-  | "Human-Machine Interface"
-  | "Engineering Workstation"
-  | "Control Server"
-  | "Data Historian"
-  | "Safety Instrumented System/Protection Relay"
-  | "Input/Output Server";
-
-/** Union of all supported platform strings */
-export type PlatformId = EnterprisePlatformId | IcsPlatformId;
-
-/** Framework discriminator */
-export type FrameworkId = "enterprise" | "ics";
-
-/** Data source selector */
-export type DataSourceId = "stix" | "builtin";
-
-/** Sector filter options */
-export type SectorFilter = "all" | "government" | "financial";
-
-/** Kill-chain phase → weight multiplier (keyed by phase number) */
-export type PhaseWeights = Record<number, number>;
-
-/** STIX tactic slug → tactic ID mapping */
-export type StixTacticMap = Record<string, string>;
-
-/** Tactic ID → phase number mapping */
-export type TacticPhase = Record<string, number>;
-
-/** Tactic ID → STIX phase name mapping */
-export type TacticToPhase = Record<string, string>;
-
-/** Mitigation name → control ID mapping */
-export type MitigationControlMap = Record<string, string>;
-
-/** Import for coverage KB type (defined in coverageKb.ts) */
-import type { CoverageKB } from "./coverageKb";
-
-/** Return type of parseStixBundle() — all data extracted from a STIX bundle */
-export interface ParsedStixData {
-  techniques: Technique[];
-  edges: Edge[];
-  chains: AttackChain[];
-  techniqueDescriptions: Record<string, string>;
-  chainTechContext: ChainTechniqueContext;
-  techniquePlatforms: Record<string, string[]>;
-  mitigations: Record<string, Mitigation[]>;
-  groupProfiles: Record<string, ChainProfile>;
-}
-
 /** Full return type of getFrameworkConfig(fw) */
 export interface FrameworkConfig {
+  id: FrameworkId;
+  label: string;
   tactics: Tactic[];
-  stixTacticMap: StixTacticMap;
-  tacticPhase: TacticPhase;
-  tacticToPhase: TacticToPhase;
-  phaseWeights: PhaseWeights;
+  stixTacticMap: Record<string, string>;
+  tacticPhase: Record<string, number>;
+  tacticToPhase: Record<string, string>;
   allPlatforms: string[];
   killChainName: string;
   stixSourceName: string;
   navigatorDomain: string;
+  attackVersion: string;
+  /** Upstream STIX bundle (used by scripts/build-attack-data.ts, not at runtime) */
   stixUrl: string;
-  stixCacheKey: string;
-  hasBuiltin: boolean;
+  /** Same-origin compact dataset served from public/data */
+  dataUrl: string;
+  dataCacheKey: string;
   hasSubTechniques: boolean;
-  securityControls: SecurityControl[];
-  controlPresets: Record<string, ControlPreset>;
+  gateOptions: GateDef[];
+  defaultGates: string[];
+  telemetrySources: TelemetrySource[];
+  mitigationTiers: Record<string, CostTier>;
+  nonActionableMitigations: string[];
+  posturePresets: Record<string, PosturePreset>;
   envPresets: Record<string, EnvPreset>;
-  mitigationControlMap: MitigationControlMap;
   coverageKB: CoverageKB;
 }

@@ -5,7 +5,7 @@
 export interface ToolTechniqueScore {
   detect: number;
   prevent: number;
-  /** Source attribution (e.g. "ER7", "ER6", "sigma", "vendor") */
+  /** Provenance of the score ("estimate" for the bundled KB) */
   source?: string;
 }
 
@@ -50,6 +50,8 @@ export interface InfraCategory {
 export interface CoverageKBMetadata {
   attack_version: string;
   last_updated: string;
+  /** "estimate" = author-written defaults; "measured" = derived from validation data */
+  provenance: "estimate" | "measured";
   sources: string[];
 }
 

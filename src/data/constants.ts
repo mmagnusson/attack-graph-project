@@ -1,18 +1,6 @@
-// ─── Static Constants extracted from attack-path-optimizer.html ───────────────
+// ─── Static Constants ─────────────────────────────────────────────────────────
 
-export interface Tactic {
-  id: string;
-  name: string;
-  phase: number;
-  color: string;
-}
-
-export interface ControlCategory {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-}
+import type { ChainColor, Tactic } from '../types';
 
 export const TACTICS: Tactic[] = [
   { id: "TA0043", name: "Reconnaissance", phase: 0, color: "#6366f1" },
@@ -32,13 +20,22 @@ export const TACTICS: Tactic[] = [
   { id: "TA0040", name: "Impact", phase: 8, color: "#a855f7" },
 ];
 
-export const CHAIN_COLORS = [
-  { color: "#f59e0b", label: "amber" },
-  { color: "#06b6d4", label: "cyan" },
-  { color: "#ec4899", label: "pink" },
-] as const;
+/** Highlight colors for up to three compared chains (validated as a set on the dark surfaces) */
+export const CHAIN_COLORS: readonly ChainColor[] = [
+  { color: "#c98500", label: "gold" },
+  { color: "#d55181", label: "magenta" },
+  { color: "#9085e9", label: "violet" },
+];
 
 export const MAX_HIGHLIGHTED_CHAINS = 3;
+
+/** Model encoding colors — attacker success, detection, prevention (validated, see README) */
+export const ENCODING = {
+  success: "#d95926",
+  detection: "#3987e5",
+  prevention: "#199e70",
+  cut: "#0ca30c",
+} as const;
 
 // ─── ICS/OT ATT&CK Constants ─────────────────────────────────────────────────
 
@@ -72,20 +69,6 @@ export const ICS_STIX_TACTIC_MAP: Record<string, string> = {
   "impact": "TA0105",
 };
 
-export const ICS_ALL_PLATFORMS: string[] = [
-  "Field Controller/RTU/PLC/IED",
-  "Human-Machine Interface",
-  "Engineering Workstation",
-  "Control Server",
-  "Data Historian",
-  "Safety Instrumented System/Protection Relay",
-  "Input/Output Server",
-];
-
-export const ICS_PHASE_WEIGHTS: Record<number, number> = {
-  0: 0.6, 1: 0.7, 2: 0.8, 3: 0.9, 4: 1.0, 5: 1.0, 6: 1.1, 7: 1.4, 8: 1.6,
-};
-
 // ─── STIX Phase → Tactic Mapping ──────────────────────────────────────────────
 
 export const STIX_TACTIC_MAP: Record<string, string> = {
@@ -106,22 +89,7 @@ export const STIX_TACTIC_MAP: Record<string, string> = {
   "impact": "TA0040",
 };
 
-export const TACTIC_PHASE: Record<string, number> = {};
-TACTICS.forEach(t => TACTIC_PHASE[t.id] = t.phase);
-
-// F4: Kill Chain Phase Weighting — later phases weight more
-export const PHASE_WEIGHTS: Record<number, number> = {
-  0: 0.5, 1: 0.7, 2: 0.8, 3: 0.9, 4: 1.0, 5: 1.0, 6: 1.1, 7: 1.2, 8: 1.5,
-};
-
-// F2: Platform/OS Filtering
-export const ALL_PLATFORMS: string[] = ["Windows", "Linux", "macOS", "Cloud", "Network", "SaaS"];
-
-// ─── Security Control Categories ──────────────────────────────────────────────
-
-export const CONTROL_CATEGORIES: ControlCategory[] = [
-  { id: "technical", name: "Technical / Preventive", color: "#14b8a6", icon: "\u26E9" },
-  { id: "detective", name: "Detective / Monitoring", color: "#3b82f6", icon: "\u25CE" },
-  { id: "administrative", name: "Administrative / Policy", color: "#a855f7", icon: "\u00A7" },
-  { id: "physical", name: "Physical / Operational", color: "#f59e0b", icon: "\u25A3" },
+/** Enterprise platforms exactly as ATT&CK v19 publishes them (techniques and analytics share these names) */
+export const ALL_PLATFORMS: string[] = [
+  "Windows", "Linux", "macOS", "ESXi", "IaaS", "SaaS", "Office Suite", "Identity Provider", "Containers", "Network Devices", "PRE",
 ];

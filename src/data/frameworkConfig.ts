@@ -1,45 +1,19 @@
 // ─── Framework Config ─────────────────────────────────────────────────────────
+//
+// ATT&CK version pinning lives here (attackVersion / stixUrl) and in the coverage
+// KB metadata. After bumping it, run `npm run data` to regenerate public/data.
 
-import type { Tactic } from './constants';
-import type { SecurityControl, ControlPreset } from './controls';
-import type { EnvPreset } from './envPresets';
-import type { CoverageKB } from './coverageKb';
-
+import type { FrameworkConfig, FrameworkId, Tactic } from '../types';
+import { TACTICS, ICS_TACTICS, STIX_TACTIC_MAP, ICS_STIX_TACTIC_MAP, ALL_PLATFORMS } from './constants';
 import {
-  TACTICS, ICS_TACTICS,
-  STIX_TACTIC_MAP, ICS_STIX_TACTIC_MAP,
-  TACTIC_PHASE, PHASE_WEIGHTS, ICS_PHASE_WEIGHTS,
-  ALL_PLATFORMS, ICS_ALL_PLATFORMS,
-} from './constants';
-import {
-  SECURITY_CONTROLS, ICS_SECURITY_CONTROLS,
-  CONTROL_PRESETS, ICS_CONTROL_PRESETS,
-  ICS_MITIGATION_CONTROL_MAP,
-} from './controls';
+  ENTERPRISE_TELEMETRY, ENTERPRISE_MITIGATION_TIERS, ENTERPRISE_NON_ACTIONABLE, ENTERPRISE_GATES, ENTERPRISE_DEFAULT_GATES, ENTERPRISE_POSTURES,
+  ICS_TELEMETRY, ICS_MITIGATION_TIERS, ICS_NON_ACTIONABLE, ICS_GATES, ICS_DEFAULT_GATES, ICS_POSTURES,
+} from './defenseCatalog';
 import { ENV_PRESETS, ICS_ENV_PRESETS } from './envPresets';
 import { COVERAGE_KB, ICS_COVERAGE_KB } from './coverageKb';
-import { MITIGATION_CONTROL_MAP } from './techniqueMetadata';
+import { PARSER_VERSION } from '../engine/stixParser';
 
-export interface FrameworkConfig {
-  tactics: Tactic[];
-  stixTacticMap: Record<string, string>;
-  tacticPhase: Record<string, number>;
-  tacticToPhase: Record<string, string>;
-  phaseWeights: Record<number, number>;
-  allPlatforms: string[];
-  killChainName: string;
-  stixSourceName: string;
-  navigatorDomain: string;
-  stixUrl: string;
-  stixCacheKey: string;
-  hasBuiltin: boolean;
-  hasSubTechniques: boolean;
-  securityControls: SecurityControl[];
-  controlPresets: Record<string, ControlPreset>;
-  envPresets: Record<string, EnvPreset>;
-  mitigationControlMap: Record<string, string>;
-  coverageKB: CoverageKB;
-}
+export const ATTACK_VERSION = "19.0";
 
 export function buildTacticPhase(tactics: Tactic[]): Record<string, number> {
   const m: Record<string, number> = {};
@@ -53,51 +27,61 @@ export function buildTacticToPhase(stixMap: Record<string, string>): Record<stri
   return m;
 }
 
-const TACTIC_TO_PHASE_NAME: Record<string, string> = {};
-Object.entries(STIX_TACTIC_MAP).forEach(([name, id]) => { TACTIC_TO_PHASE_NAME[id] = name; });
+const stixUrl = (domain: string) =>
+  "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v" + ATTACK_VERSION + "/" + domain + "/" + domain + ".json";
 
-export function getFrameworkConfig(fw: string): FrameworkConfig {
+export function getFrameworkConfig(fw: FrameworkId | string): FrameworkConfig {
   if (fw === "ics") {
     return {
+      id: "ics",
+      label: "ICS/OT",
       tactics: ICS_TACTICS,
       stixTacticMap: ICS_STIX_TACTIC_MAP,
       tacticPhase: buildTacticPhase(ICS_TACTICS),
       tacticToPhase: buildTacticToPhase(ICS_STIX_TACTIC_MAP),
-      phaseWeights: ICS_PHASE_WEIGHTS,
-      allPlatforms: ICS_ALL_PLATFORMS,
+      // v19 ICS techniques carry no platform data, so there is nothing to filter on
+      allPlatforms: [],
       killChainName: "mitre-ics-attack",
       stixSourceName: "mitre-attack",
       navigatorDomain: "ics-attack",
-      stixUrl: "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v19.0/ics-attack/ics-attack.json",
-      stixCacheKey: "ics-attack-v19.0",
-      hasBuiltin: false,
+      attackVersion: ATTACK_VERSION,
+      stixUrl: stixUrl("ics-attack"),
+      dataUrl: "/data/ics-attack-" + ATTACK_VERSION + ".json",
+      dataCacheKey: "ics-attack-" + ATTACK_VERSION + "-p" + PARSER_VERSION,
       hasSubTechniques: false,
-      securityControls: ICS_SECURITY_CONTROLS,
-      controlPresets: ICS_CONTROL_PRESETS,
+      gateOptions: ICS_GATES,
+      defaultGates: ICS_DEFAULT_GATES,
+      telemetrySources: ICS_TELEMETRY,
+      mitigationTiers: ICS_MITIGATION_TIERS,
+      nonActionableMitigations: ICS_NON_ACTIONABLE,
+      posturePresets: ICS_POSTURES,
       envPresets: ICS_ENV_PRESETS,
-      mitigationControlMap: ICS_MITIGATION_CONTROL_MAP,
       coverageKB: ICS_COVERAGE_KB,
     };
   }
-  // Enterprise (default)
   return {
+    id: "enterprise",
+    label: "Enterprise",
     tactics: TACTICS,
     stixTacticMap: STIX_TACTIC_MAP,
-    tacticPhase: TACTIC_PHASE,
-    tacticToPhase: TACTIC_TO_PHASE_NAME,
-    phaseWeights: PHASE_WEIGHTS,
+    tacticPhase: buildTacticPhase(TACTICS),
+    tacticToPhase: buildTacticToPhase(STIX_TACTIC_MAP),
     allPlatforms: ALL_PLATFORMS,
     killChainName: "mitre-attack",
     stixSourceName: "mitre-attack",
     navigatorDomain: "enterprise-attack",
-    stixUrl: "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v19.0/enterprise-attack/enterprise-attack.json",
-    stixCacheKey: "enterprise-attack-v19.0",
-    hasBuiltin: true,
+    attackVersion: ATTACK_VERSION,
+    stixUrl: stixUrl("enterprise-attack"),
+    dataUrl: "/data/enterprise-attack-" + ATTACK_VERSION + ".json",
+    dataCacheKey: "enterprise-attack-" + ATTACK_VERSION + "-p" + PARSER_VERSION,
     hasSubTechniques: true,
-    securityControls: SECURITY_CONTROLS,
-    controlPresets: CONTROL_PRESETS,
+    gateOptions: ENTERPRISE_GATES,
+    defaultGates: ENTERPRISE_DEFAULT_GATES,
+    telemetrySources: ENTERPRISE_TELEMETRY,
+    mitigationTiers: ENTERPRISE_MITIGATION_TIERS,
+    nonActionableMitigations: ENTERPRISE_NON_ACTIONABLE,
+    posturePresets: ENTERPRISE_POSTURES,
     envPresets: ENV_PRESETS,
-    mitigationControlMap: MITIGATION_CONTROL_MAP,
     coverageKB: COVERAGE_KB,
   };
 }

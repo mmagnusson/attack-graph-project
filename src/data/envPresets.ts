@@ -1,16 +1,17 @@
 // ─── Environment Presets ──────────────────────────────────────────────────────
+// Base-exposure shortcuts: per-technique chance an attempt would work before any
+// modeled defense (parent values apply to sub-techniques). The non-default
+// presets fold some controls into exposure, so prefer "Unassessed" when you
+// record your defenses explicitly in the Defenses panel — otherwise those
+// controls are counted twice.
 
-export interface EnvPreset {
-  name: string;
-  description: string;
-  overrides?: Record<string, number>;
-}
+import type { EnvPreset } from '../types';
 
 export const ENV_PRESETS: Record<string, EnvPreset> = {
-  default: { name: "Unassessed (Worst Case)", description: "All nodes fully exposed" },
+  default: { name: "Unassessed (exposure 100%)", description: "Every technique fully exposed; defenses come from the Defenses panel" },
   government: {
     name: "Government (Typical)",
-    description: "Basic perimeter, some EDR, limited segmentation",
+    description: "Shortcut: typical government exposure with basic perimeter and some EDR folded in",
     overrides: {
       "T1566": 0.6, "T1190": 0.5, "T1059": 0.8, "T1078": 0.7,
       "T1547": 0.6, "T1068": 0.7, "T1003": 0.75, "T1021": 0.7,
@@ -20,7 +21,7 @@ export const ENV_PRESETS: Record<string, EnvPreset> = {
   },
   hardened: {
     name: "Hardened Enterprise",
-    description: "Full EDR, app whitelisting, network segmentation, MFA",
+    description: "Shortcut: exposure with EDR, allowlisting, segmentation and MFA folded in",
     overrides: {
       "T1566": 0.3, "T1190": 0.2, "T1059": 0.3, "T1078": 0.2,
       "T1547": 0.25, "T1068": 0.35, "T1003": 0.3, "T1021": 0.25,
@@ -40,8 +41,8 @@ export const ENV_PRESETS: Record<string, EnvPreset> = {
 
 export const ICS_ENV_PRESETS: Record<string, EnvPreset> = {
   default: {
-    name: "Unassessed (Worst Case)",
-    description: "No environment assessment applied",
+    name: "Unassessed (exposure 100%)",
+    description: "Every technique fully exposed; defenses come from the Defenses panel",
     overrides: {}
   },
   "air-gapped": {
