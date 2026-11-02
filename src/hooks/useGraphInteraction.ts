@@ -1,9 +1,11 @@
 // ─── useGraphInteraction — divider drag, collapse, search, panel layout ──────
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import type { Technique } from '../types';
+import { readStored, writeStored } from './usePersistentState';
 
 interface UseGraphInteractionArgs {
-  displayTechniques: any[];
+  displayTechniques: Technique[];
 }
 
 export function useGraphInteraction({ displayTechniques }: UseGraphInteractionArgs) {
@@ -11,12 +13,9 @@ export function useGraphInteraction({ displayTechniques }: UseGraphInteractionAr
   const [showBottomPanels, setShowBottomPanels] = useState(true);
   const isDraggingDivider = useRef(false);
 
-  const [collapsedTactics, setCollapsedTactics] = useState<Set<string>>(() => {
-    try {
-      const s = localStorage.getItem("attackBreaker_collapsed");
-      return s ? new Set(JSON.parse(s)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [collapsedTactics, setCollapsedTactics] = useState<Set<string>>(
+    () => new Set(readStored<string[]>("attackBreaker_collapsed", [], Array.isArray)),
+  );
 
   const [techSearchQuery, setTechSearchQuery] = useState("");
   const [popoutGraph, setPopoutGraph] = useState(false);
@@ -74,7 +73,7 @@ export function useGraphInteraction({ displayTechniques }: UseGraphInteractionAr
     setCollapsedTactics(prev => {
       const next = new Set(prev);
       if (next.has(tacId)) next.delete(tacId); else next.add(tacId);
-      try { localStorage.setItem("attackBreaker_collapsed", JSON.stringify([...next])); } catch {}
+      writeStored("attackBreaker_collapsed", [...next]);
       return next;
     });
   }, []);
@@ -83,7 +82,7 @@ export function useGraphInteraction({ displayTechniques }: UseGraphInteractionAr
     if (!techSearchQuery.trim()) return null;
     const q = techSearchQuery.toLowerCase().trim();
     const matches = new Set<string>();
-    displayTechniques.forEach((t: any) => {
+    displayTechniques.forEach(t => {
       if (t.id.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)) matches.add(t.id);
     });
     return matches;

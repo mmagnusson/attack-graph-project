@@ -1,184 +1,129 @@
-import React from 'react';
-import { TACTICS } from '../../data/constants';
+// ─── ExecutiveSummary — leadership view of residual risk and the plan ───────
+
+import { useMemo } from 'react';
+import type { AttackDataset, DefensePosture } from '../../types';
+import type { RiskModelView } from '../../hooks/useRiskModel';
+import { actorBreakdown } from '../../engine/riskModel';
+import { fmtPct, fmtUsd } from '../../engine/displayMetrics';
+import { ENCODING } from '../../data/constants';
 import { PopoutButton } from '../Analysis/PopoutButton';
+import { KindBadge, Meter, SmallButton } from '../ui';
 import { theme } from '../../theme';
-import type { Technique, Tactic, SecurityControl } from '../../types';
-
-interface ChainStatus {
-  broken: boolean;
-}
-
-interface OptimalResult {
-  selected: string[];
-}
 
 interface ExecutiveSummaryProps {
-  techniques: Technique[];
-  exposures: Record<string, number>;
-  betweenness: Record<string, number>;
-  chainCoverage: Record<string, number>;
-  filteredChains: any[];
-  chainStatus: ChainStatus[];
-  remediated: Set<string>;
-  optimal: OptimalResult;
-  deployedControls: Set<string>;
+  rm: RiskModelView;
+  dataset: AttackDataset;
+  posture: DefensePosture;
+  budget: number;
+  onExportBoard: () => void;
   popout?: boolean;
   onPopout?: () => void;
-  tactics?: Tactic[];
-  securityControls?: SecurityControl[];
 }
 
-export function ExecutiveSummary({ techniques, exposures, betweenness, chainCoverage, filteredChains,
-  chainStatus, remediated, optimal, deployedControls, popout, onPopout, tactics: tacticsProp, securityControls: secControlsProp }: ExecutiveSummaryProps) {
-  const tacticsArr = tacticsProp || TACTICS;
-  const controlsArr = secControlsProp || [];
-  const avgExposure = techniques.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / Math.max(techniques.length, 1);
-  const highExposed = techniques.filter(t => (exposures[t.id] ?? 1) > 0.7).length;
-  const totalDisrupted = chainStatus.filter(c => c.broken).length;
-  const disruptionRate = totalDisrupted / Math.max(filteredChains.length, 1);
-  const riskScore = Math.round(Math.min(100, (avgExposure * 40 + (1 - disruptionRate) * 35 + (highExposed / Math.max(techniques.length, 1)) * 25)));
-  const riskColor = riskScore > 70 ? theme.colors.red : riskScore > 40 ? theme.colors.orange : theme.colors.green;
+export function ExecutiveSummary({ rm, dataset, posture, budget, onExportBoard, popout, onPopout }: ExecutiveSummaryProps) {
+  const { model, baseState, plan } = rm;
 
-  const topRisks = techniques
-    .map(t => ({ ...t, exposure: exposures[t.id] ?? 1, bc: betweenness[t.id] ?? 0, cc: chainCoverage[t.id] ?? 0 }))
-    .sort((a, b) => (b.exposure * b.bc) - (a.exposure * a.bc))
-    .filter(t => !remediated.has(t.id))
-    .slice(0, 5);
+  // Average chance actors get through each required stage (weighted by actor weight)
+  const stages = useMemo(() => {
+    if (!model || !baseState) return [];
+    const acc = new Map<string, { label: string; sum: number; w: number }>();
+    model.actors.forEach((a, i) => {
+      for (const g of actorBreakdown(model, rm.params, baseState, i)) {
+        const x = acc.get(g.gateId) ?? { label: g.label, sum: 0, w: 0 };
+        x.sum += a.weight * g.value;
+        x.w += a.weight;
+        acc.set(g.gateId, x);
+      }
+    });
+    return [...acc.values()].map(x => ({ label: x.label, value: x.w > 0 ? x.sum / x.w : 0 }));
+  }, [model, baseState, rm.params]);
 
-  const tacticExposures: Record<string, { avg: number; count: number; name: string; color: string }> = {};
-  tacticsArr.forEach(tac => {
-    const tacTechs = techniques.filter(t => t.tactic === tac.id);
-    if (tacTechs.length === 0) return;
-    const avg = tacTechs.reduce((s, t) => s + (exposures[t.id] ?? 1), 0) / tacTechs.length;
-    tacticExposures[tac.id] = { avg, count: tacTechs.length, name: tac.name, color: tac.color || '#6366f1' };
-  });
-  const coverageGaps = Object.values(tacticExposures).sort((a, b) => b.avg - a.avg).slice(0, 5);
+  const topActors = useMemo(() => {
+    if (!model || !baseState) return [];
+    return model.actors.map((a, i) => ({ name: a.chain.name, v: baseState.viability[i] })).sort((a, b) => b.v - a.v).slice(0, 5);
+  }, [model, baseState]);
 
-  const topUndeployedControls = controlsArr
-    .filter(c => !deployedControls.has(c.id))
-    .map(c => {
-      const totalReduction = Object.values(c.coverage).reduce((s: number, v: any) => s + Math.abs(v as number), 0);
-      return { ...c, impact: totalReduction };
-    })
-    .sort((a, b) => b.impact - a.impact)
-    .slice(0, 3);
-
-  const sectionStyle = { background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle, borderRadius: 8, padding: "18px 22px", marginBottom: 14 };
-  const labelStyle: React.CSSProperties = { ...theme.sectionLabel, marginBottom: 10 };
+  if (!model || !plan) return <div style={{ color: theme.colors.textMuted }}>Loading…</div>;
+  const w = plan.totalWeight || 1;
+  const reduction = plan.baselineRisk > 0 ? 1 - plan.finalRisk / plan.baselineRisk : 0;
+  const section = { background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle, borderRadius: 8, padding: "16px 20px", marginBottom: 14 };
+  const label = { ...theme.sectionLabel, marginBottom: 10 };
+  const actionable = dataset.mitigations.filter(m => m.actionable).length;
 
   return (
     <>
-      <h3 style={{ fontSize: theme.fontSizes.medium, color: theme.colors.cyan, margin: "0 0 16px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center" }}>
+      <h3 style={{ fontSize: theme.fontSizes.medium, color: theme.colors.cyan, margin: "0 0 16px 0", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: 8 }}>
         EXECUTIVE SUMMARY
         {!popout && onPopout && <PopoutButton onClick={onPopout} title="Pop out Executive Summary" />}
+        <span style={{ marginLeft: "auto" }}><SmallButton onClick={onExportBoard} color={theme.colors.cyan}>BOARD REPORT</SmallButton></span>
       </h3>
 
-      <div style={{ ...sectionStyle, textAlign: "center" }}>
-        <div style={labelStyle}>Overall Risk Score</div>
-        <div style={{ fontSize: theme.fontSizes.hero, fontWeight: 700, color: riskColor, lineHeight: 1.1 }}>{riskScore}</div>
-        <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textMuted, marginTop: 6 }}>
-          {riskScore > 70 ? "Critical — Immediate action required" : riskScore > 40 ? "Moderate — Improvements recommended" : "Good — Maintain current posture"}
+      <div style={{ ...section, textAlign: "center" }}>
+        <div style={label}>Residual risk today</div>
+        <div style={{ fontSize: theme.fontSizes.hero, fontWeight: 600, color: theme.colors.textPrimary, lineHeight: 1.1 }}>{fmtPct(rm.currentResidual)}</div>
+        <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, marginTop: 6, lineHeight: 1.5 }}>
+          Expected share of {model.actors.length} modeled threat actors that could complete every required stage of an intrusion without being contained.
         </div>
       </div>
 
-      <div style={{ ...sectionStyle }}>
-        <div style={labelStyle}>Key Metrics</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: theme.spacing.xl }}>
-          {[
-            { label: "Techniques", value: techniques.length, color: theme.colors.indigo },
-            { label: "Attack Chains", value: filteredChains.length, color: theme.colors.violet },
-            { label: "Disruption Rate", value: (disruptionRate * 100).toFixed(0) + "%", color: disruptionRate > 0.7 ? theme.colors.green : theme.colors.orange },
-            { label: "Avg Exposure", value: (avgExposure * 100).toFixed(0) + "%", color: avgExposure > 0.6 ? theme.colors.red : theme.colors.orange },
-            { label: "Remediated", value: remediated.size, color: theme.colors.green },
-            { label: "Controls Deployed", value: deployedControls.size, color: theme.colors.teal },
-          ].map((m, i) => (
-            <div key={i} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: theme.fontSizes.display, fontWeight: 700, color: m.color }}>{m.value}</div>
-              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>{m.label}</div>
-            </div>
-          ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+        {[
+          { l: "With the plan", v: fmtPct(plan.finalRisk / w) },
+          { l: "Plan cost / yr", v: fmtUsd(plan.totalCost) },
+          { l: "Risk reduction", v: "−" + fmtPct(reduction) },
+        ].map(s => (
+          <div key={s.l} style={{ ...section, marginBottom: 0, padding: "12px 14px" }}>
+            <div style={{ fontSize: theme.fontSizes.display, fontWeight: 600, color: theme.colors.textPrimary }}>{s.v}</div>
+            <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+      {rm.sensitivity && (
+        <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, margin: "-6px 0 14px" }}>
+          Reduction ranges from {fmtPct(rm.sensitivity.low)} to {fmtPct(rm.sensitivity.high)} under pessimistic and optimistic assumptions. Budget {fmtUsd(budget)}; costs are estimates unless edited.
         </div>
+      )}
+
+      <div style={section}>
+        <div style={label}>Recommended next investments</div>
+        {plan.steps.slice(0, 6).map((s, i) => (
+          <div key={s.item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: i ? "1px solid " + theme.colors.borderSubtle : "none" }}>
+            <span style={{ color: theme.colors.textFaint, width: 16, fontSize: theme.fontSizes.small }}>{i + 1}</span>
+            <KindBadge kind={s.item.kind} />
+            <span style={{ flex: 1, fontSize: theme.fontSizes.small, color: theme.colors.textPrimary }}>{s.item.name}</span>
+            <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary, fontVariantNumeric: "tabular-nums" }}>{fmtUsd(s.item.cost)} · −{(s.delta / w * 100).toFixed(1)} pts</span>
+          </div>
+        ))}
+        {plan.steps.length === 0 && <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>No affordable defense reduces risk further.</div>}
       </div>
 
-      <div style={{ ...sectionStyle }}>
-        <div style={labelStyle}>Top 5 Risks</div>
-        {topRisks.map((t, i) => {
-          const tactic = tacticsArr.find(ta => ta.id === t.tactic);
-          return (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: i < 4 ? "1px solid " + theme.colors.borderSubtle : "none" }}>
-              <span style={{ fontSize: theme.fontSizes.medium, color: theme.colors.textFaint, width: 24, fontWeight: 700 }}>#{i + 1}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: theme.fontSizes.body, fontWeight: 600, color: theme.colors.textPrimary }}>{t.id} — {t.name}</div>
-                <div style={{ fontSize: theme.fontSizes.small, color: tactic?.color }}>{tactic?.name}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: theme.fontSizes.medium, fontWeight: 700, color: t.exposure > 0.7 ? theme.colors.red : theme.colors.orange }}>{(t.exposure * 100).toFixed(0)}%</div>
-                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint }}>exposure</div>
-              </div>
-            </div>
-          );
-        })}
+      <div style={section}>
+        <div style={label}>How often actors get through each stage</div>
+        {stages.map(s => (
+          <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <span style={{ width: 150, flexShrink: 0, fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>{s.label}</span>
+            <span style={{ flex: 1, minWidth: 0, display: "flex" }}><Meter value={s.value} color={ENCODING.success} width="100%" height={8} label={s.label} /></span>
+            <span style={{ width: 40, textAlign: "right", fontSize: theme.fontSizes.small, color: theme.colors.textBody, fontVariantNumeric: "tabular-nums" }}>{fmtPct(s.value)}</span>
+          </div>
+        ))}
+        <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted }}>Lower is better. The weakest stage is where the next dollar usually goes furthest.</div>
       </div>
 
-      <div style={{ ...sectionStyle }}>
-        <div style={labelStyle}>Coverage Gaps (Highest Exposure Tactics)</div>
-        {coverageGaps.map((tac, i) => (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.fontSizes.base, marginBottom: 3 }}>
-              <span style={{ color: tac.color }}>{tac.name}</span>
-              <span style={{ color: tac.avg > 0.7 ? theme.colors.red : theme.colors.orange }}>{(tac.avg * 100).toFixed(0)}%</span>
-            </div>
-            <div style={{ height: 8, background: theme.colors.bgSurface, borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: (tac.avg * 100) + "%", background: tac.color, borderRadius: 4, opacity: 0.7 }} />
-            </div>
+      <div style={section}>
+        <div style={label}>Most viable actors</div>
+        {topActors.map(a => (
+          <div key={a.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>
+            <span style={{ flex: 1 }}>{a.name}</span>
+            <Meter value={a.v} color={ENCODING.success} width={80} label={"Viability of " + a.name} />
+            <span style={{ width: 40, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtPct(a.v)}</span>
           </div>
         ))}
       </div>
 
-      <div style={{ ...sectionStyle }}>
-        <div style={labelStyle}>Recommended Actions</div>
-        <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, marginBottom: 10 }}>Top remediation targets:</div>
-        {optimal.selected.slice(0, 3).map((id, i) => {
-          const t = techniques.find(t => t.id === id);
-          return (
-            <div key={id} style={{ fontSize: theme.fontSizes.base, color: theme.colors.orange, padding: "4px 0" }}>
-              {i + 1}. Remediate <strong>{id}</strong>{t ? " (" + t.name + ")" : ""}
-            </div>
-          );
-        })}
-        {topUndeployedControls.length > 0 && (
-          <>
-            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 }}>Top undeployed controls:</div>
-            {topUndeployedControls.map((c, i) => (
-              <div key={c.id} style={{ fontSize: theme.fontSizes.base, color: theme.colors.teal, padding: "4px 0" }}>
-                {i + 1}. Deploy <strong>{c.name}</strong> ({c.cost})
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-
-      <div style={{ ...sectionStyle }}>
-        <div style={labelStyle}>Tactic Exposure Heatmap</div>
-        {tacticsArr.map(tac => {
-          const info = tacticExposures[tac.id];
-          if (!info) return null;
-          return (
-            <div key={tac.id} style={{ marginBottom: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.fontSizes.tiny, marginBottom: 2 }}>
-                <span style={{ color: tac.color }}>{tac.name}</span>
-                <span style={{ color: theme.colors.textMuted }}>{(info.avg * 100).toFixed(0)}% ({info.count})</span>
-              </div>
-              <div style={{ height: 10, background: theme.colors.bgSurface, borderRadius: 5, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%", width: (info.avg * 100) + "%", borderRadius: 5,
-                  background: info.avg > 0.7 ? theme.colors.red : info.avg > 0.4 ? theme.colors.orange : theme.colors.green,
-                  opacity: 0.8,
-                }} />
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ ...section, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary }}>
+        <div style={label}>Current posture</div>
+        {posture.mitigations.size} of {actionable} MITRE mitigations in place · {posture.dataComponents.size} of {dataset.dataComponents.length} data components collected
+        {posture.blocked.size > 0 && <> · {posture.blocked.size} techniques assumed blocked</>}
       </div>
     </>
   );

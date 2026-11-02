@@ -1,81 +1,77 @@
 // ─── useCompareMode — side-by-side framework comparison ──────────────────────
 
 import { useState, useEffect, useMemo } from 'react';
+import type { AttackDataset, FrameworkId, Technique } from '../types';
 import { getFrameworkConfig } from '../data/frameworkConfig';
-import { loadStixData } from '../data/loadAttackData';
-import {
-  computeBetweenness,
-  computeChainCoverage,
-  layoutNodes,
-} from '../engine/graphModel';
+import { loadAttackData } from '../data/loadAttackData';
+import { layoutNodes, buildCooccurrenceEdges, rollupId } from '../engine/graphModel';
+import type { NodeMetrics } from '../engine/displayMetrics';
 
 interface UseCompareModeArgs {
-  framework: string;
-  activeTechniques: any[];
+  framework: FrameworkId;
+  activeTechniques: Technique[];
 }
 
 export function useCompareMode({ framework, activeTechniques }: UseCompareModeArgs) {
   const [compareMode, setCompareMode] = useState(false);
-  const [compareData, setCompareData] = useState<any>(null);
-  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareData, setCompareData] = useState<{ fw: FrameworkId; data: AttackDataset } | null>(null);
 
-  const otherFramework = framework === "enterprise" ? "ics" : "enterprise";
+  const otherFramework: FrameworkId = framework === "enterprise" ? "ics" : "enterprise";
   const otherFwConfig = useMemo(() => getFrameworkConfig(otherFramework), [otherFramework]);
 
-  // Load other framework STIX data when compare mode is enabled
   useEffect(() => {
-    if (!compareMode) { setCompareData(null); return; }
+    if (!compareMode) return;
     const controller = new AbortController();
-    setCompareLoading(true);
-    loadStixData(controller.signal, otherFwConfig as any).then((data: any) => {
-      if (controller.signal.aborted) return;
-      setCompareData(data);
-      setCompareLoading(false);
-    }).catch(() => {
-      if (controller.signal.aborted) return;
-      setCompareLoading(false);
-    });
+    loadAttackData(controller.signal, otherFwConfig)
+      .then(data => { if (!controller.signal.aborted) setCompareData({ fw: otherFwConfig.id, data }); })
+      .catch(() => { /* the read-only pane simply stays empty */ });
     return () => controller.abort();
   }, [compareMode, otherFwConfig]);
 
-  // Compare layout computation
+  const data = compareMode && compareData?.fw === otherFramework ? compareData.data : null;
+  const compareLoading = compareMode && !data;
+
+  // Read-only pane: node size by actor count, no defenses applied
   const compareLayout = useMemo(() => {
-    if (!compareMode || !compareData) return null;
-    const techs = compareData.techniques.filter((t: any) => !t.parentId);
+    if (!data) return null;
+    const techs = data.techniques.filter(t => !t.parentId);
+    const display = new Set(techs.map(t => t.id));
     const layout = layoutNodes(techs, otherFwConfig.tactics);
-    const edges = (() => {
-      const techSet = new Set(techs.map((t: any) => t.id));
-      return compareData.edges.filter((e: any) => techSet.has(e.from) && techSet.has(e.to));
-    })();
-    const bc = computeBetweenness(techs, edges);
-    const cc = computeChainCoverage(techs, compareData.chains || []);
+    const groups = data.chains.filter(c => c.kind === 'group');
+    const counts: Record<string, Set<string>> = {};
+    for (const c of groups) for (const t of c.path) {
+      const id = rollupId(t, display);
+      if (id) (counts[id] ||= new Set()).add(c.id);
+    }
+    const maxCount = Math.max(1, ...Object.values(counts).map(s => s.size));
+    const metrics: Record<string, NodeMetrics> = {};
+    for (const t of techs) {
+      const n = counts[t.id]?.size ?? 0;
+      metrics[t.id] = { success: 1, detection: 0, activity: n / maxCount, actors: n, mitigations: 0, blocked: false };
+    }
     return {
-      techniques: techs, edges, positions: layout.positions,
-      viewHeight: layout.viewHeight, viewWidth: layout.viewWidth,
-      phaseCenters: layout.phaseCenters, betweenness: bc,
-      chainCoverage: cc, chains: compareData.chains || [],
+      techniques: techs, edges: buildCooccurrenceEdges(groups, display, otherFwConfig.tacticPhase, 200),
+      positions: layout.positions, viewHeight: layout.viewHeight, viewWidth: layout.viewWidth,
+      phaseCenters: layout.phaseCenters, metrics,
     };
-  }, [compareMode, compareData, otherFwConfig]);
+  }, [data, otherFwConfig]);
 
-  // Compare analysis: shared vs unique techniques
+  // Shared vs unique technique IDs (potential IT↔OT pivot points)
   const compareAnalysis = useMemo(() => {
-    if (!compareMode || !compareData) return null;
-    const currentIds = new Set<string>(activeTechniques.filter((t: any) => !t.parentId).map((t: any) => t.id));
-    const otherIds = new Set<string>((compareData.techniques || []).filter((t: any) => !t.parentId).map((t: any) => t.id));
-    const shared = new Set<string>(Array.from(currentIds).filter((id: string) => otherIds.has(id)));
-    const uniqueCurrent = new Set<string>(Array.from(currentIds).filter((id: string) => !otherIds.has(id)));
-    const uniqueOther = new Set<string>(Array.from(otherIds).filter((id: string) => !currentIds.has(id)));
-    return { currentCount: currentIds.size, otherCount: otherIds.size, shared, uniqueCurrent, uniqueOther };
-  }, [compareMode, compareData, activeTechniques]);
+    if (!data) return null;
+    const currentIds = new Set(activeTechniques.filter(t => !t.parentId).map(t => t.id));
+    const otherIds = new Set(data.techniques.filter(t => !t.parentId).map(t => t.id));
+    const shared = new Set([...currentIds].filter(id => otherIds.has(id)));
+    return {
+      currentCount: currentIds.size, otherCount: otherIds.size, shared,
+      uniqueCurrent: currentIds.size - shared.size, uniqueOther: otherIds.size - shared.size,
+    };
+  }, [data, activeTechniques]);
 
-  const resetCompare = () => {
-    setCompareMode(false);
-    setCompareData(null);
-  };
+  const resetCompare = () => setCompareMode(false);
 
   return {
-    compareMode, setCompareMode,
-    compareData, compareLoading,
+    compareMode, setCompareMode, compareLoading,
     otherFramework, otherFwConfig,
     compareLayout, compareAnalysis,
     resetCompare,

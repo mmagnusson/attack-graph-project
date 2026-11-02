@@ -1,68 +1,50 @@
-// ─── StatsBar — Stat indicators + action buttons toolbar ──
+// ─── StatsBar — headline numbers, panel launchers, actions ──
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Stat } from '../Analysis';
+import { fmtPct, fmtUsd } from '../../engine/displayMetrics';
 import { theme } from '../../theme';
+import { SIDEBAR_TABS, type SidebarPanel } from './sidebarTabs';
 
 interface StatsBarProps {
-  framework: string;
-  filteredChains: any[];
-  totalDisrupted: number;
-  remediated: Set<string>;
-  optimal: { selected: string[]; chainsDisrupted: number; chainsTotal: number };
-  applyOptimal: () => void;
-  exportCSV: () => void;
-  navFileInputRef: React.RefObject<HTMLInputElement | null>;
-  exportNavigatorLayer: () => void;
-  dataSource: string;
-  fwConfig: any;
+  shownResidual: number;
+  currentResidual: number;
+  planResidual: number;
+  planCost: number;
+  budget: number;
+  actorCount: number;
+  previewPlan: boolean;
+  setPreviewPlan: (v: boolean) => void;
+  sidebarPanel: SidebarPanel | null;
+  setSidebarPanel: (v: SidebarPanel | null) => void;
+  hasSubTechniques: boolean;
   showSubTechniques: boolean;
   setShowSubTechniques: (fn: (prev: boolean) => boolean) => void;
-  chainBuilderMode: boolean;
-  setChainBuilderMode: (fn: (prev: boolean) => boolean) => void;
-  setChainBuilderPath: (v: string[]) => void;
-  setChainBuilderName: (v: string) => void;
-  phaseWeighting: boolean;
-  setPhaseWeighting: (fn: (prev: boolean) => boolean) => void;
-  compareMode: boolean;
-  setCompareMode: (fn: (prev: boolean) => boolean) => void;
-  environmentProfile: any;
-  setShowProfileWizard: (v: boolean) => void;
   showBottomPanels: boolean;
   setShowBottomPanels: (fn: (prev: boolean) => boolean) => void;
-  highlightedChains: any[];
+  highlightedCount: number;
   isolateChain: boolean;
   setIsolateChain: (fn: (prev: boolean) => boolean) => void;
-  customPositions: Record<string, any>;
-  setCustomPositions: (v: Record<string, any>) => void;
+  hasCustomPositions: boolean;
+  resetPositions: () => void;
+  hasProfile: boolean;
+  openProfileWizard: () => void;
+  compareMode: boolean;
+  setCompareMode: (fn: (prev: boolean) => boolean) => void;
+  chainBuilderMode: boolean;
+  toggleChainBuilder: () => void;
+  exportCSV: () => void;
+  openNavImport: () => void;
+  exportNavigatorLayer: () => void;
+  exportPlanCSV: () => void;
+  exportBoardReport: () => void;
   handleShare: () => void;
   shareConfirm: boolean;
   resetAll: () => void;
-  showSaved: boolean;
-  sidebarPanel: "controls" | "analysis" | "gap" | "executive" | null;
-  setSidebarPanel: (v: "controls" | "analysis" | "gap" | "executive" | null) => void;
   onShowHelp: () => void;
 }
 
-export function StatsBar(props: StatsBarProps) {
-  const {
-    framework, filteredChains, totalDisrupted, remediated, optimal,
-    applyOptimal, exportCSV, navFileInputRef, exportNavigatorLayer,
-    dataSource, fwConfig,
-    showSubTechniques, setShowSubTechniques,
-    chainBuilderMode, setChainBuilderMode, setChainBuilderPath, setChainBuilderName,
-    phaseWeighting, setPhaseWeighting,
-    compareMode, setCompareMode,
-    environmentProfile, setShowProfileWizard,
-    showBottomPanels, setShowBottomPanels,
-    highlightedChains, isolateChain, setIsolateChain,
-    customPositions, setCustomPositions,
-    handleShare, shareConfirm, resetAll, showSaved,
-    sidebarPanel, setSidebarPanel,
-    onShowHelp,
-  } = props;
-
-  // "More" dropdown state
+export function StatsBar(p: StatsBarProps) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -76,179 +58,106 @@ export function StatsBar(props: StatsBarProps) {
     return () => { document.removeEventListener("mousedown", handler); document.removeEventListener("keydown", escHandler); };
   }, [moreMenuOpen]);
 
-  const btnStyle = (active: boolean, color: string) => ({
-    background: active ? color : "transparent",
-    color: active ? (color === theme.colors.textMuted || color === theme.colors.orange || color === theme.colors.teal ? theme.colors.bg : "#fff") : color,
-    border: "1px solid " + color,
-    borderRadius: theme.radii.sm,
-    padding: "8px 14px",
-    fontSize: theme.fontSizes.small,
-    fontWeight: 700 as const,
-    cursor: "pointer" as const,
-    fontFamily: "inherit",
-  });
-
-  const menuItemStyle = (active: boolean, color: string) => ({
+  const menuItemStyle = (active: boolean) => ({
     display: "flex" as const, alignItems: "center" as const, gap: 10, width: "100%", textAlign: "left" as const,
-    background: "transparent", border: "none", color: active ? color : theme.colors.textBody,
+    background: "transparent", border: "none", color: active ? theme.colors.textPrimary : theme.colors.textBody,
     padding: "8px 14px", fontSize: theme.fontSizes.small, fontWeight: 600 as const, cursor: "pointer" as const, fontFamily: "inherit",
   });
-
   const dot = (active: boolean, color: string) => ({
     width: 8, height: 8, borderRadius: theme.radii.round, background: active ? color : theme.colors.border, flexShrink: 0 as const,
   });
-
-  const anyAdvancedActive = phaseWeighting || compareMode || environmentProfile || chainBuilderMode || showSubTechniques;
+  const close = (fn: () => void) => () => { fn(); setMoreMenuOpen(false); };
+  const anyAdvancedActive = p.compareMode || p.hasProfile || p.chainBuilderMode || p.showSubTechniques;
+  const reduction = p.currentResidual > 0 ? 1 - p.planResidual / p.currentResidual : 0;
 
   return (
     <div style={{
-      display: "flex", gap: theme.spacing.xl, padding: "12px 24px", borderBottom: "1px solid " + theme.colors.borderSubtle,
+      display: "flex", gap: theme.spacing.xl, padding: "10px 24px", borderBottom: "1px solid " + theme.colors.borderSubtle,
       alignItems: "center", flexWrap: "wrap", flexShrink: 0,
     }}>
-      <span style={{
-        fontSize: theme.fontSizes.small, fontWeight: 700, padding: "4px 10px", borderRadius: theme.radii.pill,
-        background: framework === "ics" ? "#a855f720" : "#3b82f620",
-        color: framework === "ics" ? theme.colors.purple : theme.colors.blue,
-        border: "1px solid " + (framework === "ics" ? "#a855f740" : "#3b82f640"),
-      }}>
-        {framework === "ics" ? "ICS/OT" : "Enterprise"}
-      </span>
-      <Stat label="Attack Chains" value={filteredChains.length} color="#6366f1" />
-      <Stat label="Disrupted" value={totalDisrupted + "/" + filteredChains.length}
-        color={totalDisrupted === filteredChains.length ? "#22c55e" : "#f59e0b"} />
-      <Stat label="Remediated Nodes" value={remediated.size} color="#22c55e" />
-      <Stat label="Optimal Covers" value={optimal.chainsDisrupted + " chains in " + optimal.selected.length + " nodes"} color="#f59e0b" />
+      <Stat label={p.previewPlan ? "residual risk (plan preview)" : "residual risk"} value={fmtPct(p.shownResidual)} color={theme.colors.textPrimary} />
+      <Stat label={"plan: " + fmtUsd(p.planCost) + " of " + fmtUsd(p.budget)} value={"−" + fmtPct(reduction)} color={theme.colors.textPrimary} />
+      <Stat label="actors modeled" value={p.actorCount} color={theme.colors.textPrimary} />
 
-      {/* Action buttons */}
-      <button onClick={applyOptimal} style={{
-        background: theme.colors.orange, color: theme.colors.bg, border: "none", borderRadius: theme.radii.sm,
-        padding: "8px 14px", fontSize: theme.fontSizes.small, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-        letterSpacing: "0.5px",
-      }}>APPLY OPTIMAL</button>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: theme.fontSizes.small, color: theme.colors.textBody, cursor: "pointer" }}
+        title="Show the graph as if the recommended plan were in place">
+        <input type="checkbox" checked={p.previewPlan} onChange={e => p.setPreviewPlan(e.target.checked)} />
+        Preview plan
+      </label>
 
-      {/* Sidebar panel quick-launch buttons */}
       <div style={{ display: "flex", gap: 4, background: theme.colors.bgCard, borderRadius: theme.radii.md, padding: 3, border: "1px solid " + theme.colors.borderSubtle }}>
-        {([
-          { id: "controls" as const, label: "Controls", key: "S", color: theme.colors.teal },
-          { id: "analysis" as const, label: "Analysis", key: "A", color: theme.colors.blue },
-          { id: "gap" as const, label: "Gaps", key: "G", color: theme.colors.red },
-          { id: "executive" as const, label: "Executive", key: "X", color: theme.colors.cyan },
-        ]).map(tab => (
-          <button key={tab.id}
-            onClick={() => setSidebarPanel(sidebarPanel === tab.id ? null : tab.id)}
-            title={tab.label + " (" + tab.key + ")"}
+        {SIDEBAR_TABS.map(tab => (
+          <button key={tab.id} onClick={() => p.setSidebarPanel(p.sidebarPanel === tab.id ? null : tab.id)} title={tab.label + " (" + tab.key + ")"}
+            aria-pressed={p.sidebarPanel === tab.id}
             style={{
-              background: sidebarPanel === tab.id ? tab.color + "22" : "transparent",
-              color: sidebarPanel === tab.id ? tab.color : theme.colors.textMuted,
-              border: sidebarPanel === tab.id ? "1px solid " + tab.color + "44" : "1px solid transparent",
-              borderRadius: theme.radii.sm,
-              padding: "5px 10px", fontSize: theme.fontSizes.small, fontWeight: 600,
+              background: p.sidebarPanel === tab.id ? tab.color + "22" : "transparent",
+              color: p.sidebarPanel === tab.id ? theme.colors.textPrimary : theme.colors.textMuted,
+              border: p.sidebarPanel === tab.id ? "1px solid " + tab.color + "66" : "1px solid transparent",
+              borderRadius: theme.radii.sm, padding: "5px 10px", fontSize: theme.fontSizes.small, fontWeight: 600,
               cursor: "pointer", fontFamily: "inherit",
             }}>{tab.label}</button>
         ))}
       </div>
 
-      <button onClick={handleShare} style={btnStyle(false, "#06b6d4")}>SHARE</button>
-      {shareConfirm && (
-        <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.cyan, opacity: 0.9 }}>URL copied!</span>
-      )}
-      <button onClick={resetAll} style={{
-        background: "transparent", color: theme.colors.textMuted, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.sm,
-        padding: "8px 14px", fontSize: theme.fontSizes.small, cursor: "pointer", fontFamily: "inherit",
-      }}>RESET</button>
-      {showSaved && (
-        <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.green, opacity: 0.8, transition: "opacity 0.3s" }}>Saved</span>
-      )}
+      <div style={{ flex: 1 }} />
+      <button onClick={p.handleShare} style={{ ...theme.buttonBase, padding: "7px 12px", background: "transparent", color: theme.colors.cyan, border: "1px solid " + theme.colors.cyan }}>SHARE</button>
+      {p.shareConfirm && <span style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>{"✓"} Link copied</span>}
+      <button onClick={p.resetAll} style={{ ...theme.buttonBase, padding: "7px 12px", background: "transparent", color: theme.colors.textMuted, border: "1px solid " + theme.colors.border, fontWeight: 400 }}>RESET</button>
 
-      {/* ── More dropdown menu ── */}
       <div ref={moreMenuRef} style={{ position: "relative" }}>
-        <button onClick={() => setMoreMenuOpen(prev => !prev)} style={{
+        <button onClick={() => setMoreMenuOpen(prev => !prev)} aria-expanded={moreMenuOpen} style={{
+          ...theme.buttonBase, padding: "7px 12px",
           background: moreMenuOpen ? theme.colors.textFaint : "transparent", color: moreMenuOpen ? "#fff" : theme.colors.textSecondary,
-          border: "1px solid " + theme.colors.textFaint, borderRadius: theme.radii.sm,
-          padding: "8px 14px", fontSize: theme.fontSizes.small, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-          position: "relative",
+          border: "1px solid " + theme.colors.textFaint, position: "relative",
         }}>
-          MORE {moreMenuOpen ? "\u25B4" : "\u25BE"}
+          MORE {moreMenuOpen ? "▴" : "▾"}
           {anyAdvancedActive && (
-            <span style={{
-              position: "absolute", top: -3, right: -3, width: 8, height: 8,
-              background: theme.colors.green, borderRadius: theme.radii.round, border: "1px solid " + theme.colors.bg,
-            }} />
+            <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, background: theme.colors.green, borderRadius: theme.radii.round, border: "1px solid " + theme.colors.bg }} />
           )}
         </button>
         {moreMenuOpen && (
           <div style={{
             position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 1000,
             background: theme.colors.bgSurface, border: "1px solid " + theme.colors.border, borderRadius: theme.radii.md,
-            padding: "8px 0", minWidth: 220, boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            padding: "8px 0", minWidth: 240, boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
           }}>
-            <button onClick={() => { onShowHelp(); setMoreMenuOpen(false); }} style={menuItemStyle(false, "#22d3ee")}>
-              <span style={dot(false, "#22d3ee")} />
-              HELP / GUIDE
-            </button>
+            <button onClick={close(p.onShowHelp)} style={menuItemStyle(false)}><span style={dot(false, "#22d3ee")} />HELP / GUIDE</button>
             <div style={{ borderTop: "1px solid " + theme.colors.border, margin: "6px 0" }} />
-
-            {/* ── View ── */}
             <div style={{ padding: "6px 14px 4px", ...theme.sectionLabel, fontSize: theme.fontSizes.tiny }}>View</div>
-            {dataSource === "stix" && fwConfig.hasSubTechniques && (
-              <button onClick={() => setShowSubTechniques(prev => !prev)} style={menuItemStyle(showSubTechniques, "#8b5cf6")}>
-                <span style={dot(showSubTechniques, "#8b5cf6")} />
-                {showSubTechniques ? "HIDE" : "SHOW"} SUB-TECH
+            {p.hasSubTechniques && (
+              <button onClick={() => p.setShowSubTechniques(prev => !prev)} style={menuItemStyle(p.showSubTechniques)}>
+                <span style={dot(p.showSubTechniques, "#8b5cf6")} />{p.showSubTechniques ? "HIDE" : "SHOW"} SUB-TECHNIQUES
               </button>
             )}
-            <button onClick={() => setShowBottomPanels(prev => !prev)} style={menuItemStyle(showBottomPanels, "#64748b")}>
-              <span style={dot(showBottomPanels, "#64748b")} />
-              PANELS
+            <button onClick={() => p.setShowBottomPanels(prev => !prev)} style={menuItemStyle(p.showBottomPanels)}>
+              <span style={dot(p.showBottomPanels, "#64748b")} />BOTTOM PANELS
             </button>
-            <button onClick={() => setPhaseWeighting(prev => !prev)} style={menuItemStyle(phaseWeighting, "#f97316")}>
-              <span style={dot(phaseWeighting, "#f97316")} />
-              PHASE WEIGHT
-            </button>
-            {highlightedChains.length > 0 && (
-              <button onClick={() => setIsolateChain(prev => !prev)} style={menuItemStyle(isolateChain, "#ec4899")}>
-                <span style={dot(isolateChain, "#ec4899")} />
-                {isolateChain ? "SHOW ALL" : "ISOLATE"}
+            {p.highlightedCount > 0 && (
+              <button onClick={() => p.setIsolateChain(prev => !prev)} style={menuItemStyle(p.isolateChain)}>
+                <span style={dot(p.isolateChain, "#ec4899")} />{p.isolateChain ? "SHOW ALL NODES" : "ISOLATE HIGHLIGHTED"}
               </button>
             )}
-            {Object.keys(customPositions).length > 0 && (
-              <button onClick={() => { setCustomPositions({}); setMoreMenuOpen(false); }} style={menuItemStyle(false, "#8b5cf6")}>
-                <span style={dot(false, "#8b5cf6")} />
-                AUTO-SPACE
-              </button>
+            {p.hasCustomPositions && (
+              <button onClick={close(p.resetPositions)} style={menuItemStyle(false)}><span style={dot(false, "#8b5cf6")} />AUTO-SPACE</button>
             )}
-
-            {/* ── Tools ── */}
             <div style={{ borderTop: "1px solid " + theme.colors.border, margin: "6px 0" }} />
             <div style={{ padding: "6px 14px 4px", ...theme.sectionLabel, fontSize: theme.fontSizes.tiny }}>Tools</div>
-            <button onClick={() => setShowProfileWizard(true)} style={menuItemStyle(!!environmentProfile, "#8b5cf6")}>
-              <span style={dot(!!environmentProfile, "#8b5cf6")} />
-              {environmentProfile ? "EDIT PROFILE" : "ENV PROFILE"}
+            <button onClick={close(p.openProfileWizard)} style={menuItemStyle(p.hasProfile)}>
+              <span style={dot(p.hasProfile, "#8b5cf6")} />{p.hasProfile ? "EDIT ENVIRONMENT PROFILE" : "ENVIRONMENT PROFILE"}
             </button>
-            <button onClick={() => setCompareMode(prev => !prev)} style={menuItemStyle(compareMode, "#06b6d4")}>
-              <span style={dot(compareMode, "#06b6d4")} />
-              {compareMode ? "EXIT COMPARE" : "COMPARE IT/OT"}
+            <button onClick={() => p.setCompareMode(prev => !prev)} style={menuItemStyle(p.compareMode)}>
+              <span style={dot(p.compareMode, "#06b6d4")} />{p.compareMode ? "EXIT COMPARE" : "COMPARE IT/OT"}
             </button>
-            <button onClick={() => { setChainBuilderMode(prev => !prev); if (chainBuilderMode) { setChainBuilderPath([]); setChainBuilderName(""); } }}
-              style={menuItemStyle(chainBuilderMode, "#a855f7")}>
-              <span style={dot(chainBuilderMode, "#a855f7")} />
-              {chainBuilderMode ? "EXIT BUILDER" : "BUILD CHAIN"}
+            <button onClick={p.toggleChainBuilder} style={menuItemStyle(p.chainBuilderMode)}>
+              <span style={dot(p.chainBuilderMode, "#a855f7")} />{p.chainBuilderMode ? "EXIT CHAIN BUILDER" : "BUILD CUSTOM CHAIN"}
             </button>
-
-            {/* ── Export / Import ── */}
             <div style={{ borderTop: "1px solid " + theme.colors.border, margin: "6px 0" }} />
             <div style={{ padding: "6px 14px 4px", ...theme.sectionLabel, fontSize: theme.fontSizes.tiny }}>Export / Import</div>
-            <button onClick={() => { exportCSV(); setMoreMenuOpen(false); }} style={menuItemStyle(false, "#3b82f6")}>
-              <span style={dot(false, "#3b82f6")} />
-              EXPORT CSV
-            </button>
-            <button onClick={() => { navFileInputRef.current?.click(); setMoreMenuOpen(false); }} style={menuItemStyle(false, "#f97316")}>
-              <span style={dot(false, "#f97316")} />
-              IMPORT NAV
-            </button>
-            <button onClick={() => { exportNavigatorLayer(); setMoreMenuOpen(false); }} style={menuItemStyle(false, "#f97316")}>
-              <span style={dot(false, "#f97316")} />
-              EXPORT NAV
-            </button>
+            <button onClick={close(p.exportBoardReport)} style={menuItemStyle(false)}><span style={dot(false, "#06b6d4")} />BOARD REPORT (HTML)</button>
+            <button onClick={close(p.exportPlanCSV)} style={menuItemStyle(false)}><span style={dot(false, "#d95926")} />PLAN CSV</button>
+            <button onClick={close(p.exportCSV)} style={menuItemStyle(false)}><span style={dot(false, "#3b82f6")} />ANALYSIS CSV</button>
+            <button onClick={close(p.exportNavigatorLayer)} style={menuItemStyle(false)}><span style={dot(false, "#f97316")} />EXPORT NAVIGATOR LAYER</button>
+            <button onClick={close(p.openNavImport)} style={menuItemStyle(false)}><span style={dot(false, "#f97316")} />IMPORT NAVIGATOR LAYER</button>
           </div>
         )}
       </div>

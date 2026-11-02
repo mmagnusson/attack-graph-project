@@ -1,0 +1,1 @@
+export { FrontierChart } from './FrontierChart';

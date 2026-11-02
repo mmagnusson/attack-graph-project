@@ -118,3 +118,33 @@ button[style*="menuItem"]:hover,
   background: #3b82f620;
   color: #e2e8f0;
 }
+
+/* Loading pulse */
+@keyframes stix-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Docked sidebar: beside the graph on desktop, full-screen overlay on small screens */
+.ab-sidebar {
+  width: 460px;
+  flex-shrink: 0;
+  min-height: 0;
+  animation: slideInRight 0.18s ease-out;
+}
+
+@media (max-width: 760px) {
+  .ab-sidebar {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    z-index: 100;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

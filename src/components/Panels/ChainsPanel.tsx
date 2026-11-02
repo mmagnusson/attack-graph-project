@@ -1,200 +1,151 @@
-// ─── ChainsPanel — Attack chains list with search, profiles, and comparison ──
+// ─── ChainsPanel — modeled actors ranked by viability + gate breakdown ──────
 
-import { CHAIN_COLORS } from '../../data/constants';
+import { useMemo } from 'react';
+import type { AttackChain, CatalogItem, ChainKind, Technique } from '../../types';
+import type { RiskModelView } from '../../hooks/useRiskModel';
+import { CHAIN_COLORS, ENCODING } from '../../data/constants';
+import { SECTORS } from '../../engine/actorTags';
+import { fmtPct } from '../../engine/displayMetrics';
 import { PopoutButton } from '../Analysis';
+import { Meter } from '../ui';
+import { linkButton } from '../styles';
+import { ChainBreakdown } from './ChainBreakdown';
 import { theme } from '../../theme';
 
+export type KindFilter = 'all' | ChainKind;
+
 interface ChainsPanelProps {
-  filteredChains: any[];
-  displayedChainStatus: any[];
-  highlightedChains: any[];
-  toggleHighlightedChain: (chain: any) => void;
-  remediated: Set<string>;
-  effectiveExposures: Record<string, number>;
-  activeTechniques: any[];
-  chainSearchQuery: string;
-  setChainSearchQuery: (v: string) => void;
-  popoutChains: boolean;
-  setPopoutChains: (v: boolean) => void;
-  setCustomChains: (fn: (prev: any[]) => any[]) => void;
-  expandedChainProfile: string | null;
-  setExpandedChainProfile: (fn: (prev: string | null) => string | null) => void;
-  activeGroupProfiles: Record<string, any>;
-  chainSetAnalysis: any;
+  rm: RiskModelView;
+  chains: AttackChain[];
+  techById: Map<string, Technique>;
+  /** Highlighted actor IDs, most recently highlighted (the focus) first */
+  highlightedIds: string[];
+  /** Stable color slot of a highlighted actor */
+  colorOf: (id: string) => number | undefined;
+  toggleHighlighted: (id: string) => void;
+  query: string;
+  setQuery: (v: string) => void;
+  kindFilter: KindFilter;
+  setKindFilter: (v: KindFilter) => void;
+  removeCustom: (id: string) => void;
+  onSelectTech: (id: string) => void;
+  bestDefensesFor: (chainId: string) => { item: CatalogItem; delta: number }[];
+  popout: boolean;
+  onPopout: () => void;
+  stacked?: boolean;
 }
 
-export function ChainsPanel({
-  filteredChains, displayedChainStatus, highlightedChains, toggleHighlightedChain,
-  remediated, effectiveExposures, activeTechniques,
-  chainSearchQuery, setChainSearchQuery,
-  popoutChains, setPopoutChains,
-  setCustomChains,
-  expandedChainProfile, setExpandedChainProfile,
-  activeGroupProfiles, chainSetAnalysis,
-}: ChainsPanelProps) {
-  return (
-    <>
-      <h3 style={{ ...theme.panelHeading }}>
-        Attack Chains ({filteredChains.length})
-        {!popoutChains && <PopoutButton onClick={() => setPopoutChains(true)} title="Pop out Attack Chains" />}
-      </h3>
-      <div style={{ position: "relative", marginBottom: theme.spacing.lg }}>
-        <input type="text" value={chainSearchQuery} onChange={e => setChainSearchQuery(e.target.value)}
-          placeholder="Search chains..."
-          style={{ ...theme.inputBase, padding: "6px 28px 6px 10px", width: "100%" }} />
-        {chainSearchQuery && (
-          <button onClick={() => setChainSearchQuery("")} style={{
-            position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: theme.colors.textMuted,
-            cursor: "pointer", fontSize: "14px", lineHeight: 1, padding: "4px",
-          }}>{"\u2715"}</button>
-        )}
-      </div>
-      {displayedChainStatus.map((chain: any, i: number) => {
-        const activeIdx = highlightedChains.findIndex((c: any) => c.name === chain.name);
-        const isActive = activeIdx >= 0;
-        const activeColor = isActive ? CHAIN_COLORS[activeIdx].color : null;
-        return (
-          <div key={i}
-            onClick={() => toggleHighlightedChain(chain)}
-            style={{
-              padding: "10px 12px", marginBottom: theme.spacing.sm, borderRadius: theme.radii.sm, cursor: "pointer",
-              background: isActive ? theme.colors.bgSurface : "transparent",
-              border: "1px solid " + (isActive ? activeColor + "66" : chain.broken ? theme.colors.green + "33" : theme.colors.red + "33"),
-              opacity: chain.broken ? 0.6 : 1,
-            }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: theme.fontSizes.body, fontWeight: 600, color: chain.broken ? theme.colors.green : theme.colors.textPrimary, display: "flex", alignItems: "center", gap: theme.spacing.md }}>
-                {isActive && <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: theme.radii.round, background: activeColor as any, flexShrink: 0 }} />}
-                {chain.broken ? "\u2713 " : "\u26A0 "}{chain.name}
-                {chain.custom && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.purple, background: theme.colors.purple + "15", padding: "2px 6px", borderRadius: theme.radii.sm, marginLeft: 8, fontWeight: 700 }}>CUSTOM</span>}
-              </span>
-              <div style={{ display: "flex", gap: theme.spacing.sm, alignItems: "center" }}>
-                <span style={{
-                  fontSize: theme.fontSizes.small, padding: "3px 8px", borderRadius: theme.radii.pill,
-                  background: chain.severity > 0.85 ? theme.colors.red + "30" : theme.colors.orange + "30",
-                  color: chain.severity > 0.85 ? theme.colors.red : theme.colors.orange,
-                }}>
-                  {(chain.severity * 100).toFixed(0)}%
-                </span>
-                {chain.custom && (
-                  <button onClick={(e) => {
-                    e.stopPropagation();
-                    setCustomChains(prev => {
-                      const next = prev.filter((c: any) => c.name !== chain.name || c.path.join(",") !== chain.path.join(","));
-                      try { localStorage.setItem("attackBreaker_customChains", JSON.stringify(next)); } catch(e) {}
-                      return next;
-                    });
-                  }} style={{
-                    background: "transparent", color: theme.colors.red, border: "none", fontSize: theme.fontSizes.base,
-                    cursor: "pointer", padding: "0 4px", lineHeight: 1,
-                  }}>{"\u2715"}</button>
-                )}
-              </div>
-            </div>
-            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted, marginTop: theme.spacing.xs }}>{chain.description}</div>
-            <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textFaint, marginTop: theme.spacing.sm, display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
-              {chain.path.map((tid: string, j: number) => {
-                const tech = activeTechniques.find((t: any) => t.id === tid);
-                return (
-                  <span key={j} title={tech ? tech.name : tid} style={{
-                    padding: "2px 5px", borderRadius: theme.radii.sm,
-                    background: remediated.has(tid) ? theme.colors.green + "20" : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red + "20" : theme.colors.bgSurface,
-                    color: remediated.has(tid) ? theme.colors.green : (effectiveExposures[tid] ?? 1) > 0.7 ? theme.colors.red : theme.colors.textSecondary,
-                    textDecoration: remediated.has(tid) ? "line-through" : "none",
-                    fontFamily: '"JetBrains Mono", monospace',
-                    cursor: "default",
-                  }}>
-                    {tid}{j < chain.path.length - 1 ? " \u2192" : ""}
-                  </span>
-                );
-              })}
-            </div>
-            {chain.broken && chain.breakpoints.length > 0 && (
-              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.green, marginTop: theme.spacing.xs }}>
-                Broken at: {chain.breakpoints.join(", ")}
-              </div>
-            )}
-            {/* Threat Actor Profile toggle */}
-            {activeGroupProfiles[chain.name] && (
-              <>
-                <div style={{ marginTop: theme.spacing.sm }}>
-                  <span onClick={(e) => { e.stopPropagation(); setExpandedChainProfile(prev => prev === chain.name ? null : chain.name); }}
-                    style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, cursor: "pointer", userSelect: "none", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    {expandedChainProfile === chain.name ? "\u25B2 HIDE PROFILE" : "\u25BC SHOW PROFILE"}
-                  </span>
-                </div>
-                {expandedChainProfile === chain.name && (() => {
-                  const prof = activeGroupProfiles[chain.name];
-                  return (
-                    <div style={{
-                      marginTop: theme.spacing.md, padding: theme.spacing.lg, background: theme.colors.bg, border: "1px solid " + theme.colors.borderSubtle,
-                      borderRadius: theme.radii.sm, fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary,
-                    }}>
-                      {prof.country && <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Origin:</span> <span style={{ color: theme.colors.textBody }}>{prof.country}</span></div>}
-                      {prof.aliases && prof.aliases.length > 0 && <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Aliases:</span> {prof.aliases.slice(0, 5).join(", ")}</div>}
-                      {(prof.firstSeen || prof.lastSeen) && <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Active:</span> {prof.firstSeen || "?"} — {prof.lastSeen || "present"}</div>}
-                      {prof.sectors && prof.sectors.length > 0 && (
-                        <div style={{ marginBottom: theme.spacing.xs }}><span style={{ color: theme.colors.textMuted }}>Targeting:</span> {prof.sectors.join(", ")}</div>
-                      )}
-                      {prof.description && <div style={{ marginTop: theme.spacing.sm, lineHeight: "1.4", color: theme.colors.textBody }}>{prof.description}</div>}
-                    </div>
-                  );
-                })()}
-              </>
-            )}
-          </div>
-        );
-      })}
+const sectorLabel = new Map(SECTORS.map(s => [s.id, s.label]));
 
-      {/* Chain Uniqueness Comparison */}
-      {chainSetAnalysis && (
-        <div style={{
-          marginTop: theme.spacing.xl, padding: theme.spacing.lg, background: theme.colors.bgSurface, borderRadius: theme.radii.md,
-          border: "1px solid " + theme.colors.border,
-        }}>
-          <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>Chain Comparison</div>
-          {chainSetAnalysis.intersection.size > 0 && (
-            <div style={{ marginBottom: theme.spacing.lg }}>
-              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.orange, marginBottom: theme.spacing.xs }}>
-                Shared by all ({chainSetAnalysis.intersection.size}):
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
-                {[...chainSetAnalysis.intersection].map((tid: any) => (
-                  <span key={tid} style={{
-                    fontSize: theme.fontSizes.tiny, padding: "2px 6px", borderRadius: theme.radii.sm,
-                    background: theme.colors.orange + "20", color: theme.colors.orange,
-                    fontFamily: '"JetBrains Mono", monospace',
-                  }}>{tid}</span>
-                ))}
-              </div>
-              <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.orange, marginTop: theme.spacing.xs, fontStyle: "italic" }}>
-                Fix any to disrupt all {highlightedChains.length} chains
-              </div>
-            </div>
-          )}
-          {chainSetAnalysis.uniquePerChain.map(({ name, colorIndex, unique }: any) => {
-            if (unique.size === 0) return null;
-            const color = CHAIN_COLORS[colorIndex % CHAIN_COLORS.length].color;
+export function ChainsPanel(p: ChainsPanelProps) {
+  const { rm, chains, highlightedIds, bestDefensesFor, kindFilter } = p;
+  const q = p.query.trim().toLowerCase();
+
+  const rows = useMemo(() => chains
+    .filter(c => kindFilter === 'all' || c.kind === kindFilter)
+    .filter(c => !q || c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
+      || c.aliases.some(a => a.toLowerCase().includes(q)) || c.path.some(t => t.toLowerCase() === q))
+    .map(c => ({ c, v: rm.viabilityById.get(c.id) ?? 1 }))
+    .sort((a, b) => b.v - a.v || a.c.name.localeCompare(b.c.name)),
+  [chains, kindFilter, q, rm.viabilityById]);
+
+  const focusedId = highlightedIds[0] ?? null;
+  const focused = focusedId ? chains.find(c => c.id === focusedId) : undefined;
+  const best = useMemo(() => (focusedId ? bestDefensesFor(focusedId) : []), [focusedId, bestDefensesFor]);
+
+  const shared = useMemo(() => {
+    if (highlightedIds.length < 2) return null;
+    const sets = highlightedIds.map(id => new Set(chains.find(c => c.id === id)?.path ?? []));
+    return [...sets[0]].filter(t => sets.every(s => s.has(t)));
+  }, [highlightedIds, chains]);
+
+  const kinds: { id: KindFilter; label: string }[] = [
+    { id: 'all', label: 'All' }, { id: 'group', label: 'Groups' }, { id: 'campaign', label: 'Campaigns' }, { id: 'custom', label: 'Custom' },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: p.stacked ? "column" : "row", gap: theme.spacing.xl, height: "100%", minHeight: 0 }}>
+      <div style={{ flex: p.stacked ? "none" : "0 0 min(420px, 42%)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <h3 style={{ ...theme.panelHeading }}>
+          Threat actors ({rows.length}) — most viable first
+          {!p.popout && <PopoutButton onClick={p.onPopout} title="Pop out Attack Chains" />}
+        </h3>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+          <input value={p.query} onChange={e => p.setQuery(e.target.value)} placeholder="Search actor, alias, or technique ID…" aria-label="Search actors"
+            style={{ ...theme.inputBase, padding: "5px 8px", flex: 1, minWidth: 140 }} />
+          <div style={{ display: "flex", gap: 2 }}>
+            {kinds.map(k => (
+              <button key={k.id} onClick={() => p.setKindFilter(k.id)} style={{
+                ...theme.buttonBase, padding: "4px 8px", fontSize: theme.fontSizes.micro,
+                background: p.kindFilter === k.id ? theme.colors.bgSurface : "transparent",
+                color: p.kindFilter === k.id ? theme.colors.textPrimary : theme.colors.textMuted,
+                border: "1px solid " + (p.kindFilter === k.id ? theme.colors.textMuted : theme.colors.border),
+              }}>{k.label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
+          {rows.map(({ c, v }) => {
+            const hi = p.colorOf(c.id) ?? -1;
             return (
-              <div key={name} style={{ marginBottom: theme.spacing.md }}>
-                <div style={{ fontSize: theme.fontSizes.tiny, color, marginBottom: theme.spacing.xs }}>Only in {name} ({unique.size}):</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.xs }}>
-                  {[...unique].map((tid: any) => (
-                    <span key={tid} style={{
-                      fontSize: theme.fontSizes.tiny, padding: "2px 6px", borderRadius: theme.radii.sm,
-                      background: color + "20", color,
-                      fontFamily: '"JetBrains Mono", monospace',
-                    }}>{tid}</span>
-                  ))}
+              <div key={c.id} role="button" tabIndex={0} onClick={() => p.toggleHighlighted(c.id)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.toggleHighlighted(c.id); } }}
+                style={{
+                  padding: "7px 10px", marginBottom: 3, borderRadius: theme.radii.sm, cursor: "pointer",
+                  background: hi >= 0 ? theme.colors.bgSurface : "transparent",
+                  border: "1px solid " + (hi >= 0 ? CHAIN_COLORS[hi].color + "88" : theme.colors.borderSubtle),
+                }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {hi >= 0 && <span style={{ width: 9, height: 9, borderRadius: "50%", background: CHAIN_COLORS[hi].color, flexShrink: 0 }} />}
+                  <span style={{ fontSize: theme.fontSizes.small, fontWeight: 600, color: theme.colors.textPrimary, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                  {c.kind !== 'group' && <span style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, textTransform: "uppercase" }}>{c.kind}</span>}
+                  <Meter value={v} color={ENCODING.success} width={60} label={"Viability of " + c.name} />
+                  <span style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textBody, width: 38, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtPct(v)}</span>
+                  {c.kind === 'custom' && (
+                    <button onClick={e => { e.stopPropagation(); p.removeCustom(c.id); }} aria-label={"Delete " + c.name}
+                      style={{ ...linkButton, color: theme.colors.textMuted, padding: "0 2px" }}>{"✕"}</button>
+                  )}
+                </div>
+                <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.id} · {c.path.length} techniques{c.viaSoftware.length > 0 ? " (" + c.viaSoftware.length + " via software)" : ""}
+                  {c.country ? " · " + c.country : ""}
+                  {c.sectors.length > 0 ? " · " + c.sectors.slice(0, 3).map(s => sectorLabel.get(s) ?? s).join(", ") : ""}
+                  {c.attributedTo ? " · attributed to " + c.attributedTo : ""}
                 </div>
               </div>
             );
           })}
-          <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: theme.spacing.md, borderTop: "1px solid " + theme.colors.border + "60", paddingTop: theme.spacing.sm }}>
-            Union: {chainSetAnalysis.union.size} | Overlap: {chainSetAnalysis.intersection.size}
-          </div>
         </div>
-      )}
-    </>
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+        {focused ? (
+          <>
+            <ChainBreakdown chain={focused} colorIndex={p.colorOf(focused.id) ?? 0} rm={rm} techById={p.techById} bestDefenses={best} onSelectTech={p.onSelectTech} />
+            {focused.description && (
+              <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary, lineHeight: 1.5, marginTop: 10 }}>
+                {focused.description}
+                {focused.aliases.length > 0 && <div style={{ color: theme.colors.textMuted, marginTop: 4 }}>Aliases: {focused.aliases.slice(0, 6).join(", ")}</div>}
+                {(focused.country || focused.sectors.length > 0) && (
+                  <div style={{ color: theme.colors.textMuted, marginTop: 2 }}>Attribution and sectors are keyword-derived from MITRE's description.</div>
+                )}
+              </div>
+            )}
+            {shared && (
+              <div style={{ marginTop: 12, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary }}>
+                <strong style={{ color: theme.colors.textPrimary }}>{shared.length}</strong> techniques shared by all {highlightedIds.length} highlighted actors
+                {shared.length > 0 && <span style={{ color: theme.colors.textMuted }}> — e.g. {shared.slice(0, 8).join(", ")}</span>}.
+                {" "}Shared techniques only help if they close a whole stage for each actor.
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ paddingTop: 30, textAlign: "center", color: theme.colors.textMuted, fontSize: theme.fontSizes.small, lineHeight: 1.7 }}>
+            Select an actor to see its required stages, the techniques it can switch between at each one,<br />
+            and which defenses would cut it off. Up to three actors can be highlighted on the graph.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

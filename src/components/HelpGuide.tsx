@@ -10,122 +10,102 @@ interface HelpGuideProps {
 const sections = [
   {
     title: "Getting Started",
-    content: `AttackBreaker helps you figure out the most effective way to defend your organization against cyberattacks. It models real attack paths — the sequences of techniques that adversaries actually use — and shows you which security controls give you the biggest bang for your buck.
-
-**How it works in a nutshell:**
-- Attack techniques (from the MITRE ATT&CK framework) are shown as nodes on the graph
-- These techniques are connected into attack chains — realistic sequences an attacker would follow
-- You deploy security controls to block or reduce the effectiveness of specific techniques
-- The app calculates which controls disrupt the most attack chains, helping you prioritize your defenses
+    content: `AttackBreaker answers one question: **given a budget, which defenses cut off the most attack paths used by real threat actors?** It works from MITRE ATT&CK v19 — techniques, the threat groups that use them, MITRE's mitigations, and MITRE's detection strategies.
 
 **Quick start:**
-1. Choose your framework (Enterprise or ICS/OT) and data source
-2. Look at the graph — red/orange nodes are high-risk techniques
-3. Click "APPLY OPTIMAL" to see the mathematically best set of controls to deploy
-4. Explore the sidebar panels (Controls, Analysis, Gaps, Executive) for deeper insight`,
+1. Open **Defenses (D)** and record what you already have — tick MITRE mitigations and the telemetry you collect, or apply a starting posture (basic hygiene, NIST CSF, CIS IG2…).
+2. Open **Plan (P)**, set your annual budget, and read the recommended investments in order.
+3. Click any cost to replace the placeholder estimate with a real quote; the plan re-ranks instantly.
+4. Tick **Preview plan** to see the graph as if the plan were in place, then **Board report** for a one-page summary.
+
+Residual risk is the expected share of modeled threat actors that could complete every required stage of an intrusion without being contained.`,
+  },
+  {
+    title: "How the Model Works",
+    content: `An intrusion has to pass every **required stage** (by default Initial Access, Execution, Command & Control, and an Objective — Exfiltration or Impact). At each stage the actor can use **any** technique MITRE has recorded for it, including techniques its malware and tools provide.
+
+- **A stage is an OR:** it only closes when all of the actor's options are covered. One open option keeps it open. This is why blocking a single popular technique rarely stops an actor.
+- **The chain is an AND:** closing any one stage stops the actor.
+- **Mitigations** lower each technique's chance of working. Additional mitigations on the same technique add less each time.
+- **Detection** comes from MITRE's analytics. Each analytic needs specific telemetry (data components); when you collect it, the analytic can raise an alert. Alerts can come from any stage.
+- **Response** contains an alerted intrusion with some probability — once per intrusion, so detection alone can never remove more than your response effectiveness.
+- **Substitution** — actors sometimes succeed with techniques MITRE hasn't recorded for them, so no stage ever closes completely.
+
+Every assumption is a slider in **Model (M)**, and the plan shows a pessimistic-to-optimistic range.`,
   },
   {
     title: "The Graph",
-    content: `The main visualization shows attack techniques as nodes and their connections as edges.
+    content: `Techniques are nodes, arranged in tactic columns from Reconnaissance to Impact.
 
-**Node colors tell you the risk level:**
-- **Red/Orange nodes** — High exposure, not yet mitigated
-- **Green nodes** — Remediated (a deployed control covers this technique)
-- **Faded nodes** — Lower risk or not on a critical path
+- **Node size** — share of residual attacker activity flowing through the technique. Block a technique and its share shifts to the actor's alternatives.
+- **Orange arc** — residual success chance after mitigations (full ring = 100%).
+- **Blue outer arc** — detection coverage from your telemetry and tools.
+- **Aqua dot** — at least one mitigation in place.
+- **Number** — modeled actors using the technique (sub-techniques rolled up when hidden).
+- **Dashed halo** — techniques touched by the defense you're hovering in Plan or Defenses.
+- **Red dashes** — blind spots (while the Blind spots panel is open).
 
-**Interacting with the graph:**
-- **Click a node** to select it and see its details in the Detail panel below
-- **Drag nodes** to rearrange the layout (use "AUTO-SPACE" in the MORE menu to reset)
-- **Hover over a node** to see which attack chains pass through it
+Highlight an actor in the Threat actors tab: its techniques light up, lines fan out from its most-used technique to its options at the next stage, and stage markers (✂ cut, ◐ narrowed, ○ open) appear under the columns.
 
-**Attack chains** are drawn as colored paths connecting technique nodes. When you deploy controls, you'll see chains change from active (colored) to disrupted (faded/green).`,
+Background lines connect techniques commonly used together in consecutive stages. ATT&CK doesn't record step order, so a line never means "A leads to B".`,
   },
   {
-    title: "Controls & Deployment",
-    content: `The **Controls** sidebar (press S or click "Controls" in the toolbar) shows all available security controls grouped by category.
+    title: "Plan & Defenses",
+    content: `**Plan (P)** — Budget, org size, the headline (residual risk today → with plan), a cost-versus-risk curve, and the ranked investments. Each step adds the defense with the most risk removed per dollar at that point. Items past the budget show what the next dollars would buy. Hover a row to see what it touches on the graph; **In place** records it as done.
 
-**How controls work:**
-- Each control covers one or more attack techniques, reducing their effectiveness by a percentage
-- Deploying a control is like flipping a switch — it immediately updates the graph and all calculations
-- Hover over a technique ID in the controls list to see its full name
+**Defenses (D)** — Your current posture.
+- Mitigations (prevent) — MITRE's mitigation catalog. Each row shows how many techniques and actors it reaches and the risk it would remove if added alone right now.
+- Telemetry (detect) — MITRE data components grouped into purchasable sources (endpoint process telemetry, identity logs, network flow, cloud audit logs…). Expand a source to toggle individual data components.
 
-**The "APPLY OPTIMAL" button** uses a weighted set-cover algorithm to find the smallest set of controls that disrupts the most attack chains. Think of it as: "If I could only deploy N controls, which ones should I pick?" The budget slider in the header controls how many nodes the algorithm targets.
-
-**Deployment status** is tracked per-control. You can manually toggle individual controls on/off, or let the optimizer suggest the best set.`,
+**Costs are placeholder estimates by tier** — edit them. Telemetry costs assume you also run MITRE's analytics on the data and respond to alerts.`,
   },
   {
-    title: "Bottom Panels",
-    content: `The bottom of the screen has three tabbed panels (press 1, 2, or 3 to switch, or B to hide/show them all):
+    title: "Panels & Tabs",
+    content: `**Bottom tabs** (1/2/3, B to hide):
+- **Threat actors** — modeled actors, most viable first. Select one for its gate-by-gate breakdown: each stage's chance of passing and of going unnoticed, every option it can switch between, and the best next defenses against that actor.
+- **Hotspots** — techniques carrying the most residual attacker activity, with an Assume blocked what-if.
+- **Detail** — the selected technique: MITRE mitigations (tick to record), MITRE's detection strategy with each analytic, its platforms and the data components it needs (click to mark collected), your tools' estimated coverage, and the actors who use it.
 
-**1. Attack Chains** — Lists every attack chain in the model. Each chain shows the sequence of techniques an attacker would use. Disrupted chains are marked in green. Click a chain to highlight it on the graph. Hover over any technique ID to see its name.
-
-**2. Priority List** — Ranks techniques by how critical they are to defend. The ranking considers how many chains each technique appears in and how much residual exposure remains. This helps you focus on the techniques that matter most.
-
-**3. Detail** — Shows full information about the currently selected technique: its description, which attack phase it belongs to, what MITRE mitigations exist for it, and which controls in your framework can address it. Click on a MITRE mitigation to expand its description.`,
+**Sidebar** (stays docked beside the graph):
+- **Plan (P)**, **Defenses (D)**, **Model (M)**
+- **Blind spots (G)** — techniques in required stages with activity but no mitigation in place and no telemetry.
+- **Executive (X)** — leadership summary and board report.`,
   },
   {
-    title: "Sidebar Panels",
-    content: `Four sidebar panels provide analytical views (press the key shown, or use the toolbar buttons):
+    title: "Data & Settings",
+    content: `**Header** (press H):
+- **Framework** — Enterprise or ICS/OT ATT&CK.
+- **Data** — the bundled MITRE ATT&CK v19 dataset, or a STIX 2.1 bundle you upload (a newer ATT&CK release or your own CTI).
+- **Base exposure** — presets for how exposed techniques are before modeled defenses. Prefer "Unassessed" when you record defenses explicitly, or controls get counted twice.
+- **Platforms** — filters techniques and MITRE analytics (a Windows-only shop isn't credited for Linux analytics).
+- **Actors targeting** — sector tags derived from MITRE group descriptions.
 
-**Controls (S)** — Deploy/undeploy security controls, see coverage percentages, and review what each control protects against.
+**MORE menu:** sub-techniques, environment profile (infrastructure, tools, actors of concern — tool scores are author estimates), IT/OT compare, custom chain builder, exports (board report, plan CSV, analysis CSV, Navigator layer) and Navigator import.
 
-**Analysis (A)** — Statistical breakdown of your security posture: coverage by attack phase, technique category distribution, and overall risk metrics.
-
-**Gaps (G)** — Highlights techniques that are NOT covered by any deployed control. These are your blind spots. The gap analysis helps you identify where you're most vulnerable.
-
-**Executive (X)** — A high-level summary suitable for leadership briefings: overall risk score, deployment progress, chain disruption rate, and key recommendations.`,
-  },
-  {
-    title: "Settings & Configuration",
-    content: `**Header controls** (press H to collapse/expand):
-
-- **Framework** — Choose between Enterprise ATT&CK (IT-focused) and ICS/OT ATT&CK (industrial control systems)
-- **Data Source** — "Built-in" uses curated sample chains. "STIX (Live)" fetches the latest MITRE data. You can also upload custom STIX bundles.
-- **Environment** — Presets that adjust technique relevance based on your environment type
-- **Platforms** — Filter techniques by operating system / platform (Windows, Linux, macOS, etc.)
-- **Threat Sector** — Filter by industry sector to focus on the most relevant threats
-- **Budget** — Controls how many nodes the optimal set-cover algorithm targets
-- **Search** — Filter the technique list by name or ID`,
-  },
-  {
-    title: "Advanced Tools",
-    content: `Found in the **MORE** menu:
-
-- **Sub-Techniques** — Show or hide MITRE sub-techniques (e.g., T1059.001 under T1059). Available when using STIX data.
-- **Phase Weighting** — Adjusts technique importance based on where it falls in the attack kill chain. Early-phase techniques (like Initial Access) get higher weight since stopping an attack early is more valuable.
-- **Environment Profile** — A wizard that captures your organization's size, industry, infrastructure, and existing security tools to personalize the analysis.
-- **Compare IT/OT** — Side-by-side comparison of Enterprise and ICS/OT frameworks, useful for organizations with both IT and operational technology environments.
-- **Build Chain** — Create custom attack chains by selecting techniques in sequence. Useful for modeling specific threat scenarios.
-- **Export CSV** — Download the current analysis as a spreadsheet.
-- **Import/Export Navigator** — Exchange data with MITRE ATT&CK Navigator layers, a widely used format for sharing coverage maps.`,
+**Share** copies a link with your posture, budget and settings. Everything else is saved in this browser.`,
   },
   {
     title: "Keyboard Shortcuts",
-    content: `**Panel shortcuts:**
-- **1 / 2 / 3** — Switch bottom panel tabs (Chains / Priority / Detail)
-- **S** — Toggle Controls sidebar
-- **A** — Toggle Analysis sidebar
-- **G** — Toggle Gaps sidebar
-- **X** — Toggle Executive sidebar
-- **Esc** — Close sidebar
+    content: `**Panels:**
+- **P** Plan · **D** (or S) Defenses · **M** Model · **G** Blind spots · **X** Executive
+- **Esc** — close the sidebar
+- **1 / 2 / 3** — Threat actors / Hotspots / Detail
 
-**View shortcuts:**
-- **H** — Collapse/expand the header toolbar
-- **B** — Show/hide bottom panels
+**View:**
+- **H** — collapse/expand the header toolbar
+- **B** — show/hide the bottom panels
 
-All shortcuts work when you're not typing in a text field.`,
+Shortcuts are ignored while you're typing in a field.`,
   },
   {
-    title: "Understanding the Math",
-    content: `AttackBreaker uses a few key concepts under the hood:
-
-**Exposure score** — Each technique has a score from 0 to 1 representing how exposed it is. 1.0 means fully exposed (no controls deployed), 0.0 means fully mitigated. When you deploy a control that covers a technique by, say, 80%, the exposure drops by that amount.
-
-**Chain disruption** — An attack chain is considered "disrupted" when any technique in the chain has been sufficiently mitigated. Since an attacker needs every step in the chain to succeed, blocking even one step breaks the whole chain.
-
-**Weighted set cover** — The "APPLY OPTIMAL" algorithm solves a classic optimization problem: given a limited budget, which controls cover the most attack chains? It considers both the number of chains a technique appears in and the exposure reduction each control provides, finding a near-optimal solution.
-
-**Phase weighting** (when enabled) — Multiplies technique importance by its position in the attack lifecycle. Techniques in the Initial Access or Execution phases get higher weight because stopping an attack early prevents all downstream damage.`,
+    title: "Limits & Honesty",
+    content: `- **A planning model, not a guarantee.** Results depend on the assumptions in Model; the plan always shows a range.
+- **ATT&CK is incomplete.** Actors use techniques MITRE hasn't documented — that's what the substitution rate stands for.
+- **Mitigation mappings are coarse.** MITRE maps one mitigation to many techniques without saying how well it works for each; the model uses one effectiveness value for all.
+- **Detection assumes analytics.** Collecting telemetry only helps if MITRE's analytics (or equivalents) run on it and someone responds.
+- **Costs are placeholders** until you edit them.
+- **Tool coverage scores** in the environment profile are author estimates, not MITRE Evaluations results.
+- **Sector and attribution tags** are keyword-derived from MITRE descriptions.`,
   },
 ];
 

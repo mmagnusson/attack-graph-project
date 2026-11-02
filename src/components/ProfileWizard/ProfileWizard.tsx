@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { getKBToolsByCategory, getKBInfraByCategory } from '../../engine/exposureEngine';
+import { getKBToolsByCategory, getKBInfraByCategory, type GroupedInfraCategory, type GroupedToolCategory } from '../../engine/exposureEngine';
 import { theme } from '../../theme';
 import type { CoverageKB, EnvironmentProfile } from '../../types';
 
@@ -67,9 +67,9 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
   const filteredTools = useMemo(() => {
     if (!toolSearch.trim()) return toolsByCategory;
     const q = toolSearch.toLowerCase();
-    const result: Record<string, any> = {};
+    const result: Record<string, GroupedToolCategory> = {};
     for (const [catId, cat] of Object.entries(toolsByCategory)) {
-      const filtered = (cat as any).tools.filter((t: any) => t.display_name.toLowerCase().includes(q) || t.id.includes(q));
+      const filtered = cat.tools.filter(t => t.display_name.toLowerCase().includes(q) || t.id.includes(q));
       if (filtered.length > 0) result[catId] = { ...cat, tools: filtered };
     }
     return result;
@@ -78,9 +78,9 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
   const filteredInfra = useMemo(() => {
     if (!infraSearch.trim()) return infraByCategory;
     const q = infraSearch.toLowerCase();
-    const result: Record<string, any> = {};
+    const result: Record<string, GroupedInfraCategory> = {};
     for (const [catId, cat] of Object.entries(infraByCategory)) {
-      const filtered = (cat as any).items.filter((t: any) => t.display_name.toLowerCase().includes(q) || t.id.includes(q));
+      const filtered = cat.items.filter(t => t.display_name.toLowerCase().includes(q) || t.id.includes(q));
       if (filtered.length > 0) result[catId] = { ...cat, items: filtered };
     }
     return result;
@@ -145,11 +145,11 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
             <div>
               <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary, marginBottom: 10 }}>Select your infrastructure. Each adds relevant attack surface to the analysis.</div>
               <input type="text" placeholder="Search infrastructure..." value={infraSearch} onChange={e => setInfraSearch(e.target.value)} style={searchStyle} />
-              {Object.entries(filteredInfra).map(([catId, cat]: [string, any]) => (
+              {Object.entries(filteredInfra).map(([catId, cat]) => (
                 <div key={catId} style={cardStyle}>
                   <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>{cat.icon} {cat.name}</div>
                   <div style={{ display: "flex", flexWrap: "wrap" }}>
-                    {cat.items.map((item: any) => (
+                    {cat.items.map(item => (
                       <span key={item.id} style={pillStyle(infrastructure.includes(item.id))} onClick={() => toggleItem(infrastructure, setInfrastructure, item.id)}>
                         {item.display_name}
                       </span>
@@ -165,13 +165,13 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
 
           {step === 3 && (
             <div>
-              <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary, marginBottom: 10 }}>Select your deployed security tools. These reduce technique exposure based on detection/prevention capabilities.</div>
+              <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary, marginBottom: 10 }}>Select your deployed security tools. Their per-technique detection and prevention scores are author estimates (not MITRE Evaluations results) and feed the model alongside your Defenses panel.</div>
               <input type="text" placeholder="Search tools... (e.g. 'crowd', 'splunk')" value={toolSearch} onChange={e => setToolSearch(e.target.value)} style={searchStyle} />
-              {Object.entries(filteredTools).map(([catId, cat]: [string, any]) => (
+              {Object.entries(filteredTools).map(([catId, cat]) => (
                 <div key={catId} style={cardStyle}>
                   <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>{cat.icon} {cat.name}</div>
                   <div style={{ display: "flex", flexWrap: "wrap" }}>
-                    {cat.tools.map((tool: any) => (
+                    {cat.tools.map(tool => (
                       <span key={tool.id} style={pillStyle(securityTools.includes(tool.id))} onClick={() => toggleItem(securityTools, setSecurityTools, tool.id)}>
                         {tool.display_name}
                       </span>
@@ -221,7 +221,7 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
                 ) : (
                   <div style={{ display: "flex", flexWrap: "wrap" }}>
                     {infrastructure.map(id => {
-                      const item = (coverageKB as any).infrastructure[id];
+                      const item = coverageKB.infrastructure[id];
                       return <span key={id} style={{ ...pillStyle(true), cursor: "default" }}>{item?.display_name || id}</span>;
                     })}
                   </div>
@@ -234,7 +234,7 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
                 ) : (
                   <div style={{ display: "flex", flexWrap: "wrap" }}>
                     {securityTools.map(id => {
-                      const tool = (coverageKB as any).tools[id];
+                      const tool = coverageKB.tools[id];
                       return <span key={id} style={{ ...pillStyle(true), cursor: "default" }}>{tool?.display_name || id}</span>;
                     })}
                   </div>

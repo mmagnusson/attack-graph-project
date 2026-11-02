@@ -20,6 +20,8 @@ export function PopoutPanel({ title, width, height, onClose, children, graphMode
   // Detached window state
   const [detachedWin, setDetachedWin] = useState<Window | null>(null);
   const [detachedContainer, setDetachedContainer] = useState<HTMLDivElement | null>(null);
+  // External DOM object: mutate it through a ref, keep state only to trigger rendering
+  const detachedWinRef = useRef<Window | null>(null);
 
   // Overlay position/size state (always declared, only used in overlay mode)
   const [pos, setPos] = useState(() => ({
@@ -52,6 +54,7 @@ export function PopoutPanel({ title, width, height, onClose, children, graphMode
     const div = win.document.createElement('div');
     div.style.cssText = graphMode ? 'height:100vh;overflow:hidden;padding:0' : 'padding:16px 20px;height:100vh;overflow:auto';
     win.document.body.appendChild(div);
+    detachedWinRef.current = win;
     setDetachedWin(win);
     setDetachedContainer(div);
   }, [w, h, title, graphMode]);
@@ -67,7 +70,8 @@ export function PopoutPanel({ title, width, height, onClose, children, graphMode
 
   // Update detached window title
   useEffect(() => {
-    if (detachedWin && !detachedWin.closed) detachedWin.document.title = title || 'Panel';
+    const win = detachedWinRef.current;
+    if (win && !win.closed) win.document.title = title || 'Panel';
   }, [detachedWin, title]);
 
   // Cleanup detached window on unmount
