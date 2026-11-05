@@ -31,7 +31,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1546": { detect: 0.87, prevent: 0.60, source: "estimate" }, "T1053": { detect: 0.82, prevent: 0.55, source: "estimate" },
         "T1068": { detect: 0.75, prevent: 0.50, source: "estimate" }, "T1548": { detect: 0.80, prevent: 0.55, source: "estimate" },
         "T1134": { detect: 0.83, prevent: 0.50, source: "estimate" }, "T1036": { detect: 0.88, prevent: 0.60, source: "estimate" },
-        "T1027": { detect: 0.82, prevent: 0.55, source: "estimate" }, "T1562": { detect: 0.78, prevent: 0.50, source: "estimate" },
+        "T1027": { detect: 0.82, prevent: 0.55, source: "estimate" }, "T1685": { detect: 0.78, prevent: 0.50, source: "estimate" },
         "T1070": { detect: 0.80, prevent: 0.45, source: "estimate" }, "T1003": { detect: 0.90, prevent: 0.70, source: "estimate" },
         "T1003.001": { detect: 0.92, prevent: 0.75, source: "estimate" }, "T1110": { detect: 0.70, prevent: 0.40, source: "estimate" },
         "T1021": { detect: 0.75, prevent: 0.40, source: "estimate" }, "T1570": { detect: 0.78, prevent: 0.45, source: "estimate" },
@@ -56,7 +56,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1053": { detect: 0.80, prevent: 0.55, source: "estimate" }, "T1068": { detect: 0.72, prevent: 0.48, source: "estimate" },
         "T1548": { detect: 0.78, prevent: 0.55, source: "estimate" }, "T1134": { detect: 0.80, prevent: 0.50, source: "estimate" },
         "T1036": { detect: 0.85, prevent: 0.62, source: "estimate" }, "T1027": { detect: 0.80, prevent: 0.55, source: "estimate" },
-        "T1562": { detect: 0.82, prevent: 0.58, source: "estimate" }, "T1070": { detect: 0.78, prevent: 0.42, source: "estimate" },
+        "T1685": { detect: 0.82, prevent: 0.58, source: "estimate" }, "T1070": { detect: 0.78, prevent: 0.42, source: "estimate" },
         "T1003": { detect: 0.88, prevent: 0.72, source: "estimate" }, "T1003.001": { detect: 0.90, prevent: 0.75, source: "estimate" },
         "T1110": { detect: 0.68, prevent: 0.40, source: "estimate" }, "T1021": { detect: 0.72, prevent: 0.38, source: "estimate" },
         "T1570": { detect: 0.75, prevent: 0.42, source: "estimate" }, "T1057": { detect: 0.82, prevent: 0.28, source: "estimate" },
@@ -78,7 +78,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1546": { detect: 0.82, prevent: 0.55, source: "estimate" }, "T1053": { detect: 0.78, prevent: 0.52, source: "estimate" },
         "T1068": { detect: 0.70, prevent: 0.45, source: "estimate" }, "T1548": { detect: 0.76, prevent: 0.50, source: "estimate" },
         "T1134": { detect: 0.78, prevent: 0.48, source: "estimate" }, "T1036": { detect: 0.84, prevent: 0.58, source: "estimate" },
-        "T1027": { detect: 0.80, prevent: 0.52, source: "estimate" }, "T1562": { detect: 0.75, prevent: 0.48, source: "estimate" },
+        "T1027": { detect: 0.80, prevent: 0.52, source: "estimate" }, "T1685": { detect: 0.75, prevent: 0.48, source: "estimate" },
         "T1070": { detect: 0.76, prevent: 0.40, source: "estimate" }, "T1003": { detect: 0.86, prevent: 0.68, source: "estimate" },
         "T1021": { detect: 0.72, prevent: 0.38, source: "estimate" }, "T1057": { detect: 0.80, prevent: 0.25, source: "estimate" },
         "T1204": { detect: 0.78, prevent: 0.58, source: "estimate" }, "T1047": { detect: 0.80, prevent: 0.52, source: "estimate" },
@@ -96,7 +96,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1546": { detect: 0.85, prevent: 0.58, source: "estimate" }, "T1053": { detect: 0.80, prevent: 0.54, source: "estimate" },
         "T1068": { detect: 0.73, prevent: 0.48, source: "estimate" }, "T1548": { detect: 0.78, prevent: 0.54, source: "estimate" },
         "T1134": { detect: 0.80, prevent: 0.50, source: "estimate" }, "T1036": { detect: 0.86, prevent: 0.60, source: "estimate" },
-        "T1027": { detect: 0.82, prevent: 0.56, source: "estimate" }, "T1562": { detect: 0.80, prevent: 0.52, source: "estimate" },
+        "T1027": { detect: 0.82, prevent: 0.56, source: "estimate" }, "T1685": { detect: 0.80, prevent: 0.52, source: "estimate" },
         "T1070": { detect: 0.78, prevent: 0.44, source: "estimate" }, "T1003": { detect: 0.88, prevent: 0.70, source: "estimate" },
         "T1021": { detect: 0.74, prevent: 0.40, source: "estimate" }, "T1570": { detect: 0.76, prevent: 0.44, source: "estimate" },
         "T1057": { detect: 0.82, prevent: 0.28, source: "estimate" }, "T1082": { detect: 0.78, prevent: 0.24, source: "estimate" },
@@ -130,7 +130,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1003": { detect: 0.82, prevent: 0.62, source: "estimate" }, "T1204": { detect: 0.75, prevent: 0.55, source: "estimate" },
         "T1047": { detect: 0.78, prevent: 0.50, source: "estimate" }, "T1486": { detect: 0.80, prevent: 0.60, source: "estimate" },
         "T1027": { detect: 0.76, prevent: 0.48, source: "estimate" }, "T1134": { detect: 0.74, prevent: 0.42, source: "estimate" },
-        "T1562": { detect: 0.72, prevent: 0.45, source: "estimate" }, "T1070": { detect: 0.70, prevent: 0.38, source: "estimate" },
+        "T1685": { detect: 0.72, prevent: 0.45, source: "estimate" }, "T1070": { detect: 0.70, prevent: 0.38, source: "estimate" },
       },
     },
     "eset": {
@@ -155,7 +155,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1003": { detect: 0.84, prevent: 0.65, source: "estimate" }, "T1204": { detect: 0.78, prevent: 0.58, source: "estimate" },
         "T1486": { detect: 0.82, prevent: 0.68, source: "estimate" }, "T1027": { detect: 0.76, prevent: 0.50, source: "estimate" },
         "T1134": { detect: 0.75, prevent: 0.45, source: "estimate" }, "T1047": { detect: 0.76, prevent: 0.50, source: "estimate" },
-        "T1543": { detect: 0.74, prevent: 0.52, source: "estimate" }, "T1562": { detect: 0.72, prevent: 0.46, source: "estimate" },
+        "T1543": { detect: 0.74, prevent: 0.52, source: "estimate" }, "T1685": { detect: 0.72, prevent: 0.46, source: "estimate" },
       },
     },
     "trendmicro": {
@@ -168,7 +168,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1003": { detect: 0.85, prevent: 0.66, source: "estimate" }, "T1204": { detect: 0.78, prevent: 0.58, source: "estimate" },
         "T1486": { detect: 0.80, prevent: 0.62, source: "estimate" }, "T1027": { detect: 0.78, prevent: 0.52, source: "estimate" },
         "T1134": { detect: 0.76, prevent: 0.46, source: "estimate" }, "T1047": { detect: 0.78, prevent: 0.52, source: "estimate" },
-        "T1071": { detect: 0.70, prevent: 0.42, source: "estimate" }, "T1562": { detect: 0.74, prevent: 0.48, source: "estimate" },
+        "T1071": { detect: 0.70, prevent: 0.42, source: "estimate" }, "T1685": { detect: 0.74, prevent: 0.48, source: "estimate" },
         "T1566": { detect: 0.72, prevent: 0.55, source: "estimate" },
       },
     },
@@ -196,7 +196,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1053": { detect: 0.78, prevent: 0.0, source: "estimate" }, "T1068": { detect: 0.50, prevent: 0.0, source: "estimate" },
         "T1548": { detect: 0.60, prevent: 0.0, source: "estimate" }, "T1134": { detect: 0.62, prevent: 0.0, source: "estimate" },
         "T1036": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1027": { detect: 0.55, prevent: 0.0, source: "estimate" },
-        "T1562": { detect: 0.70, prevent: 0.0, source: "estimate" }, "T1070": { detect: 0.68, prevent: 0.0, source: "estimate" },
+        "T1685": { detect: 0.70, prevent: 0.0, source: "estimate" }, "T1070": { detect: 0.68, prevent: 0.0, source: "estimate" },
         "T1003": { detect: 0.78, prevent: 0.0, source: "estimate" }, "T1003.001": { detect: 0.82, prevent: 0.0, source: "estimate" },
         "T1110": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1558": { detect: 0.70, prevent: 0.0, source: "estimate" },
         "T1021": { detect: 0.68, prevent: 0.0, source: "estimate" }, "T1570": { detect: 0.60, prevent: 0.0, source: "estimate" },
@@ -217,7 +217,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1059": { detect: 0.78, prevent: 0.0, source: "estimate" }, "T1055": { detect: 0.62, prevent: 0.0, source: "estimate" },
         "T1547": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1543": { detect: 0.68, prevent: 0.0, source: "estimate" },
         "T1053": { detect: 0.75, prevent: 0.0, source: "estimate" }, "T1036": { detect: 0.70, prevent: 0.0, source: "estimate" },
-        "T1562": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1070": { detect: 0.65, prevent: 0.0, source: "estimate" },
+        "T1685": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1070": { detect: 0.65, prevent: 0.0, source: "estimate" },
         "T1003": { detect: 0.75, prevent: 0.0, source: "estimate" }, "T1110": { detect: 0.74, prevent: 0.0, source: "estimate" },
         "T1558": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1078": { detect: 0.78, prevent: 0.0, source: "estimate" },
         "T1021": { detect: 0.65, prevent: 0.0, source: "estimate" }, "T1071": { detect: 0.68, prevent: 0.0, source: "estimate" },
@@ -234,7 +234,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1059": { detect: 0.76, prevent: 0.0, source: "estimate" }, "T1055": { detect: 0.60, prevent: 0.0, source: "estimate" },
         "T1547": { detect: 0.70, prevent: 0.0, source: "estimate" }, "T1543": { detect: 0.66, prevent: 0.0, source: "estimate" },
         "T1053": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1036": { detect: 0.68, prevent: 0.0, source: "estimate" },
-        "T1562": { detect: 0.65, prevent: 0.0, source: "estimate" }, "T1003": { detect: 0.74, prevent: 0.0, source: "estimate" },
+        "T1685": { detect: 0.65, prevent: 0.0, source: "estimate" }, "T1003": { detect: 0.74, prevent: 0.0, source: "estimate" },
         "T1110": { detect: 0.68, prevent: 0.0, source: "estimate" }, "T1078": { detect: 0.70, prevent: 0.0, source: "estimate" },
         "T1021": { detect: 0.64, prevent: 0.0, source: "estimate" }, "T1071": { detect: 0.66, prevent: 0.0, source: "estimate" },
         "T1486": { detect: 0.62, prevent: 0.0, source: "estimate" }, "T1204": { detect: 0.58, prevent: 0.0, source: "estimate" },
@@ -251,7 +251,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1003": { detect: 0.70, prevent: 0.0, source: "estimate" }, "T1110": { detect: 0.68, prevent: 0.0, source: "estimate" },
         "T1078": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1021": { detect: 0.62, prevent: 0.0, source: "estimate" },
         "T1071": { detect: 0.65, prevent: 0.0, source: "estimate" }, "T1486": { detect: 0.58, prevent: 0.0, source: "estimate" },
-        "T1562": { detect: 0.60, prevent: 0.0, source: "estimate" }, "T1036": { detect: 0.62, prevent: 0.0, source: "estimate" },
+        "T1685": { detect: 0.60, prevent: 0.0, source: "estimate" }, "T1036": { detect: 0.62, prevent: 0.0, source: "estimate" },
         "T1047": { detect: 0.60, prevent: 0.0, source: "estimate" }, "T1558": { detect: 0.62, prevent: 0.0, source: "estimate" },
       },
     },
@@ -264,7 +264,7 @@ export const COVERAGE_KB: CoverageKB = {
         "T1003": { detect: 0.72, prevent: 0.0, source: "estimate" }, "T1110": { detect: 0.74, prevent: 0.0, source: "estimate" },
         "T1078": { detect: 0.76, prevent: 0.0, source: "estimate" }, "T1021": { detect: 0.64, prevent: 0.0, source: "estimate" },
         "T1071": { detect: 0.70, prevent: 0.0, source: "estimate" }, "T1486": { detect: 0.65, prevent: 0.0, source: "estimate" },
-        "T1562": { detect: 0.64, prevent: 0.0, source: "estimate" }, "T1036": { detect: 0.66, prevent: 0.0, source: "estimate" },
+        "T1685": { detect: 0.64, prevent: 0.0, source: "estimate" }, "T1036": { detect: 0.66, prevent: 0.0, source: "estimate" },
         "T1204": { detect: 0.62, prevent: 0.0, source: "estimate" }, "T1566": { detect: 0.60, prevent: 0.0, source: "estimate" },
         "T1055": { detect: 0.58, prevent: 0.0, source: "estimate" }, "T1053": { detect: 0.64, prevent: 0.0, source: "estimate" },
       },
@@ -611,7 +611,7 @@ export const COVERAGE_KB: CoverageKB = {
       exposes: {
         "T1059": 0.85, "T1059.001": 0.9, "T1047": 0.85, "T1053": 0.8,
         "T1547": 0.85, "T1543": 0.85, "T1546": 0.8, "T1055": 0.85,
-        "T1036": 0.8, "T1027": 0.75, "T1562": 0.8, "T1070": 0.75,
+        "T1036": 0.8, "T1027": 0.75, "T1685": 0.8, "T1070": 0.75,
         "T1003": 0.85, "T1068": 0.7, "T1548": 0.75, "T1134": 0.8,
         "T1021": 0.8, "T1570": 0.75, "T1057": 0.8, "T1082": 0.8,
         "T1005": 0.7, "T1486": 0.8, "T1489": 0.7, "T1529": 0.6,
@@ -624,7 +624,7 @@ export const COVERAGE_KB: CoverageKB = {
       exposes: {
         "T1059": 0.85, "T1059.001": 0.9, "T1047": 0.8, "T1053": 0.75,
         "T1547": 0.85, "T1543": 0.7, "T1546": 0.8, "T1055": 0.85,
-        "T1036": 0.8, "T1027": 0.75, "T1562": 0.75, "T1070": 0.7,
+        "T1036": 0.8, "T1027": 0.75, "T1685": 0.75, "T1070": 0.7,
         "T1003": 0.8, "T1068": 0.65, "T1548": 0.7, "T1134": 0.75,
         "T1204": 0.8, "T1566": 0.8, "T1057": 0.75, "T1082": 0.75,
         "T1005": 0.75, "T1486": 0.85, "T1560": 0.7,
@@ -766,7 +766,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       techniques: {
         "T0846": { detect: 0.85, prevent: 0.0, source: "estimate" },
         "T0842": { detect: 0.80, prevent: 0.40, source: "estimate" },
-        "T0855": { detect: 0.75, prevent: 0.35, source: "estimate" },
+        "T1692.001": { detect: 0.75, prevent: 0.35, source: "estimate" },
         "T0860": { detect: 0.82, prevent: 0.0, source: "estimate" },
         "T0843": { detect: 0.78, prevent: 0.0, source: "estimate" },
         "T0886": { detect: 0.80, prevent: 0.0, source: "estimate" },
@@ -780,7 +780,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       techniques: {
         "T0846": { detect: 0.88, prevent: 0.0, source: "estimate" },
         "T0842": { detect: 0.82, prevent: 0.35, source: "estimate" },
-        "T0855": { detect: 0.80, prevent: 0.40, source: "estimate" },
+        "T1692.001": { detect: 0.80, prevent: 0.40, source: "estimate" },
         "T0843": { detect: 0.82, prevent: 0.0, source: "estimate" },
         "T0886": { detect: 0.78, prevent: 0.0, source: "estimate" },
         "T0821": { detect: 0.75, prevent: 0.32, source: "estimate" },
@@ -795,7 +795,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       techniques: {
         "T0846": { detect: 0.82, prevent: 0.0, source: "estimate" },
         "T0842": { detect: 0.78, prevent: 0.30, source: "estimate" },
-        "T0855": { detect: 0.72, prevent: 0.30, source: "estimate" },
+        "T1692.001": { detect: 0.72, prevent: 0.30, source: "estimate" },
         "T0843": { detect: 0.75, prevent: 0.0, source: "estimate" },
         "T0886": { detect: 0.74, prevent: 0.0, source: "estimate" },
         "T0821": { detect: 0.70, prevent: 0.28, source: "estimate" },
@@ -808,7 +808,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       techniques: {
         "T0846": { detect: 0.80, prevent: 0.0, source: "estimate" },
         "T0842": { detect: 0.70, prevent: 0.30, source: "estimate" },
-        "T0855": { detect: 0.72, prevent: 0.32, source: "estimate" },
+        "T1692.001": { detect: 0.72, prevent: 0.32, source: "estimate" },
         "T0860": { detect: 0.50, prevent: 0.0, source: "estimate" },
       },
     },
@@ -819,7 +819,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       techniques: {
         "T0846": { detect: 0.78, prevent: 0.0, source: "estimate" },
         "T0842": { detect: 0.72, prevent: 0.28, source: "estimate" },
-        "T0855": { detect: 0.68, prevent: 0.28, source: "estimate" },
+        "T1692.001": { detect: 0.68, prevent: 0.28, source: "estimate" },
       },
     },
     "tenable_ot": {
@@ -829,7 +829,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       techniques: {
         "T0846": { detect: 0.75, prevent: 0.0, source: "estimate" },
         "T0842": { detect: 0.65, prevent: 0.25, source: "estimate" },
-        "T0855": { detect: 0.70, prevent: 0.30, source: "estimate" },
+        "T1692.001": { detect: 0.70, prevent: 0.30, source: "estimate" },
         "T0843": { detect: 0.60, prevent: 0.0, source: "estimate" },
         "T0836": { detect: 0.55, prevent: 0.0, source: "estimate" },
       },
@@ -850,7 +850,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       display_name: "Rockwell / Allen-Bradley",
       category: "plc",
       exposes: {
-        "T0843": 0.9, "T0821": 0.85, "T0836": 0.8, "T0855": 0.85,
+        "T0843": 0.9, "T0821": 0.85, "T0836": 0.8, "T1692.001": 0.85,
         "T0886": 0.8, "T0846": 0.75, "T0842": 0.7,
       },
     },
@@ -858,7 +858,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       display_name: "Siemens",
       category: "plc",
       exposes: {
-        "T0843": 0.9, "T0821": 0.85, "T0836": 0.85, "T0855": 0.85,
+        "T0843": 0.9, "T0821": 0.85, "T0836": 0.85, "T1692.001": 0.85,
         "T0886": 0.8, "T0846": 0.75, "T0842": 0.7,
       },
     },
@@ -866,7 +866,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       display_name: "Schneider Electric",
       category: "plc",
       exposes: {
-        "T0843": 0.88, "T0821": 0.82, "T0836": 0.8, "T0855": 0.82,
+        "T0843": 0.88, "T0821": 0.82, "T0836": 0.8, "T1692.001": 0.82,
         "T0886": 0.78, "T0846": 0.72, "T0842": 0.68,
       },
     },
@@ -875,7 +875,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       category: "plc",
       exposes: {
         "T0843": 0.88, "T0821": 0.82, "T0836": 0.78, "T0886": 0.75,
-        "T0855": 0.70, "T0846": 0.60, "T0842": 0.55,
+        "T1692.001": 0.70, "T0846": 0.60, "T0842": 0.55,
       },
     },
     "abb": {
@@ -883,7 +883,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       category: "plc",
       exposes: {
         "T0843": 0.87, "T0821": 0.83, "T0836": 0.79, "T0886": 0.74,
-        "T0855": 0.68, "T0846": 0.58, "T0842": 0.53,
+        "T1692.001": 0.68, "T0846": 0.58, "T0842": 0.53,
       },
     },
     "emerson": {
@@ -891,7 +891,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       category: "plc",
       exposes: {
         "T0843": 0.86, "T0821": 0.80, "T0836": 0.77, "T0886": 0.73,
-        "T0855": 0.69, "T0846": 0.59, "T0842": 0.54,
+        "T1692.001": 0.69, "T0846": 0.59, "T0842": 0.54,
       },
     },
     "ge_vernova": {
@@ -899,7 +899,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       category: "plc",
       exposes: {
         "T0843": 0.85, "T0821": 0.81, "T0836": 0.76, "T0886": 0.72,
-        "T0855": 0.67, "T0846": 0.57, "T0842": 0.52,
+        "T1692.001": 0.67, "T0846": 0.57, "T0842": 0.52,
       },
     },
     "yokogawa": {
@@ -907,7 +907,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       category: "plc",
       exposes: {
         "T0843": 0.87, "T0821": 0.82, "T0836": 0.78, "T0886": 0.74,
-        "T0855": 0.69, "T0846": 0.58, "T0842": 0.53,
+        "T1692.001": 0.69, "T0846": 0.58, "T0842": 0.53,
       },
     },
     "mitsubishi_electric": {
@@ -915,7 +915,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       category: "plc",
       exposes: {
         "T0843": 0.86, "T0821": 0.80, "T0836": 0.77, "T0886": 0.73,
-        "T0855": 0.68, "T0846": 0.57, "T0842": 0.52,
+        "T1692.001": 0.68, "T0846": 0.57, "T0842": 0.52,
       },
     },
     // ── SCADA Software ──
@@ -923,7 +923,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       display_name: "AVEVA (Wonderware)",
       category: "scada",
       exposes: {
-        "T0843": 0.75, "T0821": 0.70, "T0836": 0.72, "T0855": 0.80,
+        "T0843": 0.75, "T0821": 0.70, "T0836": 0.72, "T1692.001": 0.80,
         "T0846": 0.65,
       },
     },
@@ -931,7 +931,7 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       display_name: "Inductive Automation Ignition",
       category: "scada",
       exposes: {
-        "T0843": 0.73, "T0821": 0.68, "T0836": 0.70, "T0855": 0.78,
+        "T0843": 0.73, "T0821": 0.68, "T0836": 0.70, "T1692.001": 0.78,
         "T0846": 0.63,
       },
     },
@@ -940,14 +940,14 @@ export const ICS_COVERAGE_KB: CoverageKB = {
       display_name: "Schneider Triconex (SIS)",
       category: "safety",
       exposes: {
-        "T0843": 0.90, "T0821": 0.88, "T0836": 0.85, "T0855": 0.82,
+        "T0843": 0.90, "T0821": 0.88, "T0836": 0.85, "T1692.001": 0.82,
       },
     },
     "hima": {
       display_name: "HIMA Safety Systems",
       category: "safety",
       exposes: {
-        "T0843": 0.88, "T0821": 0.86, "T0836": 0.83, "T0855": 0.80,
+        "T0843": 0.88, "T0821": 0.86, "T0836": 0.83, "T1692.001": 0.80,
       },
     },
   },

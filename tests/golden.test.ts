@@ -49,6 +49,14 @@ describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw =
     }
   });
 
+  it('only references current techniques in the coverage KB and environment presets', () => {
+    // Revoked or deprecated IDs are silently ignored by the model; map them to their replacements
+    const ids = new Set(ds.techniques.map(t => t.id));
+    for (const [id, tool] of Object.entries(cfg.coverageKB.tools)) Object.keys(tool.techniques).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
+    for (const [id, infra] of Object.entries(cfg.coverageKB.infrastructure)) Object.keys(infra.exposes).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
+    for (const [id, p] of Object.entries(cfg.envPresets)) Object.keys(p.overrides ?? {}).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
+  });
+
   it('produces a monotone frontier and a plan that fits the budget', () => {
     const gates = cfg.gateOptions.filter(g => cfg.defaultGates.includes(g.id));
     const vocabulary = attackVocabulary(ds, cfg);
