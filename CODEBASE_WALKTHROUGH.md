@@ -48,7 +48,7 @@ src/
 │   ├── stixParser.ts            STIX → AttackDataset; PARSER_VERSION
 │   ├── actorTags.ts             Sector / attribution keyword rules
 │   ├── riskModel.ts             Probabilistic AND/OR model: compile, evaluate, what-ifs, read-outs
-│   ├── defenseVocabulary.ts     ATT&CK and D3FEND defense vocabularies; ATT&CK → D3FEND posture translation
+│   ├── defenseVocabulary.ts     ATT&CK and D3FEND defense vocabularies; borrowed D3FEND links; ATT&CK → D3FEND posture translation
 │   ├── portfolioOptimizer.ts    Catalog, costs, greedy budgeted optimizer (+ swap refinement), marginal values
 │   ├── exactSearch.ts           Apply/undo evaluator, swap local search, branch-and-bound exact search
 │   ├── posture.ts               Posture + catalog item helpers
@@ -103,14 +103,14 @@ src/
 
 `parseStixBundle()` (`engine/stixParser.ts`) extracts:
 
-- **Techniques** with *every* tactic they serve (`tactics`); `tactic` is the earliest-phase one and drives layout. v19 platform names are kept verbatim.
+- **Techniques** with *every* tactic they serve (`tactics`); `tactic` is the earliest-phase one and drives layout. Platform names are kept verbatim (ICS techniques and analytics carry platforms since v20).
 - **Adversaries** — groups (`intrusion-set`) and campaigns. `path` = techniques used directly ∪ techniques used through the actor's live malware/tools; `viaSoftware` marks the latter. Actors need ≥ 4 techniques across ≥ 3 phases. Sector/attribution tags come from `actorTags.ts`.
 - **Mitigations** (M-series) with their technique mappings and MITRE's per-technique notes. `M1055`/`M1056` (and ICS `M0816`) are flagged non-actionable.
 - **Detection** — v18+ model: detection strategy (DET) → analytics (AN, per platform) → data components (DC). Stored per technique.
 
 The same function parses user uploads in the browser (`useAttackData.handleUpload`, with `detectFramework()` auto-switching).
 
-D3FEND (`npm run data:d3fend`) is pinned to `D3FEND_VERSION`; the D3FEND API only serves the latest release, so the script refuses to run when they differ. It keeps the 30 base techniques and their countermeasures, D3FEND's inferred ATT&CK → D3FEND links for every technique in the bundled datasets (`[d3fendId, offensiveRelation, offensiveArtifact, defensiveRelation, defensiveArtifact]`), and the ontology's mitigation crosswalk (`d3f:related`).
+D3FEND (`npm run data:d3fend`) is pinned to `D3FEND_VERSION`; the D3FEND API only serves the latest release, so the script refuses to run when they differ. It keeps the 30 base techniques and their countermeasures, D3FEND's inferred ATT&CK → D3FEND links for every technique in the bundled datasets (`[d3fendId, offensiveRelation, offensiveArtifact, defensiveRelation, defensiveArtifact]`), and the ontology's mitigation crosswalk (`d3f:related`). The API answers 404 for techniques newer than its release; those get no links, and `D3FEND_BORROWED_LINKS` (`data/d3fendConfig.ts`) lets ICS techniques modeled on an Enterprise one use that technique's links until D3FEND maps them (`d3fendLinks()` applies it at runtime, so the data file stays D3FEND's own).
 
 ### 2. Runtime loading
 
@@ -194,10 +194,10 @@ Colors were validated with the dataviz palette validator against `#0a0f1a` and `
 - `riskModel.test.ts` — closed-form checks of every formula, inheritance, platform filtering, response cap, diminishing returns, and that incremental what-ifs equal full re-evaluation.
 - `portfolioOptimizer.test.ts` — ranking, budget, the single-item safeguard, non-submodular behavior, catalog pricing.
 - `exactSearch.test.ts` — exhaustive search equals brute force, apply/undo equals full re-evaluation, swap refinement fixes a stranded greedy plan, pool selection, `checkOptimality` deepening and deadline.
-- `d3fend.test.ts` — D3FEND vocabulary construction, role handling, ATT&CK → D3FEND translation, and the bundled 1.6.0 dataset (pinned version, internal consistency, cost tiers for exactly the scored bases, known mappings, plans in the same range as the ATT&CK vocabulary).
+- `d3fend.test.ts` — D3FEND vocabulary construction, role handling, borrowed links (never over D3FEND's own; only same-named ICS techniques D3FEND hasn't mapped), ATT&CK → D3FEND translation, and the bundled 1.6.0 dataset (pinned version, internal consistency, cost tiers for exactly the scored bases, known mappings, plans in the same range as the ATT&CK vocabulary).
 - `evalsCoverage.test.ts` — substep scoring rules, sub-technique roll-up, shrinkage, revoked-ID remapping, KB merge (measured parent beats estimated sub-technique), and checks on the generated file when present.
 - `urlState.test.ts` — hash round-trip and rejection of malformed input; board report escaping.
-- `golden.test.ts` — bundled v19 data: catalog sizes, every data component in exactly one telemetry source, every actionable mitigation tiered, presets reference real IDs, monotone frontier, and a realism guard (blocking one popular technique must remove < 25% of risk).
+- `golden.test.ts` — bundled data: catalog sizes, every data component in exactly one telemetry source, every actionable mitigation tiered, presets reference real IDs, the coverage KB and environment presets reference only current techniques, every platform in the data is offered, the sub-technique toggle matches the data, monotone frontier, and a realism guard (blocking one popular technique must remove < 25% of risk).
 
 ---
 
