@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import type { AttackChain, AttackDataset, D3fendDataset, DefensePosture, FrameworkConfig, Technique, TechniqueAssessment, VocabularyId } from '../../types';
 import type { RiskModelView } from '../../hooks/useRiskModel';
 import { simulateAddition } from '../../engine/riskModel';
-import { d3fendRole } from '../../engine/defenseVocabulary';
+import { d3fendBorrowedFrom, d3fendLinks, d3fendRole } from '../../engine/defenseVocabulary';
 import { fmtPct } from '../../engine/displayMetrics';
 import { CHAIN_COLORS, ENCODING } from '../../data/constants';
 import { MetricBox, PopoutButton } from '../Analysis';
@@ -280,9 +280,10 @@ function D3fendSection({ d3fend, family, vocabulary, posture, togglePrevent, set
   const [showAll, setShowAll] = useState<string | null>(null);
   const groups = useMemo(() => {
     if (!d3fend) return [];
+    const links = d3fendLinks(d3fend);
     const seen = new Map<string, { id: string; rel: string }>();
     for (const t of family) {
-      for (const [d3id, offRel, offArt, defRel, defArt] of d3fend.attack[t] ?? []) {
+      for (const [d3id, offRel, offArt, defRel, defArt] of links[t] ?? []) {
         if (!seen.has(d3id)) seen.set(d3id, { id: d3id, rel: defRel + ' ' + defArt + (offArt ? ' ← technique ' + offRel + ' ' + offArt : '') });
       }
     }
@@ -293,6 +294,10 @@ function D3fendSection({ d3fend, family, vocabulary, posture, togglePrevent, set
     }
     return D3FEND_ORDER.filter(t => by.has(t)).map(t => ({ tactic: t, items: by.get(t)!.sort((a, b) => d3fend.techniques[a.id].name.localeCompare(d3fend.techniques[b.id].name)) }));
   }, [d3fend, family]);
+  const borrowedFrom = useMemo(
+    () => (d3fend ? family.map(t => d3fendBorrowedFrom(d3fend, t)).filter((s): s is string => !!s) : []),
+    [d3fend, family],
+  );
 
   if (!d3fend) return null;
   const isD3 = vocabulary === 'd3fend';
@@ -305,7 +310,10 @@ function D3fendSection({ d3fend, family, vocabulary, posture, togglePrevent, set
       {total === 0 && <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>D3FEND {d3fend.version} infers no countermeasure for this technique.</div>}
       {total > 0 && (
         <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginBottom: 6, lineHeight: 1.5 }}>
-          Inferred by D3FEND through shared digital artifacts.{!isD3 && " Switch Defenses to the D3FEND catalog to record and plan with these."}
+          Inferred by D3FEND through shared digital artifacts.
+          {borrowedFrom.length > 0 && <> D3FEND hasn't mapped {borrowedFrom.length === 1 ? 'this technique' : 'these techniques'} yet, so these are its links for the same Enterprise technique{borrowedFrom.length === 1 ? '' : 's'}
+            {" "}{borrowedFrom.map((s, i) => <span key={s}>{i > 0 && ', '}<a href={techniqueUrl(s)} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue }}>{s}</a></span>)} (AttackBreaker's inference).</>}
+          {!isD3 && " Switch Defenses to the D3FEND catalog to record and plan with these."}
         </div>
       )}
       {groups.map(g => {

@@ -1,4 +1,4 @@
-// Golden tests against the bundled ATT&CK v19 datasets in public/data.
+// Golden tests against the bundled ATT&CK datasets in public/data.
 // They pin data integrity (counts, catalog coverage) and guard the model
 // against regressing to "one technique breaks the chain" optimism.
 
@@ -49,6 +49,23 @@ describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw =
     }
   });
 
+  it('only references current techniques in the coverage KB and environment presets', () => {
+    // Revoked or deprecated IDs are silently ignored by the model; map them to their replacements
+    const ids = new Set(ds.techniques.map(t => t.id));
+    for (const [id, tool] of Object.entries(cfg.coverageKB.tools)) Object.keys(tool.techniques).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
+    for (const [id, infra] of Object.entries(cfg.coverageKB.infrastructure)) Object.keys(infra.exposes).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
+    for (const [id, p] of Object.entries(cfg.envPresets)) Object.keys(p.overrides ?? {}).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
+  });
+
+  it('lists every platform the techniques and analytics use', () => {
+    const used = new Set([...ds.techniques.flatMap(t => t.platforms), ...Object.values(ds.detections).flatMap(d => d.analytics.flatMap(a => a.platforms))]);
+    expect([...used].sort()).toEqual([...cfg.allPlatforms].sort());
+  });
+
+  it('shows sub-techniques when the dataset has them', () => {
+    expect(cfg.hasSubTechniques).toBe(ds.techniques.some(t => t.parentId));
+  });
+
   it('produces a monotone frontier and a plan that fits the budget', () => {
     const gates = cfg.gateOptions.filter(g => cfg.defaultGates.includes(g.id));
     const vocabulary = attackVocabulary(ds, cfg);
@@ -69,11 +86,11 @@ describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw =
 describe('enterprise data shape', () => {
   const { ds } = load('enterprise');
 
-  it('has the v19 catalog sizes', () => {
-    expect(ds.techniques).toHaveLength(697);
+  it('has the v20.1 catalog sizes', () => {
+    expect(ds.techniques).toHaveLength(706);
     expect(ds.mitigations).toHaveLength(44);
     expect(ds.mitigations.filter(m => !m.actionable).map(m => m.id)).toEqual(['M1055', 'M1056']);
-    expect(Object.keys(ds.detections)).toHaveLength(697);
+    expect(Object.keys(ds.detections)).toHaveLength(706);
     expect(ds.dataComponents).toHaveLength(106);
     expect(ds.chains.filter(c => c.kind === 'group').length).toBeGreaterThanOrEqual(150);
     expect(ds.chains.filter(c => c.kind === 'campaign').length).toBeGreaterThan(30);

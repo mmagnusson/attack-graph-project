@@ -21,13 +21,18 @@ const BASE = 'https://d3fend.mitre.org';
 const CACHE = resolve('.cache/d3fend');
 const offline = process.argv.includes('--offline');
 
-async function cachedFetch(url: string, file: string): Promise<string> {
+/** `missing` is returned (and cached) on HTTP 404 instead of failing */
+async function cachedFetch(url: string, file: string, missing?: string): Promise<string> {
   const p = join(CACHE, file);
   if (existsSync(p)) return readFile(p, 'utf8');
   if (offline) throw new Error('Offline and not cached: ' + url);
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const resp = await fetch(url, { headers: { 'User-Agent': 'AttackBreaker-build/1.0' } });
+      if (resp.status === 404 && missing !== undefined) {
+        await writeFile(p, missing);
+        return missing;
+      }
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const text = await resp.text();
       if (file.endsWith('.json')) JSON.parse(text); // don't cache a truncated or HTML error body
@@ -127,11 +132,14 @@ async function main() {
     attackIds.push(...ds.techniques.map(t => t.id));
   }
   const attack: Record<string, D3fendLink[]> = {};
-  let done = 0;
+  let done = 0, unknown = 0;
   const queue = [...attackIds];
   const worker = async () => {
     for (let t = queue.shift(); t; t = queue.shift()) {
-      const body = JSON.parse(await cachedFetch(`${BASE}/api/offensive-technique/attack/${t}.json`, 'off-' + t + '.json')) as { off_to_def?: { results?: { bindings?: Binding[] } } };
+      // D3FEND answers 404 for techniques it has no entry for yet (e.g. newer than its release)
+      const text = await cachedFetch(`${BASE}/api/offensive-technique/attack/${t}.json`, 'off-' + t + '.json', '{}');
+      if (text === '{}') unknown++;
+      const body = JSON.parse(text) as { off_to_def?: { results?: { bindings?: Binding[] } } };
       const seen = new Set<string>();
       const links: D3fendLink[] = [];
       for (const b of body.off_to_def?.results?.bindings ?? []) {
@@ -145,6 +153,7 @@ async function main() {
     }
   };
   await Promise.all([worker(), worker()]);
+  if (unknown) console.log(`  ${unknown} techniques not in D3FEND ${version.version} (no mappings; see D3FEND_BORROWED_LINKS for ICS stand-ins)`);
 
   const dataset: D3fendDataset = {
     schemaVersion: D3FEND_SCHEMA_VERSION,

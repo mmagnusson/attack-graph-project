@@ -10,7 +10,7 @@ interface HelpGuideProps {
 const sections = [
   {
     title: "Getting Started",
-    content: `AttackBreaker answers one question: **given a budget, which defenses cut off the most attack paths used by real threat actors?** It works from MITRE ATT&CK v19 — techniques, the threat groups that use them, MITRE's mitigations, and MITRE's detection strategies.
+    content: `AttackBreaker answers one question: **given a budget, which defenses cut off the most attack paths used by real threat actors?** It works from MITRE ATT&CK v20.1 — techniques, the threat groups that use them, MITRE's mitigations, and MITRE's detection strategies.
 
 **Quick start:**
 1. Open **Defenses (D)** and record what you already have — tick MITRE mitigations and the telemetry you collect, or apply a starting posture (basic hygiene, NIST CSF, CIS IG2…).
@@ -79,7 +79,7 @@ Background lines connect techniques commonly used together in consecutive stages
     title: "Data & Settings",
     content: `**Header** (press H):
 - **Framework** — Enterprise or ICS/OT ATT&CK.
-- **Data** — the bundled MITRE ATT&CK v19 dataset, or a STIX 2.1 bundle you upload (a newer ATT&CK release or your own CTI).
+- **Data** — the bundled MITRE ATT&CK v20.1 dataset, or a STIX 2.1 bundle you upload (a newer ATT&CK release or your own CTI).
 - **Base exposure** — presets for how exposed techniques are before modeled defenses. Prefer "Unassessed" when you record defenses explicitly, or controls get counted twice.
 - **Platforms** — filters techniques and MITRE analytics (a Windows-only shop isn't credited for Linux analytics).
 - **Actors targeting** — sector tags derived from MITRE group descriptions.
@@ -109,7 +109,7 @@ Shortcuts are ignored while you're typing in a field.`,
 - **Detection assumes analytics.** Collecting telemetry only helps if MITRE's analytics (or equivalents) run on it and someone responds.
 - **Costs are placeholders** until you edit them.
 - **Tool coverage scores** in the environment profile are author estimates, except detection for tools marked EVALS: that comes from the vendor's latest MITRE ATT&CK Evaluations round (a controlled test, often one or two tests per technique; prevention stays an estimate). MITRE does not endorse any vendor.
-- **D3FEND links are inferred** through shared digital artifacts, so they say a countermeasure is relevant to a technique, not how well it works.
+- **D3FEND links are inferred** through shared digital artifacts, so they say a countermeasure is relevant to a technique, not how well it works. D3FEND hasn't mapped ATT&CK v20's new techniques yet; nine new ICS techniques borrow the links of the matching Enterprise technique (marked in Detail).
 - **The exact search is exact over its pool.** If it runs out of time before covering every candidate, it says which pool it finished.
 - **Sector and attribution tags** are keyword-derived from MITRE descriptions.`,
   },

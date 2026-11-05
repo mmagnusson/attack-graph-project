@@ -160,13 +160,13 @@ export const ICS_TELEMETRY: TelemetrySource[] = [
   },
   {
     id: "ts-ot-host-exec", name: "HMI/EWS process & execution telemetry", tier: 2,
-    description: "Process, command, script, API and module-load events on Windows-based OT hosts.",
-    dataComponents: ["DC0032", "DC0064", "DC0029", "DC0034", "DC0033", "DC0021", "DC0016"],
+    description: "Process, command, script, API, module-load and process-access events on Windows-based OT hosts.",
+    dataComponents: ["DC0032", "DC0064", "DC0029", "DC0034", "DC0033", "DC0021", "DC0016", "DC0035"],
   },
   {
     id: "ts-ot-host-config", name: "HMI/EWS file, registry & configuration logs", tier: 2,
-    description: "File, registry, drive, scheduled job, service and firmware changes on OT hosts.",
-    dataComponents: ["DC0039", "DC0061", "DC0040", "DC0055", "DC0059", "DC0045", "DC0063", "DC0042", "DC0046", "DC0001", "DC0005", "DC0012", "DC0060", "DC0041", "DC0065", "DC0004"],
+    description: "File, registry, drive, driver, host firewall, scheduled job, service and firmware changes on OT hosts.",
+    dataComponents: ["DC0039", "DC0061", "DC0040", "DC0055", "DC0059", "DC0045", "DC0063", "DC0042", "DC0046", "DC0001", "DC0005", "DC0012", "DC0060", "DC0041", "DC0065", "DC0004", "DC0079", "DC0053", "DC0051"],
   },
   {
     id: "ts-ot-identity", name: "OT identity & authentication logs", tier: 2,
@@ -187,7 +187,7 @@ export const ICS_MITIGATION_TIERS: Record<string, CostTier> = {
   M0920: 3, M0921: 2, M0922: 2, M0924: 1, M0926: 3, M0927: 1, M0928: 2, M0930: 4,
   M0931: 3, M0932: 3, M0934: 1, M0935: 1, M0936: 1, M0937: 3, M0938: 3, M0941: 2,
   M0942: 2, M0944: 1, M0945: 2, M0946: 2, M0947: 2, M0948: 3, M0949: 2, M0950: 2,
-  M0951: 3, M0953: 2, M0954: 2,
+  M0951: 3, M0953: 2, M0954: 2, M1061: 2,
 };
 
 export const ICS_NON_ACTIONABLE = ["M0816"];

@@ -39,6 +39,6 @@ export { tagSectors, tagCountry, SECTORS } from './actorTags';
 
 export { sanitizeCSVCell, csvRow, downloadFile, today } from './csv';
 
-export { attackVocabulary, d3fendVocabulary, d3fendRole, translateAttackPosture } from './defenseVocabulary';
+export { attackVocabulary, d3fendVocabulary, d3fendRole, d3fendLinks, d3fendBorrowedFrom, translateAttackPosture } from './defenseVocabulary';
 export { IncrementalEvaluator, improveBySwaps, choosePool, exhaustiveSearch } from './exactSearch';
 export type { ExhaustiveResult } from './exactSearch';

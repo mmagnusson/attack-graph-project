@@ -80,7 +80,7 @@ describe('choosePool', () => {
   });
 });
 
-describe('on bundled v19 data', () => {
+describe('on bundled data', () => {
   const cfg = getFrameworkConfig('enterprise');
   const ds = JSON.parse(readFileSync('public' + cfg.dataUrl, 'utf8')) as AttackDataset;
   const vocabulary = attackVocabulary(ds, cfg);
