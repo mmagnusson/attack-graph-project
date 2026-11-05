@@ -13,7 +13,7 @@ import { ENV_PRESETS, ICS_ENV_PRESETS } from './envPresets';
 import { COVERAGE_KB, ICS_COVERAGE_KB } from './coverageKb';
 import { PARSER_VERSION } from '../engine/stixParser';
 
-export const ATTACK_VERSION = "19.0";
+export const ATTACK_VERSION = "20.1";
 
 export function buildTacticPhase(tactics: Tactic[]): Record<string, number> {
   const m: Record<string, number> = {};

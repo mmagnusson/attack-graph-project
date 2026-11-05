@@ -100,6 +100,10 @@ describe('bundled D3FEND dataset', () => {
     for (const t of Object.values(ds.techniques)) expect(t.iri).not.toBe('');
   });
 
+  it('stores the tactic roles the model uses', () => {
+    expect(ds.tactics).toEqual(Object.entries(D3FEND_TACTIC_ROLES).map(([name, role]) => ({ name, role })));
+  });
+
   it('has a cost tier for exactly the scored bases', () => {
     const scored = ds.bases.filter(b => ['prevent', 'detect'].includes(D3FEND_TACTIC_ROLES[b.tactic])).map(b => b.id).sort();
     expect(Object.keys(D3FEND_TIERS).sort()).toEqual(scored);

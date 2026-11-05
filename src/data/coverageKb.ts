@@ -14,7 +14,7 @@ import type { CoverageKB } from '../types';
 
 export const COVERAGE_KB: CoverageKB = {
   metadata: {
-    attack_version: "19.0",
+    attack_version: "20.1",
     last_updated: "2026-03-10",
     provenance: "estimate",
     sources: ["Author estimates informed by public vendor material; not derived from MITRE Evaluations data"],
@@ -753,7 +753,7 @@ export const COVERAGE_KB: CoverageKB = {
 // ICS Coverage KB — OT-specific tools and infrastructure
 export const ICS_COVERAGE_KB: CoverageKB = {
   metadata: {
-    attack_version: "19.0",
+    attack_version: "20.1",
     last_updated: "2026-03-10",
     provenance: "estimate",
     sources: ["Author estimates informed by public vendor material and ICS advisories"],

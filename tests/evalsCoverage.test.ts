@@ -4,6 +4,7 @@ import { mergeEvalsIntoKb, scoreEvalsRound, type RawRound, type RawSubstep } fro
 import { assessEnvironment } from '../src/engine/exposureEngine';
 import { EVALS_COVERAGE_URL, EVALS_DETECTED_TYPES, EVALS_SCHEMA_VERSION, EVALS_TO_KB } from '../src/data/evalsConfig';
 import { COVERAGE_KB } from '../src/data/coverageKb';
+import { getFrameworkConfig } from '../src/data/frameworkConfig';
 import type { EvalsCoverage } from '../src/types';
 
 const sub = (tech: string, types: (string | [string, string])[], extra: Partial<RawSubstep> = {}): RawSubstep => ({
@@ -102,9 +103,9 @@ describe('mergeEvalsIntoKb', () => {
 const built = 'public' + EVALS_COVERAGE_URL;
 describe.skipIf(!existsSync(built))('generated evals-coverage.json', () => {
   const data = existsSync(built) ? JSON.parse(readFileSync(built, 'utf8')) as EvalsCoverage : null;
-  const ent = JSON.parse(readFileSync('public/data/enterprise-attack-19.0.json', 'utf8')) as { techniques: { id: string }[] };
+  const ent = JSON.parse(readFileSync('public' + getFrameworkConfig('enterprise').dataUrl, 'utf8')) as { techniques: { id: string }[] };
 
-  it('is current and only uses ATT&CK v19 technique IDs', () => {
+  it('is current and only uses technique IDs from the bundled ATT&CK release', () => {
     expect(data!.schemaVersion).toBe(EVALS_SCHEMA_VERSION);
     const ids = new Set(ent.techniques.map(t => t.id));
     for (const v of Object.values(data!.vendors)) {

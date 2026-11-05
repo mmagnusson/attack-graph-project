@@ -1,4 +1,4 @@
-// Golden tests against the bundled ATT&CK v19 datasets in public/data.
+// Golden tests against the bundled ATT&CK datasets in public/data.
 // They pin data integrity (counts, catalog coverage) and guard the model
 // against regressing to "one technique breaks the chain" optimism.
 
@@ -77,11 +77,11 @@ describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw =
 describe('enterprise data shape', () => {
   const { ds } = load('enterprise');
 
-  it('has the v19 catalog sizes', () => {
-    expect(ds.techniques).toHaveLength(697);
+  it('has the v20.1 catalog sizes', () => {
+    expect(ds.techniques).toHaveLength(706);
     expect(ds.mitigations).toHaveLength(44);
     expect(ds.mitigations.filter(m => !m.actionable).map(m => m.id)).toEqual(['M1055', 'M1056']);
-    expect(Object.keys(ds.detections)).toHaveLength(697);
+    expect(Object.keys(ds.detections)).toHaveLength(706);
     expect(ds.dataComponents).toHaveLength(106);
     expect(ds.chains.filter(c => c.kind === 'group').length).toBeGreaterThanOrEqual(150);
     expect(ds.chains.filter(c => c.kind === 'campaign').length).toBeGreaterThan(30);
