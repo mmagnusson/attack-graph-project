@@ -19,6 +19,12 @@ export type {
   PosturePreset,
   GateDef,
   EnvPreset,
+  D3fendRole,
+  D3fendTactic,
+  D3fendBase,
+  D3fendTechnique,
+  D3fendLink,
+  D3fendDataset,
   ChainColor,
   FrameworkConfig,
 } from "./graph";
