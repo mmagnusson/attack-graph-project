@@ -9,6 +9,7 @@ import { withItems } from '../engine/portfolioOptimizer';
 import { buildBoardReport } from '../engine/boardReport';
 import { csvRow, downloadFile, today } from '../engine/csv';
 import { SECTORS } from '../engine/actorTags';
+import { EVALS_NOTICE } from '../data/evalsConfig';
 
 interface UseExportHandlersArgs {
   cfg: FrameworkConfig;
@@ -30,6 +31,17 @@ interface UseExportHandlersArgs {
   includeSoftware: boolean;
   includeCampaigns: boolean;
   assessment: Record<string, TechniqueAssessment> | null;
+}
+
+/** Tools that contributed coverage anywhere in the assessment, with the Evals round when measured */
+function toolsInProfile(assessment: Record<string, TechniqueAssessment> | null): { name: string; measured: string | null }[] {
+  const tools = new Map<string, { name: string; measured: string | null }>();
+  for (const a of Object.values(assessment ?? {})) for (const s of a.sources) {
+    const t = tools.get(s.toolId) ?? { name: s.name, measured: null };
+    if (s.measured) t.measured = s.measured.roundName;
+    tools.set(s.toolId, t);
+  }
+  return [...tools.values()];
 }
 
 export function useExportHandlers(a: UseExportHandlersArgs) {
@@ -97,12 +109,12 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
 
   const exportCoverageCSV = useCallback(() => {
     if (!dataset || !assessment) return;
-    let csv = csvRow(['Technique ID', 'Name', 'Base exposure %', 'Est. detect %', 'Est. prevent %', 'Tools (estimates)']);
+    let csv = csvRow(['Technique ID', 'Name', 'Base exposure %', 'Detect %', 'Prevent %', 'Tools (d = detect, p = prevent; "evals" = detection measured in MITRE ATT&CK Evaluations, otherwise estimates)']);
     dataset.techniques.forEach(t => {
       const x = assessment[t.id];
       if (!x) return;
       csv += csvRow([t.id, t.name, +(x.baseExposure * 100).toFixed(0), +(x.detect * 100).toFixed(0), +(x.prevent * 100).toFixed(0),
-        x.sources.map(s => s.name + ' (d' + Math.round(s.detect * 100) + '/p' + Math.round(s.prevent * 100) + ')').join('; ') || 'None']);
+        x.sources.map(s => s.name + ' (d' + Math.round(s.detect * 100) + (s.measured ? ' evals ' + s.measured.year : '') + '/p' + Math.round(s.prevent * 100) + ')').join('; ') || 'None']);
     });
     downloadFile(csv, 'attackbreaker-coverage-' + today() + '.csv', 'text/csv');
   }, [dataset, assessment]);
@@ -134,9 +146,11 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
         .sort((x, y) => y.viability - x.viability)
         .slice(0, 8),
       params,
+      tools: toolsInProfile(assessment),
+      evalsNotice: EVALS_NOTICE,
     });
     downloadFile(html, 'attackbreaker-board-report-' + today() + '.html', 'text/html');
-  }, [cfg, dataset, vocabulary, implementedBy, model, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, params]);
+  }, [cfg, dataset, vocabulary, implementedBy, model, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, params, assessment]);
 
   return { exportCSV, exportPlanCSV, exportNavigatorLayer, exportCoverageCSV, exportBoardReport };
 }

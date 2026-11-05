@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { getKBToolsByCategory, getKBInfraByCategory, type GroupedInfraCategory, type GroupedToolCategory } from '../../engine/exposureEngine';
 import { theme } from '../../theme';
 import type { CoverageKB, EnvironmentProfile } from '../../types';
+import { EVALS_NOTICE, EVALS_SITE } from '../../data/evalsConfig';
 
 interface ProfileWizardProps {
   coverageKB: CoverageKB;
@@ -27,6 +28,7 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
   const COMPLIANCE_OPTS = ["NIST CSF", "CMMC", "HIPAA", "PCI-DSS", "SOC 2", "FedRAMP"];
 
   const toolsByCategory = useMemo(() => getKBToolsByCategory(coverageKB), [coverageKB]);
+  const hasMeasured = useMemo(() => Object.values(coverageKB.tools).some(t => t.measured), [coverageKB]);
   const infraByCategory = useMemo(() => getKBInfraByCategory(coverageKB), [coverageKB]);
   const actorList = useMemo(() => {
     const names: string[] = [];
@@ -165,15 +167,22 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
 
           {step === 3 && (
             <div>
-              <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary, marginBottom: 10 }}>Select your deployed security tools. Their per-technique detection and prevention scores are author estimates (not MITRE Evaluations results) and feed the model alongside your Defenses panel.</div>
+              <div style={{ fontSize: theme.fontSizes.base, color: theme.colors.textSecondary, marginBottom: 10 }}>
+                Select your deployed security tools. Their per-technique detection and prevention scores feed the model alongside your Defenses panel.
+                {hasMeasured
+                  ? <> Products marked <strong style={{ color: theme.colors.textBody }}>EVALS</strong> use detection rates measured in MITRE ATT&amp;CK Evaluations (the vendor's latest Enterprise round) for the techniques MITRE tested. All other scores, and every prevention score, are author estimates.</>
+                  : <> The scores are author estimates, not MITRE Evaluations results.</>}
+              </div>
               <input type="text" placeholder="Search tools... (e.g. 'crowd', 'splunk')" value={toolSearch} onChange={e => setToolSearch(e.target.value)} style={searchStyle} />
               {Object.entries(filteredTools).map(([catId, cat]) => (
                 <div key={catId} style={cardStyle}>
                   <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.md }}>{cat.icon} {cat.name}</div>
                   <div style={{ display: "flex", flexWrap: "wrap" }}>
                     {cat.tools.map(tool => (
-                      <span key={tool.id} style={pillStyle(securityTools.includes(tool.id))} onClick={() => toggleItem(securityTools, setSecurityTools, tool.id)}>
+                      <span key={tool.id} style={pillStyle(securityTools.includes(tool.id))} onClick={() => toggleItem(securityTools, setSecurityTools, tool.id)}
+                        title={tool.measured ? 'Detection measured in MITRE ATT&CK Evaluations: ' + tool.measured.roundName + ' (' + tool.measured.substeps + ' scored substeps)' : 'Author estimates'}>
                         {tool.display_name}
+                        {tool.measured && <span style={{ marginLeft: 6, fontSize: theme.fontSizes.micro, fontWeight: 700, letterSpacing: 0.4, color: theme.colors.textMuted }}>EVALS {"\u2019"}{String(tool.measured.year).slice(2)}</span>}
                       </span>
                     ))}
                   </div>
@@ -181,6 +190,11 @@ export function ProfileWizard({ coverageKB, activeChains, currentProfile, onAppl
               ))}
               {securityTools.length > 0 && (
                 <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.violet, marginTop: 6 }}>{securityTools.length} tools selected</div>
+              )}
+              {hasMeasured && (
+                <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginTop: 10, lineHeight: 1.5 }}>
+                  {EVALS_NOTICE} <a href={EVALS_SITE} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue }}>evals.mitre.org</a>
+                </div>
               )}
             </div>
           )}

@@ -5,8 +5,10 @@
 export interface ToolTechniqueScore {
   detect: number;
   prevent: number;
-  /** Provenance of the score ("estimate" for the bundled KB) */
+  /** Provenance of the detection score: "estimate" (bundled KB) or "evals" (MITRE ATT&CK Evaluations) */
   source?: string;
+  /** Evals only: scored substeps behind the detection score */
+  n?: number;
 }
 
 /**
@@ -19,6 +21,41 @@ export interface CoverageTool {
   category: string;
   data_source: string;
   techniques: Record<string, ToolTechniqueScore>;
+  /** Present when detection comes from MITRE ATT&CK Evaluations results */
+  measured?: EvalsMeasurement;
+}
+
+// ─── MITRE ATT&CK Evaluations (public/data/evals-coverage.json) ─────────────
+
+export interface EvalsTechniqueScore {
+  /** Shrunk detection rate used by the model */
+  detect: number;
+  /** Scored substeps and how many raised a Technique/Tactic/General detection */
+  n: number;
+  hits: number;
+}
+
+export interface EvalsMeasurement {
+  participant: string;
+  round: string;
+  roundName: string;
+  year: number;
+  /** Scored substeps across the round */
+  substeps: number;
+}
+
+export interface EvalsVendor extends EvalsMeasurement {
+  name: string;
+  detected: number;
+  techniques: Record<string, EvalsTechniqueScore>;
+}
+
+export interface EvalsCoverage {
+  schemaVersion: number;
+  generated: string;
+  notice: string;
+  method: { detectedTypes: string[]; run: string; shrinkage: number; minYear: number };
+  vendors: Record<string, EvalsVendor>;
 }
 
 /**

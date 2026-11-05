@@ -24,6 +24,10 @@ export interface BoardReportInput {
   frontier: { cost: number; residual: number }[];
   topActors: { name: string; kind: string; viability: number; sectors: string[] }[];
   params: ModelParams;
+  /** Security tools from the environment profile; `measured` = detection from MITRE ATT&CK Evaluations */
+  tools?: { name: string; measured: string | null }[];
+  /** Required attribution whenever Evaluations data shaped the results */
+  evalsNotice?: string;
 }
 
 export function esc(s: string | number): string {
@@ -110,6 +114,7 @@ ${r.frontier.length > 1 ? frontierSvg(r.frontier, r.budget, r.spend) : '<p class
   <li>One implemented mitigation cuts a technique's success by ${esc(fmtPct(r.params.mitigationEffectiveness))}; full detection coverage raises an alert on ${esc(fmtPct(r.params.detectionEffectiveness))} of attempts; ${esc(fmtPct(r.params.responseEffectiveness))} of alerted intrusions are contained in time; actors substitute an unrecorded technique ${esc(fmtPct(r.params.substitutionRate))} of the time; adversary adaptiveness ${esc(fmtPct(r.params.adversaryAdaptiveness))}.</li>
   <li>Techniques used through an actor's malware and tools ${r.scope.includeSoftware ? 'are' : 'are not'} counted; campaigns ${r.scope.includeCampaigns ? 'are' : 'are not'} modeled alongside groups.</li>
   <li>Costs are placeholder estimates unless edited; replace them with quotes before committing budget.</li>
+  ${r.tools && r.tools.length > 0 ? `<li>Security tools in the environment profile: ${r.tools.map(t => esc(t.name) + (t.measured ? ' (detection measured in MITRE ATT&amp;CK Evaluations ' + esc(t.measured) + ')' : ' (estimated)')).join(', ')}. Prevention scores are estimates.${r.tools.some(t => t.measured) && r.evalsNotice ? ' ' + esc(r.evalsNotice) : ''}</li>` : ''}
   <li>Technique data, mitigations and detection strategies come from MITRE ATT&amp;CK. The model is a planning heuristic, not a guarantee of security outcomes.</li>
 </ul>
 </main></body></html>`;

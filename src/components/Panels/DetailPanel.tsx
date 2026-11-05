@@ -12,6 +12,7 @@ import { Meter, SmallButton } from '../ui';
 import { linkButton, mono } from '../styles';
 import { d3fendUrl, detectionStrategyUrl, mitigationUrl, techniqueUrl } from '../links';
 import { theme } from '../../theme';
+import { EVALS_NOTICE } from '../../data/evalsConfig';
 
 interface DetailPanelProps {
   cfg: FrameworkConfig;
@@ -217,15 +218,21 @@ export function DetailPanel(p: DetailPanelProps) {
 
       {assess && assess.sources.length > 0 && (
         <div style={{ marginTop: theme.spacing.lg, padding: 10, background: theme.colors.bgCard, borderRadius: theme.radii.sm }}>
-          <div style={{ ...theme.sectionLabel, marginBottom: 4 }}>Your tools (estimated coverage)</div>
+          <div style={{ ...theme.sectionLabel, marginBottom: 4 }}>Your tools</div>
           {assess.sources.map(s => (
             <div key={s.toolId} style={{ display: "flex", gap: 10, fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>
               <span style={{ flex: 1 }}>{s.name}</span>
-              <span style={{ color: theme.colors.textSecondary }}>detect ~{fmtPct(s.detect)}</span>
+              <span style={{ color: theme.colors.textSecondary }}
+                title={s.measured ? 'MITRE ATT&CK Evaluations ' + s.measured.roundName + ': ' + s.measured.substeps + ' scored substep' + (s.measured.substeps === 1 ? '' : 's') + ' for this technique' : 'Author estimate'}>
+                detect {s.measured ? fmtPct(s.detect) + ' (Evals \u2019' + String(s.measured.year).slice(2) + ', n=' + s.measured.substeps + ')' : '~' + fmtPct(s.detect)}
+              </span>
               <span style={{ color: theme.colors.textSecondary }}>prevent ~{fmtPct(s.prevent)}</span>
             </div>
           ))}
-          <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, marginTop: 4 }}>Author estimates, not MITRE Evaluations results.</div>
+          <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+            ~ author estimate.
+            {assess.sources.some(s => s.measured) && <> Evals rates count Technique, Tactic and General detections in the first run, pulled toward the vendor's overall rate when n is small. {EVALS_NOTICE}</>}
+          </div>
         </div>
       )}
 

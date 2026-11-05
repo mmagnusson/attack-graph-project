@@ -53,6 +53,10 @@ export type {
   InfraCategory,
   CoverageKBMetadata,
   CoverageKB,
+  EvalsCoverage,
+  EvalsMeasurement,
+  EvalsTechniqueScore,
+  EvalsVendor,
 } from "./coverageKb";
 
 export type {

@@ -24,6 +24,8 @@ import { attackVocabulary, d3fendVocabulary } from './engine/defenseVocabulary';
 import { useEnvironmentProfile } from './hooks/useEnvironmentProfile';
 import { useRiskModel } from './hooks/useRiskModel';
 import { useOptimalityCheck } from './hooks/useOptimalityCheck';
+import { useEvalsCoverage } from './hooks/useEvalsCoverage';
+import { mergeEvalsIntoKb } from './engine/evalsCoverage';
 import { useExportHandlers } from './hooks/useExportHandlers';
 import { useCompareMode } from './hooks/useCompareMode';
 import { useGraphInteraction } from './hooks/useGraphInteraction';
@@ -67,6 +69,7 @@ export default function AttackBreaker() {
 
   const [vocab, setVocab] = usePersistentState<VocabularyId>(KEYS.vocabulary, 'attack', isVocab);
   const { d3fend } = useD3fendData();
+  const evals = useEvalsCoverage();
   const [budget, setBudget] = usePersistentState<number>(KEYS.budget, DEFAULT_BUDGET, isNum);
   const [orgSize, setOrgSize] = usePersistentState<OrgSize>(KEYS.orgSize, 'medium', isOrg);
   const [costOverrides, setCostOverrides] = usePersistentState<Record<string, number>>(KEYS.costs, {}, isObj);
@@ -164,7 +167,9 @@ export default function AttackBreaker() {
     ...customChains.filter(c => c.path.some(t => techById.has(t))),
   ], [candidateChains, effectiveSector, customChains, techById]);
 
-  const env = useEnvironmentProfile(cfg, techniques, modeledChains);
+  // Measured detection from MITRE ATT&CK Evaluations (Enterprise only) replaces estimates where present
+  const coverageKB = useMemo(() => (evals && cfg.id === 'enterprise' ? mergeEvalsIntoKb(cfg.coverageKB, evals) : cfg.coverageKB), [evals, cfg]);
+  const env = useEnvironmentProfile(cfg, coverageKB, techniques, modeledChains);
   const effectiveEnvPreset = cfg.envPresets[envPreset] ? envPreset : 'default';
   const fwExposureOverrides = exposureOverrides[framework];
   const exposure = useMemo(() => {
@@ -746,7 +751,7 @@ export default function AttackBreaker() {
 
       {env.showProfileWizard && (
         <ProfileWizard
-          coverageKB={cfg.coverageKB}
+          coverageKB={coverageKB}
           activeChains={candidateChains}
           currentProfile={env.environmentProfile}
           onApply={profile => { env.setEnvironmentProfile(profile); env.setShowProfileWizard(false); }}
