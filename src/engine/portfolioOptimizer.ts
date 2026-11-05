@@ -20,6 +20,7 @@ import type {
 } from '../types';
 import { applyAddition, evaluateModel, simulateAddition, type CompiledModel, type ModelState } from './riskModel';
 import { additionOf, withItems } from './posture';
+import { improveBySwaps } from './exactSearch';
 
 export { additionOf, withItems };
 
@@ -95,6 +96,8 @@ export interface OptimizeOptions {
   maxSteps?: number;
   /** Stop once a step removes less than this share of the starting risk */
   minRelativeGain?: number;
+  /** Budgeted plans only: refine the greedy result with single swaps (default true) */
+  refine?: boolean;
 }
 
 export function optimizePortfolio(
@@ -133,22 +136,42 @@ export function optimizePortfolio(
   }
 
   if (budget !== null) {
-    let single: CatalogItem | null = null;
-    let singleRisk = state.risk;
+    // Budgeted greedy safeguard: compare against the best single affordable item
+    let items = steps.map(s => s.item);
+    let itemsRisk = state.risk;
     for (const item of catalog) {
       if (item.cost > budget) continue;
       const r = simulateAddition(model, params, start, additionOf(item));
-      if (r < singleRisk - 1e-9) { single = item; singleRisk = r; }
+      if (r < itemsRisk - 1e-9) { items = [item]; itemsRisk = r; }
     }
-    if (single) {
-      return {
-        baselineRisk: start.risk, totalWeight: model.totalWeight,
-        steps: [{ item: single, cumulativeCost: single.cost, risk: singleRisk, delta: start.risk - singleRisk }],
-        totalCost: single.cost, finalRisk: singleRisk,
-      };
-    }
+    // Then single swaps/additions while they help (see exactSearch.ts)
+    const refined = opts.refine === false ? { items, risk: itemsRisk, moves: 0 } : improveBySwaps(model, params, posture, catalog, items, budget);
+    const changed = refined.items.length !== steps.length || refined.items.some((x, i) => steps[i]?.item !== x);
+    if (changed) return { ...sequence(model, params, start, refined.items), refinements: refined.moves };
   }
 
+  return { baselineRisk: start.risk, totalWeight: model.totalWeight, steps, totalCost: spent, finalRisk: state.risk };
+}
+
+/** Order a fixed set of items the way greedy would (best risk removed per dollar first) */
+function sequence(model: CompiledModel, params: ModelParams, start: ModelState, items: CatalogItem[]): PlanResult {
+  let state = start;
+  let spent = 0;
+  const steps: PlanStep[] = [];
+  const left = new Set(items);
+  while (left.size > 0) {
+    let best: CatalogItem | null = null, bestRatio = -Infinity, bestRisk = state.risk;
+    for (const item of left) {
+      const r = simulateAddition(model, params, state, additionOf(item));
+      const ratio = (state.risk - r) / Math.max(item.cost, 1);
+      if (ratio > bestRatio) { best = item; bestRatio = ratio; bestRisk = r; }
+    }
+    left.delete(best!);
+    const delta = state.risk - bestRisk;
+    state = applyAddition(model, params, state, additionOf(best!));
+    spent += best!.cost;
+    steps.push({ item: best!, cumulativeCost: spent, risk: state.risk, delta });
+  }
   return { baselineRisk: start.risk, totalWeight: model.totalWeight, steps, totalCost: spent, finalRisk: state.risk };
 }
 

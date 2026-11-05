@@ -23,6 +23,7 @@ import { useD3fendData } from './hooks/useD3fendData';
 import { attackVocabulary, d3fendVocabulary } from './engine/defenseVocabulary';
 import { useEnvironmentProfile } from './hooks/useEnvironmentProfile';
 import { useRiskModel } from './hooks/useRiskModel';
+import { useOptimalityCheck } from './hooks/useOptimalityCheck';
 import { useExportHandlers } from './hooks/useExportHandlers';
 import { useCompareMode } from './hooks/useCompareMode';
 import { useGraphInteraction } from './hooks/useGraphInteraction';
@@ -183,6 +184,7 @@ export default function AttackBreaker() {
     toolCoverage: env.modelInputs.toolCoverage, actorWeights: env.actorWeights,
     params, posture: defenses.posture, costModel, budget, previewPlan, displaySet,
   });
+  const optimality = useOptimalityCheck(rm);
 
   const defenseIndex = useMemo(() => (rm.model ? nodeDefenses(rm.model, displaySet) : {}), [rm.model, displaySet]);
   const gateTactics = useMemo(() => new Set(gates.flatMap(g => g.tactics)), [gates]);
@@ -703,7 +705,8 @@ export default function AttackBreaker() {
                       fullCostOf={fullCostOf} onSetCost={setCost} hasCostOverrides={Object.keys(costOverrides).length > 0} onResetCosts={() => setCostOverrides({})}
                       previewPlan={previewPlan} setPreviewPlan={setPreviewPlan}
                       onMarkInPlace={items => { defenses.addItems(items); setHoverDefense(null); }} onHoverItem={hoverItem}
-                      onExportPlan={exports.exportPlanCSV} onExportBoard={exports.exportBoardReport} onOpenModel={() => setSidebarPanel("model")} />
+                      onExportPlan={exports.exportPlanCSV} onExportBoard={exports.exportBoardReport} onOpenModel={() => setSidebarPanel("model")}
+                      optimality={optimality} />
                   )}
                   {sidebarPanel === "defenses" && (
                     <DefensesPanel cfg={cfg} vocabulary={vocabulary!} setVocabulary={setVocab} d3fend={d3fend} rm={rm} posture={defenses.posture}

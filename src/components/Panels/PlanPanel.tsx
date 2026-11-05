@@ -1,8 +1,9 @@
 // ─── PlanPanel — budgeted investment plan + efficiency frontier ─────────────
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { CatalogItem, VocabularyId } from '../../types';
 import type { RiskModelView } from '../../hooks/useRiskModel';
+import { OPTIMALITY_DEADLINE_MS, type OptimalityView } from '../../hooks/useOptimalityCheck';
 import { ORG_SIZES, type OrgSize } from '../../engine/portfolioOptimizer';
 import { fmtPct, fmtUsd } from '../../engine/displayMetrics';
 import { ENCODING } from '../../data/constants';
@@ -34,6 +35,7 @@ interface PlanPanelProps {
   setVocabulary: (v: VocabularyId) => void;
   /** Names of D3FEND countermeasures that implement an ATT&CK mitigation (empty otherwise) */
   implementedBy: (itemId: string) => string[];
+  optimality: OptimalityView;
 }
 
 const BUDGET_PRESETS = [100_000, 250_000, 500_000, 1_000_000, 2_000_000];
@@ -180,6 +182,11 @@ export function PlanPanel(p: PlanPanelProps) {
         </tbody>
       </table>
 
+      {plan.steps.length > 0 && (
+        <OptimalitySection view={p.optimality} planItems={plan.steps.map(s => s.item)} totalWeight={w}
+          onHoverItem={p.onHoverItem} onMarkInPlace={p.onMarkInPlace} />
+      )}
+
       {beyond.length > 0 && (
         <div style={{ marginTop: theme.spacing.xl }}>
           <div style={{ ...theme.sectionLabel, marginBottom: theme.spacing.sm }}>Next on the frontier (over budget)</div>
@@ -197,13 +204,116 @@ export function PlanPanel(p: PlanPanelProps) {
       <div style={{ marginTop: theme.spacing.xl, fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, lineHeight: 1.6 }}>
         Costs are <strong>placeholder estimates</strong> by cost tier — click any cost to enter a real quote.
         {p.hasCostOverrides && <> <button onClick={p.onResetCosts} style={{ ...linkButton, color: theme.colors.blue }}>Reset edited costs</button>.</>}
-        {" "}Each step adds the defense with the most risk removed per dollar at that point (a greedy heuristic, not a proven optimum).
+        {" "}Each step adds the defense with the most risk removed per dollar at that point, then single swaps are tried while they lower risk
+        {plan.refinements ? <> (here {plan.refinements === 1 ? 'one swap' : plan.refinements + ' swaps'} improved the plan)</> : null} — a heuristic; the exact search above checks it.
         {p.vocabulary === 'd3fend'
           ? " D3FEND coverage follows D3FEND's inferred countermeasure links; costs are per base technique."
           : " Telemetry assumes you also run MITRE's analytics on it and respond to alerts."}
         {" "}<button onClick={p.onOpenModel} style={{ ...linkButton, color: theme.colors.blue }}>Model assumptions →</button>
       </div>
     </>
+  );
+}
+
+// ─── Optimality check ────────────────────────────────────────────────────────
+
+function OptimalitySection({ view, planItems, totalWeight: w, onHoverItem, onMarkInPlace }: {
+  view: OptimalityView;
+  planItems: CatalogItem[];
+  totalWeight: number;
+  onHoverItem: (item: CatalogItem | null) => void;
+  onMarkInPlace: (items: CatalogItem[]) => void;
+}) {
+  const { state } = view;
+  const box = { marginTop: theme.spacing.xl, padding: "12px 14px", background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle, borderRadius: theme.radii.md, fontSize: theme.fontSizes.small, color: theme.colors.textBody, lineHeight: 1.6 } as const;
+  const seconds = Math.round(OPTIMALITY_DEADLINE_MS / 1000);
+
+  const header = (right: ReactNode) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+      <span style={{ ...theme.sectionLabel, flex: 1 }}>How close is this to the best plan?</span>
+      {right}
+    </div>
+  );
+
+  if (!state) return (
+    <div style={box}>
+      {header(<SmallButton onClick={view.run} color={ENCODING.detection} title={"Runs in the background for up to " + seconds + " s"}>RUN EXACT SEARCH</SmallButton>)}
+      <div style={{ color: theme.colors.textSecondary }}>
+        Tries every within-budget combination of this plan's defenses and the most promising others, widening the pool until it
+        has covered every defense that reduces risk on its own or {seconds} s have passed.
+      </div>
+    </div>
+  );
+
+  if (state.status === 'running') {
+    const pr = state.progress;
+    return (
+      <div style={box} aria-live="polite">
+        {header(<SmallButton onClick={view.stop}>STOP</SmallButton>)}
+        <div style={{ color: theme.colors.textSecondary }}>
+          {pr ? <>Searching combinations of the {pr.pool} most promising of {pr.candidates} candidate defenses · {pr.explored.toLocaleString('en-US')} branches so far</> : 'Starting…'}
+        </div>
+        <div style={{ height: 4, borderRadius: 2, background: theme.colors.bgSurface, marginTop: 8, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: (pr ? Math.max(4, 100 * pr.pool / pr.candidates) : 4) + "%", background: ENCODING.detection, borderRadius: 2, transition: "width .3s" }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') return (
+    <div style={box}>
+      {header(<SmallButton onClick={view.run} color={ENCODING.detection}>RETRY</SmallButton>)}
+      <div style={{ color: theme.colors.red }}>The search failed: {state.message}</div>
+    </div>
+  );
+
+  const r = state.result;
+  const better = r.risk < r.planRisk - 1e-9 * Math.max(1, w);
+  const bestGain = r.baselineRisk - r.risk;
+  const captured = bestGain > 0 ? (r.baselineRisk - r.planRisk) / bestGain : 1;
+  const inBest = new Set(r.items), inPlan = new Set(planItems);
+  const drop = planItems.filter(x => !inBest.has(x)), add = r.items.filter(x => !inPlan.has(x));
+  const cost = (xs: CatalogItem[]) => xs.reduce((s, x) => s + x.cost, 0);
+  const scope = r.coversAll
+    ? <>every within-budget combination of the {r.candidates} defenses that reduce risk on their own</>
+    : r.provenPool > 0
+      ? <>every within-budget combination of the {r.provenPool} most promising defenses (this plan's {planItems.length} and {r.provenPool - planItems.length} others); all {r.candidates} candidates didn't finish in {seconds} s</>
+      : <>part of the search — the time limit came before even the smallest pool was finished</>;
+  const stats = <span style={{ color: theme.colors.textMuted }}> ({r.explored.toLocaleString('en-US')} branches, {(r.elapsedMs / 1000).toFixed(1)} s)</span>;
+  const names = (xs: CatalogItem[]) => xs.map((x, i) => (
+    <span key={x.id}>{i > 0 && ', '}
+      <span onMouseEnter={() => onHoverItem(x)} onMouseLeave={() => onHoverItem(null)} style={{ color: theme.colors.textPrimary, cursor: "default", borderBottom: "1px dotted " + theme.colors.textFaint }}>{x.name}</span>
+    </span>
+  ));
+
+  return (
+    <div style={box} aria-live="polite">
+      {header(<SmallButton onClick={view.run} title="Search again">RE-RUN</SmallButton>)}
+      {!better ? (
+        <div>
+          <span aria-hidden style={{ color: ENCODING.cut, fontWeight: 700 }}>{"\u2713"} </span>
+          {r.coversAll ? <strong style={{ color: theme.colors.textPrimary }}>This plan is the best one possible. </strong> : <strong style={{ color: theme.colors.textPrimary }}>No better plan found. </strong>}
+          Checked {scope}.{stats}
+        </div>
+      ) : (
+        <>
+          <div>
+            <strong style={{ color: theme.colors.textPrimary }}>A better plan exists</strong>
+            {": "}{fmtPct(r.risk / w, 1)} residual instead of {fmtPct(r.planRisk / w, 1)}. This plan gets
+            {" "}<strong style={{ color: theme.colors.textPrimary }}>{fmtPct(captured)}</strong> of the best reduction {r.coversAll ? 'possible' : 'found'}.
+            {" "}Checked {scope}.{stats}
+          </div>
+          <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 10px" }}>
+            {drop.length > 0 && <><span style={{ color: theme.colors.textMuted }}>Drop</span><span>{names(drop)} <span style={{ color: theme.colors.textMuted }}>({fmtUsd(cost(drop))})</span></span></>}
+            {add.length > 0 && <><span style={{ color: theme.colors.textMuted }}>Add</span><span>{names(add)} <span style={{ color: theme.colors.textMuted }}>({fmtUsd(cost(add))})</span></span></>}
+          </div>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <SmallButton onClick={() => onMarkInPlace(r.items)} color={ENCODING.prevention} title="Record every defense in the better plan as already in place">MARK BETTER PLAN IN PLACE</SmallButton>
+            <span style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.tiny }}>{fmtUsd(cost(r.items))} for {r.items.length} defenses</span>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

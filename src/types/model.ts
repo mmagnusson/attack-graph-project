@@ -127,4 +127,6 @@ export interface PlanResult {
   steps: PlanStep[];
   totalCost: number;
   finalRisk: number;
+  /** Budgeted plans: improving swaps applied after greedy (0 or absent = pure greedy) */
+  refinements?: number;
 }
