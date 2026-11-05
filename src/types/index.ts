@@ -19,6 +19,12 @@ export type {
   PosturePreset,
   GateDef,
   EnvPreset,
+  D3fendRole,
+  D3fendTactic,
+  D3fendBase,
+  D3fendTechnique,
+  D3fendLink,
+  D3fendDataset,
   ChainColor,
   FrameworkConfig,
 } from "./graph";
@@ -26,6 +32,11 @@ export type {
 export type {
   ModelParams,
   DefensePosture,
+  VocabularyId,
+  PreventionDef,
+  DetectionRule,
+  DetectionBundle,
+  DefenseVocabulary,
   ToolCoverage,
   GateResult,
   GateOption,
@@ -42,6 +53,10 @@ export type {
   InfraCategory,
   CoverageKBMetadata,
   CoverageKB,
+  EvalsCoverage,
+  EvalsMeasurement,
+  EvalsTechniqueScore,
+  EvalsVendor,
 } from "./coverageKb";
 
 export type {

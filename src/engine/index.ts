@@ -18,13 +18,13 @@ export type { StixBundle, ParserConfig } from './stixParser';
 
 export {
   compileModel, evaluateModel, simulateAddition, applyAddition, actorBreakdown, viabilityParts,
-  techniqueActivity, gateValue, telemetryCoverage, stackedMitigation, clamp01,
+  techniqueActivity, gateValue, rulesCovered, stackedMitigation, clamp01,
   DEFAULT_MODEL_PARAMS, SENSITIVITY_BOUNDS,
 } from './riskModel';
 export type { CompileInputs, CompiledModel, CompiledActor, ModelState, Addition } from './riskModel';
 
 export {
-  buildCatalog, marginalValues, optimizePortfolio, evaluateItems, withItems, defaultCost, fullCost,
+  buildCatalog, marginalValues, optimizePortfolio, evaluateItems, withItems, defaultCost, fullCost, additionOf,
   TIER_COSTS, ORG_SIZES,
 } from './portfolioOptimizer';
 export type { CostModel, OrgSize, OptimizeOptions } from './portfolioOptimizer';
@@ -38,3 +38,7 @@ export type { BoardReportInput } from './boardReport';
 export { tagSectors, tagCountry, SECTORS } from './actorTags';
 
 export { sanitizeCSVCell, csvRow, downloadFile, today } from './csv';
+
+export { attackVocabulary, d3fendVocabulary, d3fendRole, translateAttackPosture } from './defenseVocabulary';
+export { IncrementalEvaluator, improveBySwaps, choosePool, exhaustiveSearch } from './exactSearch';
+export type { ExhaustiveResult } from './exactSearch';

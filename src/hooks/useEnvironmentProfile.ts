@@ -1,13 +1,13 @@
 // ─── useEnvironmentProfile — profile wizard state + KB assessment ────────────
 
 import { useMemo, useState } from 'react';
-import type { AttackChain, EnvironmentProfile, FrameworkConfig, Technique, TechniqueAssessment } from '../types';
+import type { AttackChain, CoverageKB, EnvironmentProfile, FrameworkConfig, Technique, TechniqueAssessment } from '../types';
 import { actorWeightsFor, assessEnvironment, assessmentToModelInputs } from '../engine/exposureEngine';
 import { STORAGE_PREFIX, usePersistentState } from './usePersistentState';
 
 const isProfile = (v: unknown) => v === null || (!!v && typeof v === 'object' && Array.isArray((v as EnvironmentProfile).infrastructure));
 
-export function useEnvironmentProfile(cfg: FrameworkConfig, techniques: Technique[], chains: AttackChain[]) {
+export function useEnvironmentProfile(cfg: FrameworkConfig, coverageKB: CoverageKB, techniques: Technique[], chains: AttackChain[]) {
   const [environmentProfile, setEnvironmentProfile] = usePersistentState<EnvironmentProfile | null>(
     STORAGE_PREFIX + 'envProfile.' + cfg.id, null, isProfile,
   );
@@ -17,8 +17,8 @@ export function useEnvironmentProfile(cfg: FrameworkConfig, techniques: Techniqu
     ((environmentProfile.infrastructure?.length ?? 0) > 0 || (environmentProfile.securityTools?.length ?? 0) > 0);
 
   const assessment: Record<string, TechniqueAssessment> | null = useMemo(
-    () => (hasSelections ? assessEnvironment(environmentProfile!, cfg.coverageKB, techniques) : null),
-    [hasSelections, environmentProfile, cfg.coverageKB, techniques],
+    () => (hasSelections ? assessEnvironment(environmentProfile!, coverageKB, techniques) : null),
+    [hasSelections, environmentProfile, coverageKB, techniques],
   );
   const modelInputs = useMemo(
     () => assessmentToModelInputs(assessment, (environmentProfile?.infrastructure?.length ?? 0) > 0),

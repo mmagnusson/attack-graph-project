@@ -28,6 +28,8 @@ export interface CoverageSource {
   name: string;
   detect: number;
   prevent: number;
+  /** Detection measured in MITRE ATT&CK Evaluations (otherwise both scores are estimates) */
+  measured?: { roundName: string; year: number; substeps: number };
 }
 
 /** Per-technique result of assessing an environment profile against the coverage KB */

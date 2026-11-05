@@ -12,7 +12,9 @@
     "data": "tsx scripts/build-attack-data.ts",
     "check": "tsc -b && eslint . && vitest run",
     "preview": "npm run build && wrangler dev",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "data:d3fend": "tsx scripts/build-d3fend-data.ts",
+    "data:evals": "tsx scripts/build-evals-coverage.ts"
   },
   "dependencies": {
     "react": "^19.2.0",

@@ -8,6 +8,7 @@ import { getFrameworkConfig } from '../src/data/frameworkConfig';
 import { compileModel, evaluateModel, simulateAddition, DEFAULT_MODEL_PARAMS } from '../src/engine/riskModel';
 import { buildCatalog, optimizePortfolio } from '../src/engine/portfolioOptimizer';
 import { isCurrentDataset } from '../src/data/loadAttackData';
+import { attackVocabulary } from '../src/engine/defenseVocabulary';
 import type { AttackDataset, DefensePosture, FrameworkId } from '../src/types';
 
 const load = (fw: FrameworkId) => {
@@ -15,7 +16,7 @@ const load = (fw: FrameworkId) => {
   const ds = JSON.parse(readFileSync('public' + cfg.dataUrl, 'utf8')) as AttackDataset;
   return { cfg, ds };
 };
-const none: DefensePosture = { mitigations: new Set(), dataComponents: new Set(), blocked: new Set() };
+const none: DefensePosture = { prevent: new Set(), detect: new Set(), blocked: new Set() };
 
 describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw => {
   const { cfg, ds } = load(fw);
@@ -50,8 +51,9 @@ describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw =
 
   it('produces a monotone frontier and a plan that fits the budget', () => {
     const gates = cfg.gateOptions.filter(g => cfg.defaultGates.includes(g.id));
-    const model = compileModel({ dataset: ds, chains: ds.chains.filter(c => c.kind === 'group'), gates, includeSoftware: true, platforms: null });
-    const catalog = buildCatalog(cfg, ds, none, { orgSize: 'medium', overrides: {} });
+    const vocabulary = attackVocabulary(ds, cfg);
+    const model = compileModel({ dataset: ds, vocabulary, chains: ds.chains.filter(c => c.kind === 'group'), gates, includeSoftware: true, platforms: null });
+    const catalog = buildCatalog(vocabulary, none, { orgSize: 'medium', overrides: {} });
     const frontier = optimizePortfolio(model, DEFAULT_MODEL_PARAMS, none, catalog, { budget: null, maxSteps: 25 });
     expect(frontier.steps.length).toBeGreaterThan(5);
     frontier.steps.forEach((s, i) => {
@@ -95,7 +97,8 @@ describe('enterprise data shape', () => {
 describe('model realism guard', () => {
   const { cfg, ds } = load('enterprise');
   const gates = cfg.gateOptions.filter(g => cfg.defaultGates.includes(g.id));
-  const model = compileModel({ dataset: ds, chains: ds.chains.filter(c => c.kind === 'group'), gates, includeSoftware: true, platforms: null });
+  const vocabulary = attackVocabulary(ds, cfg);
+  const model = compileModel({ dataset: ds, vocabulary, chains: ds.chains.filter(c => c.kind === 'group'), gates, includeSoftware: true, platforms: null });
   const base = evaluateModel(model, DEFAULT_MODEL_PARAMS, none);
 
   it('does not let blocking one popular technique remove most of the risk', () => {
@@ -107,7 +110,7 @@ describe('model realism guard', () => {
   });
 
   it('evaluates quickly enough for interactive use', () => {
-    const catalog = buildCatalog(cfg, ds, none, { orgSize: 'medium', overrides: {} });
+    const catalog = buildCatalog(vocabulary, none, { orgSize: 'medium', overrides: {} });
     const t0 = performance.now();
     optimizePortfolio(model, DEFAULT_MODEL_PARAMS, none, catalog, { budget: null, maxSteps: 25 });
     expect(performance.now() - t0).toBeLessThan(3000);

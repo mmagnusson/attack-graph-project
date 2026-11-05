@@ -29,3 +29,9 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
+
+# build-script download caches
+.cache
+
+# MITRE ATT&CK Evaluations-derived data: not committed until its licensing is confirmed (npm run data:evals)
+public/data/evals-coverage.json

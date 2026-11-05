@@ -113,12 +113,58 @@ export interface AttackDataset {
   usageNotes: Record<string, Record<string, string>>;
 }
 
+// ─── D3FEND ─────────────────────────────────────────────────────────────────
+
+/** How a D3FEND tactic enters the risk model */
+export type D3fendRole = "prevent" | "detect" | "response" | "foundation" | "recovery";
+
+export interface D3fendTactic {
+  name: string;
+  role: D3fendRole;
+}
+
+/** A D3FEND base technique (the purchasable unit, e.g. D3-PH Platform Hardening) */
+export interface D3fendBase {
+  id: string;
+  name: string;
+  tactic: string;
+  definition: string;
+  /** Every D3FEND technique in this base, including the base itself */
+  techniques: string[];
+}
+
+export interface D3fendTechnique {
+  name: string;
+  base: string;
+  tactic: string;
+  definition: string;
+  /** Ontology local name, for https://d3fend.mitre.org/technique/d3f:<iri>/ */
+  iri: string;
+}
+
+/** One inferred ATT&CK → D3FEND link: [D3FEND id, offensive relation, offensive artifact, defensive relation, defensive artifact] */
+export type D3fendLink = [string, string, string, string, string];
+
+export interface D3fendDataset {
+  schemaVersion: number;
+  version: string;
+  releaseDate: string;
+  tactics: D3fendTactic[];
+  bases: D3fendBase[];
+  techniques: Record<string, D3fendTechnique>;
+  /** ATT&CK technique ID → inferred D3FEND countermeasures (via digital artifacts) */
+  attack: Record<string, D3fendLink[]>;
+  /** ATT&CK mitigation ID → related D3FEND techniques (ontology d3f:related) */
+  mitigations: Record<string, string[]>;
+}
+
 // ─── Defense catalog ────────────────────────────────────────────────────────
 
 /** Rough cost class used to derive default dollar estimates */
 export type CostTier = 1 | 2 | 3 | 4;
 
-export type DefenseKind = "mitigation" | "telemetry";
+/** How a purchasable defense acts in the model: lowers technique success, or raises alerts */
+export type DefenseKind = "prevent" | "detect";
 
 /** A purchasable bundle of data components (e.g. endpoint process telemetry) */
 export interface TelemetrySource {

@@ -1,7 +1,8 @@
 // ─── Portfolio Optimizer — which defenses buy the most risk reduction per $ ──
 //
-// Candidates are MITRE mitigations and telemetry sources (bundles of data
-// components). Selection is greedy on risk removed per dollar, re-evaluated
+// Candidates come from the active defense vocabulary: MITRE mitigations and
+// telemetry sources (bundles of data components), or D3FEND prevention and
+// detection base techniques. Selection is greedy on risk removed per dollar, re-evaluated
 // after every pick, with the standard safeguard for budgeted greedy: if the
 // single best affordable item beats the greedy bundle, take it instead.
 // The objective is not submodular (closing the last open option at a gate is
@@ -9,16 +10,19 @@
 // proven optimum.
 
 import type {
-  AttackDataset,
   CatalogItem,
   CostTier,
   DefensePosture,
-  FrameworkConfig,
+  DefenseVocabulary,
   ModelParams,
   PlanResult,
   PlanStep,
 } from '../types';
 import { applyAddition, evaluateModel, simulateAddition, type CompiledModel, type ModelState } from './riskModel';
+import { additionOf, withItems } from './posture';
+import { improveBySwaps } from './exactSearch';
+
+export { additionOf, withItems };
 
 // ─── Costs ────────────────────────────────────────────────────────────────────
 
@@ -39,45 +43,43 @@ export interface CostModel {
 }
 
 /** Full-deployment cost estimate for a catalog item id */
-export function defaultCost(cfg: FrameworkConfig, itemId: string, orgSize: OrgSize): number {
-  const ts = cfg.telemetrySources.find(t => t.id === itemId);
-  const tier: CostTier = ts ? ts.tier : (cfg.mitigationTiers[itemId] ?? 2);
+export function defaultCost(vocab: DefenseVocabulary, itemId: string, orgSize: OrgSize): number {
+  const bundle = vocab.bundles.find(b => b.id === itemId);
+  const tier: CostTier = bundle ? bundle.tier : (vocab.tiers[itemId] ?? 2);
   return Math.round(TIER_COSTS[tier] * ORG_SIZES[orgSize].multiplier / 1000) * 1000;
 }
 
-export function fullCost(cfg: FrameworkConfig, itemId: string, costs: CostModel): number {
+export function fullCost(vocab: DefenseVocabulary, itemId: string, costs: CostModel): number {
   const o = costs.overrides[itemId];
-  return o !== undefined && o >= 0 ? o : defaultCost(cfg, itemId, costs.orgSize);
+  return o !== undefined && o >= 0 ? o : defaultCost(vocab, itemId, costs.orgSize);
 }
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 
 /**
- * Everything not yet deployed that could be bought. A telemetry source that is
- * partly collected is offered for its missing data components at a
- * proportional cost.
+ * Everything not yet deployed that could be bought. A detection bundle that is
+ * partly deployed is offered for its missing components at a proportional cost.
  */
-export function buildCatalog(cfg: FrameworkConfig, dataset: AttackDataset, posture: DefensePosture, costs: CostModel): CatalogItem[] {
+export function buildCatalog(vocab: DefenseVocabulary, posture: DefensePosture, costs: CostModel): CatalogItem[] {
   const items: CatalogItem[] = [];
-  for (const m of dataset.mitigations) {
-    if (!m.actionable || posture.mitigations.has(m.id)) continue;
-    items.push({ id: m.id, kind: 'mitigation', name: m.name, cost: fullCost(cfg, m.id, costs), mitigationIds: [m.id], dataComponentIds: [] });
+  for (const m of vocab.preventions) {
+    if (!m.actionable || m.techniques.length === 0 || posture.prevent.has(m.id)) continue;
+    items.push({ id: m.id, kind: 'prevent', name: m.name, cost: fullCost(vocab, m.id, costs), preventIds: [m.id], detectIds: [], group: m.group });
   }
-  const known = new Set(dataset.dataComponents.map(d => d.id));
-  for (const ts of cfg.telemetrySources) {
-    const dcs = ts.dataComponents.filter(d => known.has(d));
-    const missing = dcs.filter(d => !posture.dataComponents.has(d));
-    if (dcs.length === 0 || missing.length === 0) continue;
+  const known = new Set(vocab.components.map(d => d.id));
+  for (const b of vocab.bundles) {
+    const comps = b.components.filter(d => known.has(d));
+    const missing = comps.filter(d => !posture.detect.has(d));
+    if (comps.length === 0 || missing.length === 0) continue;
     items.push({
-      id: ts.id, kind: 'telemetry', name: ts.name,
-      cost: Math.round(fullCost(cfg, ts.id, costs) * missing.length / dcs.length),
-      mitigationIds: [], dataComponentIds: missing,
+      id: b.id, kind: 'detect', name: b.name,
+      cost: Math.round(fullCost(vocab, b.id, costs) * missing.length / comps.length),
+      preventIds: [], detectIds: missing, group: b.group,
     });
   }
   return items;
 }
 
-const additionOf = (item: CatalogItem) => ({ mitigations: item.mitigationIds, dataComponents: item.dataComponentIds });
 
 /** Risk removed by each catalog item if added alone to the current state */
 export function marginalValues(model: CompiledModel, params: ModelParams, state: ModelState, catalog: CatalogItem[]): Map<string, number> {
@@ -94,6 +96,8 @@ export interface OptimizeOptions {
   maxSteps?: number;
   /** Stop once a step removes less than this share of the starting risk */
   minRelativeGain?: number;
+  /** Budgeted plans only: refine the greedy result with single swaps (default true) */
+  refine?: boolean;
 }
 
 export function optimizePortfolio(
@@ -131,24 +135,43 @@ export function optimizePortfolio(
     steps.push({ item: best, cumulativeCost: spent, risk: state.risk, delta });
   }
 
-  // Budgeted greedy safeguard: compare against the best single affordable item
   if (budget !== null) {
-    let single: CatalogItem | null = null;
-    let singleRisk = state.risk;
+    // Budgeted greedy safeguard: compare against the best single affordable item
+    let items = steps.map(s => s.item);
+    let itemsRisk = state.risk;
     for (const item of catalog) {
       if (item.cost > budget) continue;
       const r = simulateAddition(model, params, start, additionOf(item));
-      if (r < singleRisk - 1e-9) { single = item; singleRisk = r; }
+      if (r < itemsRisk - 1e-9) { items = [item]; itemsRisk = r; }
     }
-    if (single) {
-      return {
-        baselineRisk: start.risk, totalWeight: model.totalWeight,
-        steps: [{ item: single, cumulativeCost: single.cost, risk: singleRisk, delta: start.risk - singleRisk }],
-        totalCost: single.cost, finalRisk: singleRisk,
-      };
-    }
+    // Then single swaps/additions while they help (see exactSearch.ts)
+    const refined = opts.refine === false ? { items, risk: itemsRisk, moves: 0 } : improveBySwaps(model, params, posture, catalog, items, budget);
+    const changed = refined.items.length !== steps.length || refined.items.some((x, i) => steps[i]?.item !== x);
+    if (changed) return { ...sequence(model, params, start, refined.items), refinements: refined.moves };
   }
 
+  return { baselineRisk: start.risk, totalWeight: model.totalWeight, steps, totalCost: spent, finalRisk: state.risk };
+}
+
+/** Order a fixed set of items the way greedy would (best risk removed per dollar first) */
+function sequence(model: CompiledModel, params: ModelParams, start: ModelState, items: CatalogItem[]): PlanResult {
+  let state = start;
+  let spent = 0;
+  const steps: PlanStep[] = [];
+  const left = new Set(items);
+  while (left.size > 0) {
+    let best: CatalogItem | null = null, bestRatio = -Infinity, bestRisk = state.risk;
+    for (const item of left) {
+      const r = simulateAddition(model, params, state, additionOf(item));
+      const ratio = (state.risk - r) / Math.max(item.cost, 1);
+      if (ratio > bestRatio) { best = item; bestRatio = ratio; bestRisk = r; }
+    }
+    left.delete(best!);
+    const delta = state.risk - bestRisk;
+    state = applyAddition(model, params, state, additionOf(best!));
+    spent += best!.cost;
+    steps.push({ item: best!, cumulativeCost: spent, risk: state.risk, delta });
+  }
   return { baselineRisk: start.risk, totalWeight: model.totalWeight, steps, totalCost: spent, finalRisk: state.risk };
 }
 
@@ -157,14 +180,4 @@ export function evaluateItems(model: CompiledModel, params: ModelParams, posture
   const before = evaluateModel(model, params, posture);
   const after = evaluateModel(model, params, withItems(posture, items));
   return { before: before.risk, after: after.risk };
-}
-
-export function withItems(posture: DefensePosture, items: CatalogItem[]): DefensePosture {
-  const mitigations = new Set(posture.mitigations);
-  const dataComponents = new Set(posture.dataComponents);
-  for (const it of items) {
-    it.mitigationIds.forEach(m => mitigations.add(m));
-    it.dataComponentIds.forEach(d => dataComponents.add(d));
-  }
-  return { mitigations, dataComponents, blocked: posture.blocked };
 }

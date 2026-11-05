@@ -9,7 +9,7 @@
 //                                  k_t = implemented mitigations mapped to t;
 //                                  each extra one on the same technique counts
 //                                  half as much (overlapping controls correlate)
-//   alert on technique t     q_t = D · (1 − (1 − telemetry_t)(1 − tools_t))
+//   alert on technique t     q_t = D · (1 − (1 − rules_t)(1 − tools_t))
 //   gate pass                S  = 1 − (1 − f) · Π_{t∈gate} (1 − p_t)
 //   gate unalerted (blind)   E₀ = 1 − Σ p_t·q_t / (Σ p_t + f)
 //   gate unalerted (adapt.)  E₁ = 1 − min_{t∈gate, p_t>0} q_t
@@ -23,8 +23,9 @@
 // can never remove more than ρ of an actor's viability), f = substitution
 // rate (chance of succeeding with a technique outside the actor's known set),
 // α = adversary adaptiveness (how reliably the actor steers toward your least-
-// covered option). telemetry_t is the share of t's MITRE analytics whose data
-// components are collected. Prevention needs breadth (one open option keeps a
+// covered option). rules_t is the share of t's detection rules whose components
+// are deployed — MITRE analytics fed by data components, or the D3FEND
+// detection countermeasures inferred for t (see engine/defenseVocabulary.ts). Prevention needs breadth (one open option keeps a
 // gate open); detection gives partial credit for covering the actor's likely
 // choices, shrinking as α rises, and is capped by response.
 //
@@ -33,6 +34,7 @@
 
 import type {
   AttackChain,
+  DefenseVocabulary,
   AttackDataset,
   DefensePosture,
   GateDef,
@@ -57,6 +59,8 @@ export const SENSITIVITY_BOUNDS: { low: ModelParams; high: ModelParams } = {
 
 export interface CompileInputs {
   dataset: AttackDataset;
+  /** Defense catalog the posture and optimizer are expressed in */
+  vocabulary: DefenseVocabulary;
   /** Actors to model, already filtered by kind/sector; custom chains included */
   chains: AttackChain[];
   gates: GateDef[];
@@ -92,16 +96,16 @@ export interface CompiledModel {
   /** base exposure × (1 − estimated tool prevention) */
   basePrevent: Float64Array;
   toolDetect: Float64Array;
-  mitigationIds: string[];
-  mitigationIndex: Map<string, number>;
-  /** mitigation → technique indices it applies to (explicit mappings + inherited sub-techniques) */
-  mitigationTechs: Int32Array[];
-  dcIds: string[];
-  dcIndex: Map<string, number>;
-  /** technique → analytics (each a list of DC indices); platform-filtered, empty-DC analytics dropped */
-  techAnalytics: Int32Array[][];
-  /** DC → techniques with an analytic that uses it */
-  dcTechs: Int32Array[];
+  preventionIds: string[];
+  preventionIndex: Map<string, number>;
+  /** prevention → technique indices it applies to (explicit mappings + inherited sub-techniques) */
+  preventionTechs: Int32Array[];
+  componentIds: string[];
+  componentIndex: Map<string, number>;
+  /** technique → detection rules (each a list of component indices); platform-filtered, empty rules dropped */
+  techRules: Int32Array[][];
+  /** component → techniques with a rule that uses it */
+  componentTechs: Int32Array[];
   actors: CompiledActor[];
   /** technique → actors whose gates or activity include it */
   techActors: Int32Array[];
@@ -109,10 +113,13 @@ export interface CompiledModel {
 }
 
 export interface ModelState {
-  mitCount: Int32Array;
+  /** Implemented preventions applying to each technique */
+  preventCount: Int32Array;
   blocked: Uint8Array;
+  /** Deployed detection components */
   collected: Uint8Array;
-  telemetry: Float64Array;
+  /** Share of each technique's detection rules satisfied by deployed components */
+  ruleCoverage: Float64Array;
   p: Float64Array;
   q: Float64Array;
   viability: Float64Array;
@@ -122,7 +129,7 @@ export interface ModelState {
 // ─── Compile ──────────────────────────────────────────────────────────────────
 
 export function compileModel(inputs: CompileInputs): CompiledModel {
-  const { dataset, chains, gates, includeSoftware, platforms } = inputs;
+  const { dataset, vocabulary, chains, gates, includeSoftware, platforms } = inputs;
   const techIds = dataset.techniques.map(t => t.id);
   const techIndex = new Map(techIds.map((id, i) => [id, i]));
   const n = techIds.length;
@@ -149,14 +156,14 @@ export function compileModel(inputs: CompileInputs): CompiledModel {
     toolDetect[i] = clamp01(tool?.detect ?? 0);
   }
 
-  // Mitigations (parent mapping applies to sub-techniques)
+  // Preventions (parent mapping applies to sub-techniques)
   const children: number[][] = Array.from({ length: n }, () => []);
   for (let i = 0; i < n; i++) if (parentIndex[i] >= 0) children[parentIndex[i]].push(i);
   // Non-deployable catalog entries ("Do Not Mitigate", "Pre-compromise") never change outcomes
-  const deployable = dataset.mitigations.filter(m => m.actionable);
-  const mitigationIds = deployable.map(m => m.id);
-  const mitigationIndex = new Map(mitigationIds.map((id, i) => [id, i]));
-  const mitigationTechs = deployable.map(m => {
+  const deployable = vocabulary.preventions.filter(m => m.actionable);
+  const preventionIds = deployable.map(m => m.id);
+  const preventionIndex = new Map(preventionIds.map((id, i) => [id, i]));
+  const preventionTechs = deployable.map(m => {
     const s = new Set<number>();
     for (const tid of m.techniques) {
       const i = techIndex.get(tid);
@@ -167,24 +174,22 @@ export function compileModel(inputs: CompileInputs): CompiledModel {
     return Int32Array.from([...s].sort((a, b) => a - b));
   });
 
-  // Detection analytics → data components
-  const dcIds = dataset.dataComponents.map(d => d.id);
-  const dcIndex = new Map(dcIds.map((id, i) => [id, i]));
-  const dcTechSets: Set<number>[] = dcIds.map(() => new Set());
-  const techAnalytics: Int32Array[][] = techIds.map((tid, i) => {
-    const strat = dataset.detections[tid];
-    if (!strat) return [];
+  // Detection rules → components
+  const componentIds = vocabulary.components.map(d => d.id);
+  const componentIndex = new Map(componentIds.map((id, i) => [id, i]));
+  const componentTechSets: Set<number>[] = componentIds.map(() => new Set());
+  const techRules: Int32Array[][] = techIds.map((tid, i) => {
     const out: Int32Array[] = [];
-    for (const a of strat.analytics) {
-      if (platforms && platforms.size > 0 && a.platforms.length > 0 && !a.platforms.some(p => platforms.has(p))) continue;
-      const dcs = a.dataComponents.map(d => dcIndex.get(d)).filter((d): d is number => d !== undefined);
-      if (dcs.length === 0) continue;
-      dcs.forEach(d => dcTechSets[d].add(i));
-      out.push(Int32Array.from(dcs));
+    for (const r of vocabulary.rules[tid] ?? []) {
+      if (platforms && platforms.size > 0 && r.platforms.length > 0 && !r.platforms.some(p => platforms.has(p))) continue;
+      const comps = r.components.map(d => componentIndex.get(d)).filter((d): d is number => d !== undefined);
+      if (comps.length === 0) continue;
+      comps.forEach(d => componentTechSets[d].add(i));
+      out.push(Int32Array.from(comps));
     }
     return out;
   });
-  const dcTechs = dcTechSets.map(s => Int32Array.from(s));
+  const componentTechs = componentTechSets.map(s => Int32Array.from(s));
 
   // Actors
   const techActorSets: Set<number>[] = techIds.map(() => new Set());
@@ -224,8 +229,8 @@ export function compileModel(inputs: CompileInputs): CompiledModel {
 
   return {
     techIds, techIndex, parentIndex, basePrevent, toolDetect,
-    mitigationIds, mitigationIndex, mitigationTechs,
-    dcIds, dcIndex, techAnalytics, dcTechs,
+    preventionIds, preventionIndex, preventionTechs,
+    componentIds, componentIndex, techRules, componentTechs,
     actors,
     techActors: techActorSets.map(s => Int32Array.from(s)),
     totalWeight,
@@ -236,11 +241,11 @@ export function compileModel(inputs: CompileInputs): CompiledModel {
 
 export function evaluateModel(model: CompiledModel, params: ModelParams, posture: DefensePosture): ModelState {
   const n = model.techIds.length;
-  const mitCount = new Int32Array(n);
-  for (const mid of posture.mitigations) {
-    const m = model.mitigationIndex.get(mid);
+  const preventCount = new Int32Array(n);
+  for (const mid of posture.prevent) {
+    const m = model.preventionIndex.get(mid);
     if (m === undefined) continue;
-    for (const t of model.mitigationTechs[m]) mitCount[t]++;
+    for (const t of model.preventionTechs[m]) preventCount[t]++;
   }
   const blocked = new Uint8Array(n);
   for (const tid of posture.blocked) {
@@ -249,19 +254,19 @@ export function evaluateModel(model: CompiledModel, params: ModelParams, posture
   }
   for (let i = 0; i < n; i++) if (model.parentIndex[i] >= 0 && blocked[model.parentIndex[i]]) blocked[i] = 1;
 
-  const collected = new Uint8Array(model.dcIds.length);
-  for (const dc of posture.dataComponents) {
-    const d = model.dcIndex.get(dc);
+  const collected = new Uint8Array(model.componentIds.length);
+  for (const dc of posture.detect) {
+    const d = model.componentIndex.get(dc);
     if (d !== undefined) collected[d] = 1;
   }
-  const telemetry = new Float64Array(n);
-  for (let i = 0; i < n; i++) telemetry[i] = telemetryCoverage(model.techAnalytics[i], collected);
+  const ruleCoverage = new Float64Array(n);
+  for (let i = 0; i < n; i++) ruleCoverage[i] = rulesCovered(model.techRules[i], collected);
 
   const p = new Float64Array(n);
   const q = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    p[i] = success(model, params, i, mitCount[i], blocked[i]);
-    q[i] = stopChance(params, telemetry[i], model.toolDetect[i]);
+    p[i] = success(model, params, i, preventCount[i], blocked[i]);
+    q[i] = stopChance(params, ruleCoverage[i], model.toolDetect[i]);
   }
 
   const viability = new Float64Array(model.actors.length);
@@ -270,7 +275,7 @@ export function evaluateModel(model: CompiledModel, params: ModelParams, posture
     viability[ai] = actorViability(a, p, q, params);
     risk += a.weight * viability[ai];
   });
-  return { mitCount, blocked, collected, telemetry, p, q, viability, risk };
+  return { preventCount, blocked, collected, ruleCoverage, p, q, viability, risk };
 }
 
 function success(model: CompiledModel, params: ModelParams, i: number, k: number, blocked: number): number {
@@ -285,20 +290,20 @@ export function stackedMitigation(m: number, k: number): number {
   return f;
 }
 
-function stopChance(params: ModelParams, telemetry: number, tool: number): number {
-  return params.detectionEffectiveness * (1 - (1 - telemetry) * (1 - tool));
+function stopChance(params: ModelParams, coverage: number, tool: number): number {
+  return params.detectionEffectiveness * (1 - (1 - coverage) * (1 - tool));
 }
 
-/** Share of a technique's analytics whose data components are collected (partial credit per analytic) */
-export function telemetryCoverage(analytics: Int32Array[], collected: Uint8Array): number {
-  if (analytics.length === 0) return 0;
+/** Share of a technique's detection rules whose components are deployed (partial credit per rule) */
+export function rulesCovered(rules: Int32Array[], collected: Uint8Array): number {
+  if (rules.length === 0) return 0;
   let sum = 0;
-  for (const a of analytics) {
+  for (const a of rules) {
     let have = 0;
     for (const d of a) if (collected[d]) have++;
     sum += have / a.length;
   }
-  return sum / analytics.length;
+  return sum / rules.length;
 }
 
 export function gateValue(
@@ -347,8 +352,8 @@ export function viabilityParts(model: CompiledModel, params: ModelParams, state:
 // ─── What-if: adding defenses ────────────────────────────────────────────────
 
 export interface Addition {
-  mitigations?: readonly string[];
-  dataComponents?: readonly string[];
+  prevent?: readonly string[];
+  detect?: readonly string[];
   blocked?: readonly string[];
 }
 
@@ -371,7 +376,7 @@ export function simulateAddition(model: CompiledModel, params: ModelParams, stat
 export function applyAddition(model: CompiledModel, params: ModelParams, state: ModelState, add: Addition): ModelState {
   const touched = applyToScratch(model, params, state, add);
   if (!touched) return state;
-  const { p, q, techs, mitCount, blocked, collected, telemetry } = touched;
+  const { p, q, techs, preventCount, blocked, collected, ruleCoverage } = touched;
   const viability = state.viability.slice();
   const actorSet = new Set<number>();
   for (const t of techs) for (const a of model.techActors[t]) actorSet.add(a);
@@ -382,20 +387,20 @@ export function applyAddition(model: CompiledModel, params: ModelParams, state: 
     risk += actor.weight * (v - viability[ai]);
     viability[ai] = v;
   }
-  return { mitCount, blocked, collected, telemetry, p, q, viability, risk: Math.max(0, risk) };
+  return { preventCount, blocked, collected, ruleCoverage, p, q, viability, risk: Math.max(0, risk) };
 }
 
 function applyToScratch(model: CompiledModel, params: ModelParams, state: ModelState, add: Addition) {
   const techs = new Set<number>();
-  const mitCount = state.mitCount.slice();
+  const preventCount = state.preventCount.slice();
   const blocked = state.blocked.slice();
   const collected = state.collected.slice();
-  const telemetry = state.telemetry.slice();
+  const ruleCoverage = state.ruleCoverage.slice();
 
-  for (const mid of add.mitigations || []) {
-    const m = model.mitigationIndex.get(mid);
+  for (const mid of add.prevent || []) {
+    const m = model.preventionIndex.get(mid);
     if (m === undefined) continue;
-    for (const t of model.mitigationTechs[m]) { mitCount[t]++; techs.add(t); }
+    for (const t of model.preventionTechs[m]) { preventCount[t]++; techs.add(t); }
   }
   for (const tid of add.blocked || []) {
     const i = model.techIndex.get(tid);
@@ -406,22 +411,22 @@ function applyToScratch(model: CompiledModel, params: ModelParams, state: ModelS
     }
   }
   const detTechs = new Set<number>();
-  for (const dc of add.dataComponents || []) {
-    const d = model.dcIndex.get(dc);
+  for (const dc of add.detect || []) {
+    const d = model.componentIndex.get(dc);
     if (d === undefined || collected[d]) continue;
     collected[d] = 1;
-    for (const t of model.dcTechs[d]) detTechs.add(t);
+    for (const t of model.componentTechs[d]) detTechs.add(t);
   }
-  for (const t of detTechs) { telemetry[t] = telemetryCoverage(model.techAnalytics[t], collected); techs.add(t); }
+  for (const t of detTechs) { ruleCoverage[t] = rulesCovered(model.techRules[t], collected); techs.add(t); }
   if (techs.size === 0) return null;
 
   const p = state.p.slice();
   const q = state.q.slice();
   for (const t of techs) {
-    p[t] = success(model, params, t, mitCount[t], blocked[t]);
-    q[t] = stopChance(params, telemetry[t], model.toolDetect[t]);
+    p[t] = success(model, params, t, preventCount[t], blocked[t]);
+    q[t] = stopChance(params, ruleCoverage[t], model.toolDetect[t]);
   }
-  return { p, q, techs, mitCount, blocked, collected, telemetry };
+  return { p, q, techs, preventCount, blocked, collected, ruleCoverage };
 }
 
 // ─── Read-outs for the UI ─────────────────────────────────────────────────────
@@ -440,7 +445,7 @@ export function actorBreakdown(model: CompiledModel, params: ModelParams, state:
         .map(t => ({
           techniqueId: model.techIds[t],
           success: state.p[t],
-          detection: 1 - (1 - state.telemetry[t]) * (1 - model.toolDetect[t]),
+          detection: 1 - (1 - state.ruleCoverage[t]) * (1 - model.toolDetect[t]),
           viaSoftware: actor.software.has(t),
         }))
         .sort((a, b) => b.success - a.success || a.techniqueId.localeCompare(b.techniqueId)),

@@ -1,15 +1,18 @@
 // ─── DetailPanel — one technique: residual risk, MITRE mitigations, MITRE detection ──
 
 import { useMemo, useState } from 'react';
-import type { AttackChain, AttackDataset, DefensePosture, FrameworkConfig, Technique, TechniqueAssessment } from '../../types';
+import type { AttackChain, AttackDataset, D3fendDataset, DefensePosture, FrameworkConfig, Technique, TechniqueAssessment, VocabularyId } from '../../types';
 import type { RiskModelView } from '../../hooks/useRiskModel';
 import { simulateAddition } from '../../engine/riskModel';
+import { d3fendRole } from '../../engine/defenseVocabulary';
 import { fmtPct } from '../../engine/displayMetrics';
 import { CHAIN_COLORS, ENCODING } from '../../data/constants';
 import { MetricBox, PopoutButton } from '../Analysis';
 import { Meter, SmallButton } from '../ui';
 import { linkButton, mono } from '../styles';
+import { d3fendUrl, detectionStrategyUrl, mitigationUrl, techniqueUrl } from '../links';
 import { theme } from '../../theme';
+import { EVALS_NOTICE } from '../../data/evalsConfig';
 
 interface DetailPanelProps {
   cfg: FrameworkConfig;
@@ -21,8 +24,10 @@ interface DetailPanelProps {
   exposure: number;
   exposureOverridden: boolean;
   setExposure: (id: string, v: number | undefined) => void;
-  toggleMitigation: (id: string) => void;
-  setDataComponents: (ids: string[], on: boolean) => void;
+  vocabulary: VocabularyId;
+  d3fend: D3fendDataset | null;
+  togglePrevent: (id: string) => void;
+  setDetect: (ids: string[], on: boolean) => void;
   toggleBlocked: (id: string) => void;
   assessment: Record<string, TechniqueAssessment> | null;
   chains: AttackChain[];
@@ -77,6 +82,7 @@ export function DetailPanel(p: DetailPanelProps) {
   const dcName = (id: string) => dataset.dataComponents.find(d => d.id === id)?.name ?? id;
   const assess = p.assessment?.[tech.id];
   const isBlocked = posture.blocked.has(tech.id);
+  const isAttack = p.vocabulary === 'attack';
   const shownUsers = showAllActors ? users : users.slice(0, 8);
 
   return (
@@ -130,7 +136,9 @@ export function DetailPanel(p: DetailPanelProps) {
         return (
           <div key={x.id} style={{ padding: "4px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="checkbox" disabled={!x.actionable} checked={posture.mitigations.has(x.id)} onChange={() => p.toggleMitigation(x.id)} aria-label={"In place: " + x.name} />
+              {isAttack
+                ? <input type="checkbox" disabled={!x.actionable} checked={posture.prevent.has(x.id)} onChange={() => p.togglePrevent(x.id)} aria-label={"In place: " + x.name} />
+                : <span style={{ width: 13 }} />}
               <span style={{ ...mono, fontSize: theme.fontSizes.micro, color: theme.colors.textFaint, width: 44 }}>{x.id}</span>
               <button onClick={() => setOpenNote(open ? null : x.id)} style={{ ...linkButton, flex: 1, textAlign: "left", fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>
                 {x.name}{inherited && <span style={{ color: theme.colors.textFaint }}> (via {parent})</span>}
@@ -141,7 +149,13 @@ export function DetailPanel(p: DetailPanelProps) {
             {open && (
               <div style={{ marginLeft: 60, marginTop: 4, padding: 10, background: theme.colors.bgCard, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, lineHeight: 1.6 }}>
                 {n || x.description}
-                <div><a href={"https://attack.mitre.org/mitigations/" + x.id + "/"} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue, fontSize: theme.fontSizes.micro }}>MITRE {x.id} ↗</a></div>
+                {p.d3fend && (p.d3fend.mitigations[x.id] ?? []).length > 0 && (
+                  <div style={{ marginTop: 4, fontSize: theme.fontSizes.tiny }}>
+                    <span style={{ color: theme.colors.textMuted }}>Implemented by D3FEND: </span>
+                    {p.d3fend.mitigations[x.id].map((d, j) => <span key={d}>{j > 0 && ", "}<a href={d3fendUrl(p.d3fend!.techniques[d].iri)} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue }}>{p.d3fend!.techniques[d].name}</a></span>)}
+                  </div>
+                )}
+                <div><a href={mitigationUrl(x.id)} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue, fontSize: theme.fontSizes.micro }}>MITRE {x.id} ↗</a></div>
               </div>
             )}
           </div>
@@ -156,12 +170,12 @@ export function DetailPanel(p: DetailPanelProps) {
       {strategy && (
         <>
           <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textBody, marginBottom: 6 }}>
-            <a href={"https://attack.mitre.org/detectionstrategies/" + strategy.id + "/"} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue }}>{strategy.id}</a> {strategy.name}
+            <a href={detectionStrategyUrl(strategy.id)} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue }}>{strategy.id}</a> {strategy.name}
             {subStrategies > 0 && <span style={{ color: theme.colors.textMuted }}> · sub-techniques have {subStrategies} more strategies</span>}
           </div>
           {strategy.analytics.map(a => {
             const outside = !!p.platforms && p.platforms.size > 0 && a.platforms.length > 0 && !a.platforms.some(x => p.platforms!.has(x));
-            const have = a.dataComponents.filter(d => posture.dataComponents.has(d)).length;
+            const have = isAttack ? a.dataComponents.filter(d => posture.detect.has(d)).length : 0;
             const open = openNote === a.id;
             return (
               <div key={a.id} style={{ padding: "6px 8px", marginBottom: 4, background: theme.colors.bgCard, borderRadius: theme.radii.sm, opacity: outside ? 0.5 : 1 }}>
@@ -176,9 +190,10 @@ export function DetailPanel(p: DetailPanelProps) {
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                   {a.dataComponents.map(d => {
-                    const on = posture.dataComponents.has(d);
+                    const on = isAttack && posture.detect.has(d);
                     return (
-                      <button key={d} onClick={() => p.setDataComponents([d], !on)} title={(on ? "Collected — click to remove" : "Not collected — click to mark collected") + " (" + d + ")"}
+                      <button key={d} disabled={!isAttack} onClick={() => p.setDetect([d], !on)}
+                        title={isAttack ? (on ? "Collected — click to remove" : "Not collected — click to mark collected") + " (" + d + ")" : "Switch to the ATT&CK catalog to record telemetry (" + d + ")"}
                         style={{ ...linkButton, fontSize: theme.fontSizes.micro, padding: "2px 6px", borderRadius: theme.radii.sm,
                           background: on ? ENCODING.detection + "26" : "transparent", border: "1px solid " + (on ? ENCODING.detection : theme.colors.border), color: theme.colors.textBody }}>
                         {on ? "✓ " : ""}{dcName(d)}
@@ -197,17 +212,27 @@ export function DetailPanel(p: DetailPanelProps) {
         </>
       )}
 
+      {/* D3FEND countermeasures */}
+      <D3fendSection d3fend={p.d3fend} family={family} vocabulary={p.vocabulary} posture={posture}
+        togglePrevent={p.togglePrevent} setDetect={p.setDetect} />
+
       {assess && assess.sources.length > 0 && (
         <div style={{ marginTop: theme.spacing.lg, padding: 10, background: theme.colors.bgCard, borderRadius: theme.radii.sm }}>
-          <div style={{ ...theme.sectionLabel, marginBottom: 4 }}>Your tools (estimated coverage)</div>
+          <div style={{ ...theme.sectionLabel, marginBottom: 4 }}>Your tools</div>
           {assess.sources.map(s => (
             <div key={s.toolId} style={{ display: "flex", gap: 10, fontSize: theme.fontSizes.small, color: theme.colors.textBody }}>
               <span style={{ flex: 1 }}>{s.name}</span>
-              <span style={{ color: theme.colors.textSecondary }}>detect ~{fmtPct(s.detect)}</span>
+              <span style={{ color: theme.colors.textSecondary }}
+                title={s.measured ? 'MITRE ATT&CK Evaluations ' + s.measured.roundName + ': ' + s.measured.substeps + ' scored substep' + (s.measured.substeps === 1 ? '' : 's') + ' for this technique' : 'Author estimate'}>
+                detect {s.measured ? fmtPct(s.detect) + ' (Evals \u2019' + String(s.measured.year).slice(2) + ', n=' + s.measured.substeps + ')' : '~' + fmtPct(s.detect)}
+              </span>
               <span style={{ color: theme.colors.textSecondary }}>prevent ~{fmtPct(s.prevent)}</span>
             </div>
           ))}
-          <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, marginTop: 4 }}>Author estimates, not MITRE Evaluations results.</div>
+          <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+            ~ author estimate.
+            {assess.sources.some(s => s.measured) && <> Evals rates count Technique, Tactic and General detections in the first run, pulled toward the vendor's overall rate when n is small. {EVALS_NOTICE}</>}
+          </div>
         </div>
       )}
 
@@ -237,9 +262,90 @@ export function DetailPanel(p: DetailPanelProps) {
         <>
           <div style={{ ...theme.sectionLabel, margin: "18px 0 6px" }}>About this technique</div>
           <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textSecondary, lineHeight: 1.6, whiteSpace: "pre-line" }}>{tech.description}</div>
-          <a href={"https://attack.mitre.org/techniques/" + tech.id.replace('.', '/') + "/"} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue, fontSize: theme.fontSizes.micro }}>MITRE {tech.id} ↗</a>
+          <a href={techniqueUrl(tech.id)} target="_blank" rel="noreferrer" style={{ color: theme.colors.blue, fontSize: theme.fontSizes.micro }}>MITRE {tech.id} ↗</a>
         </>
       )}
+    </>
+  );
+}
+
+// ─── D3FEND countermeasures for the selected technique (family) ─────────────
+
+const D3FEND_ORDER = ['Model', 'Harden', 'Detect', 'Isolate', 'Deceive', 'Evict', 'Restore'];
+
+function D3fendSection({ d3fend, family, vocabulary, posture, togglePrevent, setDetect }: {
+  d3fend: D3fendDataset | null; family: string[]; vocabulary: VocabularyId; posture: DefensePosture;
+  togglePrevent: (id: string) => void; setDetect: (ids: string[], on: boolean) => void;
+}) {
+  const [showAll, setShowAll] = useState<string | null>(null);
+  const groups = useMemo(() => {
+    if (!d3fend) return [];
+    const seen = new Map<string, { id: string; rel: string }>();
+    for (const t of family) {
+      for (const [d3id, offRel, offArt, defRel, defArt] of d3fend.attack[t] ?? []) {
+        if (!seen.has(d3id)) seen.set(d3id, { id: d3id, rel: defRel + ' ' + defArt + (offArt ? ' ← technique ' + offRel + ' ' + offArt : '') });
+      }
+    }
+    const by = new Map<string, { id: string; rel: string }[]>();
+    for (const x of seen.values()) {
+      const tac = d3fend.techniques[x.id]?.tactic ?? 'Model';
+      by.set(tac, [...(by.get(tac) ?? []), x]);
+    }
+    return D3FEND_ORDER.filter(t => by.has(t)).map(t => ({ tactic: t, items: by.get(t)!.sort((a, b) => d3fend.techniques[a.id].name.localeCompare(d3fend.techniques[b.id].name)) }));
+  }, [d3fend, family]);
+
+  if (!d3fend) return null;
+  const isD3 = vocabulary === 'd3fend';
+  const total = groups.reduce((n, g) => n + g.items.length, 0);
+  return (
+    <>
+      <div style={{ ...theme.sectionLabel, margin: "18px 0 6px" }}>
+        <span style={{ color: ENCODING.prevention }}>{"\u25C6"}</span> D3FEND countermeasures ({total})
+      </div>
+      {total === 0 && <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textMuted }}>D3FEND {d3fend.version} infers no countermeasure for this technique.</div>}
+      {total > 0 && (
+        <div style={{ fontSize: theme.fontSizes.tiny, color: theme.colors.textMuted, marginBottom: 6, lineHeight: 1.5 }}>
+          Inferred by D3FEND through shared digital artifacts.{!isD3 && " Switch Defenses to the D3FEND catalog to record and plan with these."}
+        </div>
+      )}
+      {groups.map(g => {
+        const role = d3fendRole(g.tactic);
+        const items = showAll === g.tactic ? g.items : g.items.slice(0, 6);
+        return (
+          <div key={g.tactic} style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: theme.fontSizes.small, color: theme.colors.textPrimary, fontWeight: 600 }}>
+              {g.tactic} <span style={{ color: theme.colors.textMuted, fontWeight: 400, fontSize: theme.fontSizes.micro }}>
+                {role === 'prevent' ? 'lowers success' : role === 'detect' ? 'raises alerts' : role === 'response' ? 'part of response (not scored separately)' : 'not scored'}
+              </span>
+            </div>
+            {items.map(x => {
+              const t = d3fend.techniques[x.id];
+              const on = role === 'prevent' ? posture.prevent.has(t.base) : role === 'detect' ? posture.detect.has(x.id) : false;
+              const scored = role === 'prevent' || role === 'detect';
+              return (
+                <div key={x.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "2px 0" }}>
+                  {isD3 && scored
+                    ? <input type="checkbox" checked={on} style={{ marginTop: 3 }}
+                        onChange={() => (role === 'prevent' ? togglePrevent(t.base) : setDetect([x.id], !on))}
+                        aria-label={(role === 'prevent' ? 'In place (whole ' + d3fend.techniques[t.base]?.name + ' base): ' : 'Deployed: ') + t.name}
+                        title={role === 'prevent' ? 'Prevention is recorded per base technique: ' + d3fend.techniques[t.base]?.name : undefined} />
+                    : <span style={{ width: 13, flexShrink: 0 }} />}
+                  <div style={{ flex: 1, fontSize: theme.fontSizes.small, color: theme.colors.textBody, lineHeight: 1.4 }}>
+                    <a href={d3fendUrl(t.iri)} target="_blank" rel="noreferrer" style={{ color: theme.colors.textBody }}>{t.name}</a>
+                    <span style={{ ...mono, color: theme.colors.textFaint, fontSize: theme.fontSizes.micro, marginLeft: 6 }}>{x.id}</span>
+                    <div style={{ fontSize: theme.fontSizes.micro, color: theme.colors.textMuted }}>{x.rel}{t.base !== x.id ? ' · ' + d3fend.techniques[t.base]?.name : ''}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {g.items.length > 6 && (
+              <button onClick={() => setShowAll(showAll === g.tactic ? null : g.tactic)} style={{ ...linkButton, color: theme.colors.blue, fontSize: theme.fontSizes.micro, marginLeft: 21 }}>
+                {showAll === g.tactic ? 'Show fewer' : 'Show all ' + g.items.length}
+              </button>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 }

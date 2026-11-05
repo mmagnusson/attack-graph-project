@@ -4,6 +4,8 @@ import {
   type CompileInputs,
 } from '../src/engine/riskModel';
 import type { AttackChain, AttackDataset, DefensePosture, GateDef, ModelParams } from '../src/types';
+import { attackVocabulary } from '../src/engine/defenseVocabulary';
+import { getFrameworkConfig } from '../src/data/frameworkConfig';
 
 // Two Initial Access options (A, B), one Execution option (C, plus sub-technique C.001), one C2 option (D)
 const dataset: AttackDataset = {
@@ -43,12 +45,13 @@ const actor = (id: string, path: string[], viaSoftware: string[] = []): AttackCh
 // α = 0 (blind attacker) and ρ = 1 (every alert contained) reduce viability to Π S·E,
 // which keeps the closed forms below easy to check by hand
 const params: ModelParams = { mitigationEffectiveness: 0.5, detectionEffectiveness: 0.5, responseEffectiveness: 1, substitutionRate: 0.1, adversaryAdaptiveness: 0 };
-const none: DefensePosture = { mitigations: new Set(), dataComponents: new Set(), blocked: new Set() };
-const posture = (p: Partial<{ mitigations: string[]; dataComponents: string[]; blocked: string[] }>): DefensePosture => ({
-  mitigations: new Set(p.mitigations), dataComponents: new Set(p.dataComponents), blocked: new Set(p.blocked),
+const none: DefensePosture = { prevent: new Set(), detect: new Set(), blocked: new Set() };
+const posture = (p: Partial<{ prevent: string[]; detect: string[]; blocked: string[] }>): DefensePosture => ({
+  prevent: new Set(p.prevent), detect: new Set(p.detect), blocked: new Set(p.blocked),
 });
+const vocabulary = attackVocabulary(dataset, getFrameworkConfig('enterprise'));
 const inputs = (over: Partial<CompileInputs> = {}): CompileInputs => ({
-  dataset, chains: [actor('X', ['T0001', 'T0002', 'T0003', 'T0004'])], gates, includeSoftware: true, platforms: null, ...over,
+  dataset, vocabulary, chains: [actor('X', ['T0001', 'T0002', 'T0003', 'T0004'])], gates, includeSoftware: true, platforms: null, ...over,
 });
 const risk = (p: DefensePosture, over: Partial<CompileInputs> = {}, prm = params) =>
   evaluateModel(compileModel(inputs(over)), prm, p).risk;
@@ -81,11 +84,11 @@ describe('evaluateModel', () => {
   });
 
   it('does nothing when one option at a gate stays open (prevention needs breadth)', () => {
-    expect(risk(posture({ mitigations: ['M0A'] }))).toBeCloseTo(1, 12);
+    expect(risk(posture({ prevent: ['M0A'] }))).toBeCloseTo(1, 12);
   });
 
   it('narrows the gate once every option is mitigated', () => {
-    expect(risk(posture({ mitigations: ['M0A', 'M0B'] }))).toBeCloseTo(1 - 0.9 * 0.5 * 0.5, 12);
+    expect(risk(posture({ prevent: ['M0A', 'M0B'] }))).toBeCloseTo(1 - 0.9 * 0.5 * 0.5, 12);
   });
 
   it('gives overlapping mitigations on one technique diminishing returns', () => {
@@ -98,37 +101,37 @@ describe('evaluateModel', () => {
 
   it('applies a parent-technique mitigation to sub-techniques', () => {
     const m = compileModel(inputs({ chains: [actor('X', ['T0001', 'T0003.001', 'T0004'])] }));
-    const s = evaluateModel(m, params, posture({ mitigations: ['M0C'] }));
+    const s = evaluateModel(m, params, posture({ prevent: ['M0C'] }));
     expect(s.p[m.techIndex.get('T0003.001')!]).toBeCloseTo(0.5, 12);
     expect(s.p[m.techIndex.get('T0003')!]).toBeCloseTo(0.5, 12);
   });
 
   it('gives detection partial credit through the evade term', () => {
     // Execution gate {C}: telemetry 1 → q = 0.5; evade = 1 − 0.5/(1 + 0.1)
-    expect(risk(posture({ dataComponents: ['DC1'] }))).toBeCloseTo((1 - 0.5 / 1.1) * (1 - 0.25 / 1.1), 10);
+    expect(risk(posture({ detect: ['DC1'] }))).toBeCloseTo((1 - 0.5 / 1.1) * (1 - 0.25 / 1.1), 10);
   });
 
   it('caps detection at response effectiveness, applied once per intrusion', () => {
     // Execution gate unalerted 1 − 0.5/1.1, C2 gate unalerted 1 − 0.25/1.1; every gate passes
     const unalerted = (1 - 0.5 / 1.1) * (1 - 0.25 / 1.1);
-    const r = risk(posture({ dataComponents: ['DC1'] }), {}, { ...params, responseEffectiveness: 0.6 });
+    const r = risk(posture({ detect: ['DC1'] }), {}, { ...params, responseEffectiveness: 0.6 });
     expect(r).toBeCloseTo(1 - 0.6 * (1 - unalerted), 10);
     // Even perfect detection cannot remove more than ρ of an actor's viability
-    const perfect = risk(posture({ dataComponents: ['DC1', 'DC2'] }), {}, { ...params, detectionEffectiveness: 1, responseEffectiveness: 0.6 });
+    const perfect = risk(posture({ detect: ['DC1', 'DC2'] }), {}, { ...params, detectionEffectiveness: 1, responseEffectiveness: 0.6 });
     expect(perfect).toBeGreaterThanOrEqual(0.4 - 1e-12);
   });
 
   it('scores analytics by the share of their data components collected', () => {
     const m = compileModel(inputs());
-    const s = evaluateModel(m, params, posture({ dataComponents: ['DC2'] }));
-    expect(s.telemetry[m.techIndex.get('T0004')!]).toBeCloseTo(0.5, 12);
+    const s = evaluateModel(m, params, posture({ detect: ['DC2'] }));
+    expect(s.ruleCoverage[m.techIndex.get('T0004')!]).toBeCloseTo(0.5, 12);
   });
 
   it('filters analytics by platform', () => {
     const m = compileModel(inputs({ platforms: new Set(['Windows']) }));
-    const s = evaluateModel(m, params, posture({ dataComponents: ['DC1', 'DC2'] }));
-    expect(s.telemetry[m.techIndex.get('T0003')!]).toBe(1);
-    expect(s.telemetry[m.techIndex.get('T0004')!]).toBe(0); // Linux-only analytic filtered out
+    const s = evaluateModel(m, params, posture({ detect: ['DC1', 'DC2'] }));
+    expect(s.ruleCoverage[m.techIndex.get('T0003')!]).toBe(1);
+    expect(s.ruleCoverage[m.techIndex.get('T0004')!]).toBe(0); // Linux-only analytic filtered out
   });
 
   it('treats blocked parents as blocking sub-techniques, leaving only substitution', () => {
@@ -159,8 +162,8 @@ describe('evaluateModel', () => {
 
   it('can exclude software-only techniques', () => {
     const chains = [actor('X', ['T0001', 'T0002', 'T0003', 'T0004'], ['T0002'])];
-    expect(risk(posture({ mitigations: ['M0A'] }), { chains, includeSoftware: false })).toBeCloseTo(1 - 0.9 * 0.5, 12);
-    expect(risk(posture({ mitigations: ['M0A'] }), { chains, includeSoftware: true })).toBeCloseTo(1, 12);
+    expect(risk(posture({ prevent: ['M0A'] }), { chains, includeSoftware: false })).toBeCloseTo(1 - 0.9 * 0.5, 12);
+    expect(risk(posture({ prevent: ['M0A'] }), { chains, includeSoftware: true })).toBeCloseTo(1, 12);
   });
 });
 
@@ -168,8 +171,8 @@ describe('incremental what-ifs', () => {
   const m = compileModel(inputs({ chains: [actor('X', ['T0001', 'T0002', 'T0003', 'T0004']), actor('Y', ['T0001', 'T0003.001', 'T0004'])] }));
   const base = evaluateModel(m, params, none);
   const cases = [
-    { mitigations: ['M0A'] }, { mitigations: ['M0A', 'M0B'] }, { mitigations: ['M0C'] },
-    { dataComponents: ['DC1'] }, { dataComponents: ['DC2'] }, { blocked: ['T0003'] },
+    { prevent: ['M0A'] }, { prevent: ['M0A', 'M0B'] }, { prevent: ['M0C'] },
+    { detect: ['DC1'] }, { detect: ['DC2'] }, { blocked: ['T0003'] },
   ];
   for (const add of cases) {
     it('simulateAddition matches a full re-evaluation for ' + JSON.stringify(add), () => {
@@ -183,7 +186,7 @@ describe('incremental what-ifs', () => {
 describe('read-outs', () => {
   it('breaks an actor down gate by gate', () => {
     const m = compileModel(inputs());
-    const s = evaluateModel(m, params, posture({ mitigations: ['M0A', 'M0B'] }));
+    const s = evaluateModel(m, params, posture({ prevent: ['M0A', 'M0B'] }));
     const gatesOut = actorBreakdown(m, params, s, 0);
     expect(gatesOut.map(g => g.gateId)).toEqual(['ia', 'ex', 'c2']);
     expect(gatesOut[0].pass).toBeCloseTo(0.775, 12);

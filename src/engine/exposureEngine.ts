@@ -55,7 +55,10 @@ export function assessEnvironment(
       if (!s) continue;
       missDetect *= 1 - (s.detect || 0);
       missPrevent *= 1 - (s.prevent || 0);
-      sources.push({ toolId, name: tool.display_name, detect: s.detect || 0, prevent: s.prevent || 0 });
+      const measured = s.source === 'evals' && tool.measured
+        ? { roundName: tool.measured.roundName, year: tool.measured.year, substeps: s.n ?? 0 }
+        : undefined;
+      sources.push({ toolId, name: tool.display_name, detect: s.detect || 0, prevent: s.prevent || 0, measured });
     }
     out[t.id] = { baseExposure, detect: 1 - missDetect, prevent: 1 - missPrevent, sources };
   }

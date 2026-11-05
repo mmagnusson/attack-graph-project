@@ -1,19 +1,20 @@
 // ─── useRiskModel — compile, evaluate, optimize (memoized) ──────────────────
 // Compilation depends on the dataset, actor set, gates and environment; the
 // cheaper evaluate/optimize steps re-run on posture, cost and parameter
-// changes. Parameters are deferred so slider drags stay responsive.
+// changes. Inputs to the optimizer are deferred so slider drags and checkbox
+// toggles paint before the (tens to hundreds of ms) re-optimization.
 
 import { useDeferredValue, useMemo } from 'react';
 import type {
-  AttackChain, AttackDataset, CatalogItem, DefensePosture, FrameworkConfig, GateDef, ModelParams, PlanResult, ToolCoverage,
+  AttackChain, AttackDataset, CatalogItem, DefensePosture, DefenseVocabulary, GateDef, ModelParams, PlanResult, ToolCoverage,
 } from '../types';
 import { compileModel, evaluateModel, techniqueActivity, SENSITIVITY_BOUNDS } from '../engine/riskModel';
 import { buildCatalog, evaluateItems, marginalValues, optimizePortfolio, withItems, type CostModel } from '../engine/portfolioOptimizer';
 import { rollupMetrics, type NodeMetrics } from '../engine/displayMetrics';
 
 interface UseRiskModelArgs {
-  cfg: FrameworkConfig;
   dataset: AttackDataset | null;
+  vocabulary: DefenseVocabulary | null;
   chains: AttackChain[];
   gates: GateDef[];
   includeSoftware: boolean;
@@ -33,17 +34,20 @@ const EMPTY_METRICS: Record<string, NodeMetrics> = {};
 
 export function useRiskModel(a: UseRiskModelArgs) {
   const params = useDeferredValue(a.params);
-  const { cfg, dataset, chains, gates, includeSoftware, platforms, exposure, toolCoverage, actorWeights, posture, costModel, budget, previewPlan, displaySet } = a;
+  const posture = useDeferredValue(a.posture);
+  const costModel = useDeferredValue(a.costModel);
+  const budget = useDeferredValue(a.budget);
+  const { dataset, vocabulary, chains, gates, includeSoftware, platforms, exposure, toolCoverage, actorWeights, previewPlan, displaySet } = a;
 
-  const model = useMemo(() => (dataset
-    ? compileModel({ dataset, chains, gates, includeSoftware, platforms, exposure, toolCoverage, actorWeights })
-    : null), [dataset, chains, gates, includeSoftware, platforms, exposure, toolCoverage, actorWeights]);
+  const model = useMemo(() => (dataset && vocabulary
+    ? compileModel({ dataset, vocabulary, chains, gates, includeSoftware, platforms, exposure, toolCoverage, actorWeights })
+    : null), [dataset, vocabulary, chains, gates, includeSoftware, platforms, exposure, toolCoverage, actorWeights]);
 
   const baseState = useMemo(() => (model ? evaluateModel(model, params, posture) : null), [model, params, posture]);
 
   const catalog: CatalogItem[] = useMemo(
-    () => (dataset ? buildCatalog(cfg, dataset, posture, costModel) : []),
-    [cfg, dataset, posture, costModel],
+    () => (vocabulary ? buildCatalog(vocabulary, posture, costModel) : []),
+    [vocabulary, posture, costModel],
   );
 
   const plan: PlanResult | null = useMemo(
@@ -97,7 +101,7 @@ export function useRiskModel(a: UseRiskModelArgs) {
 
   return {
     model, baseState, state, catalog, plan, frontier, sensitivity, marginal, activity, metrics, viabilityById,
-    shownPosture, params, totalWeight,
+    posture, shownPosture, params, budget, totalWeight,
     currentResidual: share(baseState?.risk),
     shownResidual: share(state?.risk),
     planResidual: share(plan?.finalRisk),

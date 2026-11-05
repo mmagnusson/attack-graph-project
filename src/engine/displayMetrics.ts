@@ -15,8 +15,8 @@ export interface NodeMetrics {
   activity: number;
   /** Modeled actors using this technique or any displayed-family member */
   actors: number;
-  /** Implemented mitigations applying to the node's own technique */
-  mitigations: number;
+  /** Implemented preventions applying to the node's own technique */
+  preventions: number;
   blocked: boolean;
 }
 
@@ -29,7 +29,7 @@ export function rollupMetrics(
     if (!id) return;
     let a = acc.get(id);
     if (!a) acc.set(id, a = { act: 0, ps: 0, ds: 0, pOwn: NaN, dOwn: NaN, actors: new Set(), mit: 0, blocked: false });
-    const det = 1 - (1 - state.telemetry[i]) * (1 - model.toolDetect[i]);
+    const det = 1 - (1 - state.ruleCoverage[i]) * (1 - model.toolDetect[i]);
     a.act += activity[i];
     a.ps += activity[i] * state.p[i];
     a.ds += activity[i] * det;
@@ -37,7 +37,7 @@ export function rollupMetrics(
     if (tid === id) {
       a.pOwn = state.p[i];
       a.dOwn = det;
-      a.mit = state.mitCount[i];
+      a.mit = state.preventCount[i];
       a.blocked = state.blocked[i] === 1;
     }
   });
@@ -48,7 +48,7 @@ export function rollupMetrics(
       detection: a.act > 0 ? a.ds / a.act : (Number.isNaN(a.dOwn) ? 0 : a.dOwn),
       activity: a.act,
       actors: a.actors.size,
-      mitigations: a.mit,
+      preventions: a.mit,
       blocked: a.blocked,
     };
   }
@@ -57,37 +57,37 @@ export function rollupMetrics(
 
 /** Techniques (rolled up to displayed IDs) a defense would change */
 export function defenseFootprint(
-  model: CompiledModel, display: ReadonlySet<string>, mitigationIds: readonly string[], dataComponentIds: readonly string[],
+  model: CompiledModel, display: ReadonlySet<string>, preventIds: readonly string[], detectIds: readonly string[],
 ): Set<string> {
   const out = new Set<string>();
   const add = (i: number) => {
     const id = rollupId(model.techIds[i], display);
     if (id) out.add(id);
   };
-  for (const m of mitigationIds) {
-    const mi = model.mitigationIndex.get(m);
-    if (mi !== undefined) model.mitigationTechs[mi].forEach(add);
+  for (const m of preventIds) {
+    const mi = model.preventionIndex.get(m);
+    if (mi !== undefined) model.preventionTechs[mi].forEach(add);
   }
-  for (const d of dataComponentIds) {
-    const di = model.dcIndex.get(d);
-    if (di !== undefined) model.dcTechs[di].forEach(add);
+  for (const d of detectIds) {
+    const di = model.componentIndex.get(d);
+    if (di !== undefined) model.componentTechs[di].forEach(add);
   }
   return out;
 }
 
 export interface NodeDefenses {
-  /** MITRE mitigations mapped to the technique family (parent mappings included) */
-  mitigations: string[];
-  /** Platform-filtered analytics with at least one data component */
-  analytics: number;
-  /** Data components those analytics need */
-  dataComponents: string[];
+  /** Preventions in the active vocabulary mapped to the technique family (parent mappings included) */
+  preventions: string[];
+  /** Platform-filtered detection rules with at least one component */
+  rules: number;
+  /** Components those rules need */
+  components: string[];
 }
 
 /** What MITRE offers against each displayed node (aggregated over its sub-techniques) */
 export function nodeDefenses(model: CompiledModel, display: ReadonlySet<string>): Record<string, NodeDefenses> {
   const mitsOf: Set<string>[] = model.techIds.map(() => new Set());
-  model.mitigationTechs.forEach((techs, mi) => techs.forEach(t => mitsOf[t].add(model.mitigationIds[mi])));
+  model.preventionTechs.forEach((techs, mi) => techs.forEach(t => mitsOf[t].add(model.preventionIds[mi])));
   const acc = new Map<string, { m: Set<string>; a: number; d: Set<string> }>();
   model.techIds.forEach((tid, i) => {
     const id = rollupId(tid, display);
@@ -95,11 +95,11 @@ export function nodeDefenses(model: CompiledModel, display: ReadonlySet<string>)
     let x = acc.get(id);
     if (!x) acc.set(id, x = { m: new Set(), a: 0, d: new Set() });
     mitsOf[i].forEach(m => x!.m.add(m));
-    x.a += model.techAnalytics[i].length;
-    for (const an of model.techAnalytics[i]) for (const dc of an) x.d.add(model.dcIds[dc]);
+    x.a += model.techRules[i].length;
+    for (const an of model.techRules[i]) for (const dc of an) x.d.add(model.componentIds[dc]);
   });
   const out: Record<string, NodeDefenses> = {};
-  for (const [id, x] of acc) out[id] = { mitigations: [...x.m].sort(), analytics: x.a, dataComponents: [...x.d].sort() };
+  for (const [id, x] of acc) out[id] = { preventions: [...x.m].sort(), rules: x.a, components: [...x.d].sort() };
   return out;
 }
 
@@ -109,8 +109,8 @@ export interface BlindSpot {
   share: number;
   prevention: 'none' | 'available';
   detection: 'no-guidance' | 'dark';
-  mitigations: string[];
-  missingDataComponents: string[];
+  preventions: string[];
+  missingComponents: string[];
 }
 
 /**
@@ -122,7 +122,7 @@ export interface BlindSpot {
 export function findBlindSpots(
   techniques: { id: string; tactics: string[] }[], gateTactics: ReadonlySet<string>,
   metrics: Record<string, NodeMetrics>, defenses: Record<string, NodeDefenses>,
-  posture: { mitigations: ReadonlySet<string>; dataComponents: ReadonlySet<string> }, minShare = 0.002,
+  posture: { prevent: ReadonlySet<string>; detect: ReadonlySet<string> }, minShare = 0.002,
 ): BlindSpot[] {
   const total = Object.values(metrics).reduce((s, m) => s + m.activity, 0) || 1;
   const out: BlindSpot[] = [];
@@ -132,14 +132,14 @@ export function findBlindSpots(
     const m = metrics[id], d = defenses[id];
     if (!m || !d || m.blocked) continue;
     const share = m.activity / total;
-    if (share < minShare || d.mitigations.some(x => posture.mitigations.has(x))) continue;
-    const missing = d.dataComponents.filter(x => !posture.dataComponents.has(x));
-    if (d.analytics > 0 && missing.length < d.dataComponents.length) continue;
+    if (share < minShare || d.preventions.some(x => posture.prevent.has(x))) continue;
+    const missing = d.components.filter(x => !posture.detect.has(x));
+    if (d.rules > 0 && missing.length < d.components.length) continue;
     out.push({
       techniqueId: id, share,
-      prevention: d.mitigations.length > 0 ? 'available' : 'none',
-      detection: d.analytics === 0 ? 'no-guidance' : 'dark',
-      mitigations: d.mitigations, missingDataComponents: missing,
+      prevention: d.preventions.length > 0 ? 'available' : 'none',
+      detection: d.rules === 0 ? 'no-guidance' : 'dark',
+      preventions: d.preventions, missingComponents: missing,
     });
   }
   return out.sort((a, b) => b.share - a.share);

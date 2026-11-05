@@ -51,7 +51,11 @@ Background lines connect techniques commonly used together in consecutive stages
   },
   {
     title: "Plan & Defenses",
-    content: `**Plan (P)** — Budget, org size, the headline (residual risk today → with plan), a cost-versus-risk curve, and the ranked investments. Each step adds the defense with the most risk removed per dollar at that point. Items past the budget show what the next dollars would buy. Hover a row to see what it touches on the graph; **In place** records it as done.
+    content: `**Plan (P)** — Budget, org size, the headline (residual risk today → with plan), a cost-versus-risk curve, and the ranked investments. Each step adds the defense with the most risk removed per dollar at that point, then single swaps are tried while they lower risk. Items past the budget show what the next dollars would buy. Hover a row to see what it touches on the graph; **In place** records it as done.
+
+**Run exact search** checks the plan: in the background (up to 30 s) it tries every within-budget combination of the plan's defenses and the most promising others, widening the pool until it has covered every defense that reduces risk on its own. It either proves the plan is the best one possible, or shows the better plan, what to drop and add, and what share of the best reduction the current plan gets.
+
+**ATT&CK or D3FEND** — the switch at the top of Plan and Defenses picks the defense catalog. *ATT&CK* plans in MITRE mitigations plus telemetry. *D3FEND* plans in MITRE D3FEND base techniques: Harden and Isolate prevent, Detect and Deceive detect; Evict, Model and Restore are listed but not scored (response is the Model panel's response effectiveness). Each catalog keeps its own posture; in D3FEND, **Import** carries your ATT&CK posture across using the mitigation → D3FEND crosswalk.
 
 **Defenses (D)** — Your current posture.
 - Mitigations (prevent) — MITRE's mitigation catalog. Each row shows how many techniques and actors it reaches and the risk it would remove if added alone right now.
@@ -64,7 +68,7 @@ Background lines connect techniques commonly used together in consecutive stages
     content: `**Bottom tabs** (1/2/3, B to hide):
 - **Threat actors** — modeled actors, most viable first. Select one for its gate-by-gate breakdown: each stage's chance of passing and of going unnoticed, every option it can switch between, and the best next defenses against that actor.
 - **Hotspots** — techniques carrying the most residual attacker activity, with an Assume blocked what-if.
-- **Detail** — the selected technique: MITRE mitigations (tick to record), MITRE's detection strategy with each analytic, its platforms and the data components it needs (click to mark collected), your tools' estimated coverage, and the actors who use it.
+- **Detail** — the selected technique: MITRE mitigations (tick to record), MITRE's detection strategy with each analytic, its platforms and the data components it needs (click to mark collected), its D3FEND countermeasures grouped by tactic, your tools' coverage (measured or estimated), and the actors who use it.
 
 **Sidebar** (stays docked beside the graph):
 - **Plan (P)**, **Defenses (D)**, **Model (M)**
@@ -80,7 +84,7 @@ Background lines connect techniques commonly used together in consecutive stages
 - **Platforms** — filters techniques and MITRE analytics (a Windows-only shop isn't credited for Linux analytics).
 - **Actors targeting** — sector tags derived from MITRE group descriptions.
 
-**MORE menu:** sub-techniques, environment profile (infrastructure, tools, actors of concern — tool scores are author estimates), IT/OT compare, custom chain builder, exports (board report, plan CSV, analysis CSV, Navigator layer) and Navigator import.
+**MORE menu:** sub-techniques, environment profile (infrastructure, tools, actors of concern — tools marked EVALS use detection measured in MITRE ATT&CK Evaluations when that data is deployed; other scores are author estimates), IT/OT compare, custom chain builder, exports (board report, plan CSV, analysis CSV, Navigator layer) and Navigator import.
 
 **Share** copies a link with your posture, budget and settings. Everything else is saved in this browser.`,
   },
@@ -104,7 +108,9 @@ Shortcuts are ignored while you're typing in a field.`,
 - **Mitigation mappings are coarse.** MITRE maps one mitigation to many techniques without saying how well it works for each; the model uses one effectiveness value for all.
 - **Detection assumes analytics.** Collecting telemetry only helps if MITRE's analytics (or equivalents) run on it and someone responds.
 - **Costs are placeholders** until you edit them.
-- **Tool coverage scores** in the environment profile are author estimates, not MITRE Evaluations results.
+- **Tool coverage scores** in the environment profile are author estimates, except detection for tools marked EVALS: that comes from the vendor's latest MITRE ATT&CK Evaluations round (a controlled test, often one or two tests per technique; prevention stays an estimate). MITRE does not endorse any vendor.
+- **D3FEND links are inferred** through shared digital artifacts, so they say a countermeasure is relevant to a technique, not how well it works.
+- **The exact search is exact over its pool.** If it runs out of time before covering every candidate, it says which pool it finished.
 - **Sector and attribution tags** are keyword-derived from MITRE descriptions.`,
   },
 ];
