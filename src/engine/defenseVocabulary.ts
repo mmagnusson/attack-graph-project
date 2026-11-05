@@ -9,12 +9,13 @@
 //            components, purchased as telemetry-source bundles
 //   d3fend   D3FEND Harden/Isolate/Evict base techniques · D3FEND Detect/Deceive
 //            countermeasures inferred for each technique, purchased by base technique
+//            (ICS techniques D3FEND hasn't mapped yet borrow an Enterprise equivalent's)
 // Each vocabulary keeps its own posture, so one capability is never counted twice.
 
 import type {
-  AttackDataset, CostTier, D3fendDataset, D3fendRole, DefenseVocabulary, DetectionRule, FrameworkConfig,
+  AttackDataset, CostTier, D3fendDataset, D3fendLink, D3fendRole, DefenseVocabulary, DetectionRule, FrameworkConfig,
 } from '../types';
-import { D3FEND_TACTIC_ROLES, D3FEND_TIERS, TELEMETRY_TO_D3FEND } from '../data/d3fendConfig';
+import { D3FEND_BORROWED_LINKS, D3FEND_TACTIC_ROLES, D3FEND_TIERS, TELEMETRY_TO_D3FEND } from '../data/d3fendConfig';
 
 export function attackVocabulary(dataset: AttackDataset, cfg: FrameworkConfig): DefenseVocabulary {
   const rules: Record<string, DetectionRule[]> = {};
@@ -34,6 +35,28 @@ export function attackVocabulary(dataset: AttackDataset, cfg: FrameworkConfig): 
 
 export const d3fendRole = (tactic: string): D3fendRole => D3FEND_TACTIC_ROLES[tactic] ?? 'foundation';
 
+/** The Enterprise technique whose D3FEND links `tid` borrows (D3FEND_BORROWED_LINKS), if any */
+export function d3fendBorrowedFrom(d3: D3fendDataset, tid: string): string | undefined {
+  const src = D3FEND_BORROWED_LINKS[tid];
+  return src && !d3.attack[tid] && d3.attack[src] ? src : undefined;
+}
+
+const linksCache = new WeakMap<D3fendDataset, Record<string, D3fendLink[]>>();
+
+/** ATT&CK technique → D3FEND links, D3FEND's own plus borrowed ones */
+export function d3fendLinks(d3: D3fendDataset): Record<string, D3fendLink[]> {
+  let out = linksCache.get(d3);
+  if (!out) {
+    out = { ...d3.attack };
+    for (const tid of Object.keys(D3FEND_BORROWED_LINKS)) {
+      const src = d3fendBorrowedFrom(d3, tid);
+      if (src) out[tid] = d3.attack[src];
+    }
+    linksCache.set(d3, out);
+  }
+  return out;
+}
+
 export function d3fendVocabulary(dataset: AttackDataset, d3: D3fendDataset): DefenseVocabulary {
   const known = new Set(dataset.techniques.map(t => t.id));
   const roleOf = (d3id: string) => d3fendRole(d3.techniques[d3id]?.tactic ?? '');
@@ -41,7 +64,7 @@ export function d3fendVocabulary(dataset: AttackDataset, d3: D3fendDataset): Def
   // Prevention: a base technique applies to an ATT&CK technique if any of its countermeasures is mapped to it
   const preventTechs = new Map<string, Set<string>>();
   const rules: Record<string, DetectionRule[]> = {};
-  for (const [tid, links] of Object.entries(d3.attack)) {
+  for (const [tid, links] of Object.entries(d3fendLinks(d3))) {
     if (!known.has(tid)) continue;
     for (const [d3id] of links) {
       const role = roleOf(d3id);

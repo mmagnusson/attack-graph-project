@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { d3fendVocabulary, translateAttackPosture, attackVocabulary } from '../src/engine/defenseVocabulary';
+import { d3fendVocabulary, translateAttackPosture, attackVocabulary, d3fendLinks, d3fendBorrowedFrom } from '../src/engine/defenseVocabulary';
 import { compileModel, evaluateModel, DEFAULT_MODEL_PARAMS } from '../src/engine/riskModel';
 import { buildCatalog, optimizePortfolio } from '../src/engine/portfolioOptimizer';
 import { getFrameworkConfig } from '../src/data/frameworkConfig';
-import { D3FEND_DATA_URL, D3FEND_SCHEMA_VERSION, D3FEND_TACTIC_ROLES, D3FEND_TIERS, D3FEND_VERSION, TELEMETRY_TO_D3FEND } from '../src/data/d3fendConfig';
+import { D3FEND_BORROWED_LINKS, D3FEND_DATA_URL, D3FEND_SCHEMA_VERSION, D3FEND_TACTIC_ROLES, D3FEND_TIERS, D3FEND_VERSION, TELEMETRY_TO_D3FEND } from '../src/data/d3fendConfig';
 import type { AttackDataset, D3fendDataset, DefensePosture } from '../src/types';
 
 const tech = (id: string, tactic = 'TA0002') => ({ id, name: id, tactic, tactics: [tactic], platforms: [] });
@@ -63,6 +63,26 @@ describe('d3fendVocabulary', () => {
   });
 });
 
+describe('borrowed D3FEND links', () => {
+  const link = (id: string): [string, string, string, string, string] => [id, 'x', 'y', 'z', 'w'];
+  const withLinks = (attack: D3fendDataset['attack']): D3fendDataset => ({ ...d3, attack });
+
+  it('fills an unmapped technique from its Enterprise equivalent', () => {
+    const ds = withLinks({ 'T1059.001': [link('D3-FIM')] });
+    expect(d3fendBorrowedFrom(ds, 'T1701.001')).toBe('T1059.001');
+    expect(d3fendLinks(ds)['T1701.001']).toEqual([link('D3-FIM')]);
+    expect(d3fendLinks(ds)['T1059.001']).toEqual([link('D3-FIM')]);
+  });
+
+  it("never overrides D3FEND's own links, and needs a mapped source", () => {
+    const own = withLinks({ 'T1059.001': [link('D3-FIM')], 'T1701.001': [link('D3-OSM')] });
+    expect(d3fendBorrowedFrom(own, 'T1701.001')).toBeUndefined();
+    expect(d3fendLinks(own)['T1701.001']).toEqual([link('D3-OSM')]);
+    expect(d3fendBorrowedFrom(withLinks({}), 'T1701.001')).toBeUndefined();
+    expect(d3fendBorrowedFrom(withLinks({ 'T1059.001': [link('D3-FIM')] }), 'T1059.001')).toBeUndefined();
+  });
+});
+
 describe('translateAttackPosture', () => {
   const cfg = getFrameworkConfig('enterprise');
   it('maps mitigations through the D3FEND crosswalk and telemetry through TELEMETRY_TO_D3FEND', () => {
@@ -102,6 +122,23 @@ describe('bundled D3FEND dataset', () => {
 
   it('stores the tactic roles the model uses', () => {
     expect(ds.tactics).toEqual(Object.entries(D3FEND_TACTIC_ROLES).map(([name, role]) => ({ name, role })));
+  });
+
+  it('borrows only for same-named ICS techniques that D3FEND has not mapped', () => {
+    // Fails once D3FEND maps one of them itself: drop that entry from D3FEND_BORROWED_LINKS
+    const ics = JSON.parse(readFileSync('public' + getFrameworkConfig('ics').dataUrl, 'utf8')) as AttackDataset;
+    const icsName = new Map(ics.techniques.map(t => [t.id, t.name])), entName = new Map(ent.techniques.map(t => [t.id, t.name]));
+    for (const [tid, src] of Object.entries(D3FEND_BORROWED_LINKS)) {
+      expect(icsName.get(tid), tid).toBeDefined();
+      expect(icsName.get(tid), tid).toBe(entName.get(src));
+      expect(ds.attack[tid], tid + ' is now mapped by D3FEND').toBeUndefined();
+      expect(ds.attack[src]?.length, src).toBeGreaterThan(0);
+      expect(d3fendBorrowedFrom(ds, tid)).toBe(src);
+    }
+    const v = d3fendVocabulary(ics, ds);
+    expect(v.rules['T1701.001']?.length).toBeGreaterThan(0);
+    expect(v.preventions.some(p => p.techniques.includes('T1701.001'))).toBe(true);
+    expect(d3fendVocabulary(ent, ds).rules['T1701.001']).toBeUndefined();
   });
 
   it('has a cost tier for exactly the scored bases', () => {

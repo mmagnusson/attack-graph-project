@@ -40,6 +40,24 @@ export const D3FEND_TIERS: Record<string, CostTier> = {
 };
 
 /**
+ * ICS techniques that ATT&CK v20 modeled on an Enterprise technique and that
+ * D3FEND has not mapped yet → the Enterprise technique whose D3FEND
+ * countermeasures they borrow. AttackBreaker's inference, not D3FEND's: a
+ * borrow applies only while D3FEND has no links of its own for the technique.
+ */
+export const D3FEND_BORROWED_LINKS: Record<string, string> = {
+  "T1701": "T1059",         // Command and Scripting Interpreter
+  "T1701.001": "T1059.001", // PowerShell
+  "T1701.002": "T1059.003", // Windows Command Shell
+  "T1701.003": "T1059.004", // Unix Shell
+  "T1701.004": "T1059.005", // Visual Basic
+  "T1701.005": "T1059.006", // Python
+  "T1701.006": "T1059.007", // JavaScript
+  "T0869.001": "T1071.004", // Application Layer Protocol: DNS
+  "T0869.002": "T1071.005", // Application Layer Protocol: Publish/Subscribe Protocols
+};
+
+/**
  * Approximate translation of AttackBreaker's ATT&CK telemetry sources to the
  * D3FEND detection base techniques that typically run on that telemetry. Used
  * only to carry an ATT&CK posture (or preset) over to the D3FEND vocabulary.
