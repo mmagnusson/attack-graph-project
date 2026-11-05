@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import type {
-  AttackDataset, DefensePosture, FrameworkConfig, GateDef, ModelParams, PlanResult, TechniqueAssessment,
+  AttackDataset, DefensePosture, DefenseVocabulary, FrameworkConfig, GateDef, ModelParams, PlanResult, TechniqueAssessment,
 } from '../types';
 import { evaluateModel, type CompiledModel, type ModelState } from '../engine/riskModel';
 import { withItems } from '../engine/portfolioOptimizer';
@@ -13,6 +13,9 @@ import { SECTORS } from '../engine/actorTags';
 interface UseExportHandlersArgs {
   cfg: FrameworkConfig;
   dataset: AttackDataset | null;
+  vocabulary: DefenseVocabulary | null;
+  /** ATT&CK mitigation ID → names of D3FEND countermeasures that implement it */
+  implementedBy: (itemId: string) => string[];
   model: CompiledModel | null;
   state: ModelState | null;
   activity: Float64Array | null;
@@ -30,19 +33,19 @@ interface UseExportHandlersArgs {
 }
 
 export function useExportHandlers(a: UseExportHandlersArgs) {
-  const { cfg, dataset, model, state, activity, params, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, assessment } = a;
+  const { cfg, dataset, vocabulary, implementedBy, model, state, activity, params, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, assessment } = a;
 
   const exportCSV = useCallback(() => {
     if (!dataset || !model || !state || !activity) return;
     const tacticName = (id: string) => cfg.tactics.find(t => t.id === id)?.name ?? id;
     const totalAct = activity.reduce((s, x) => s + x, 0) || 1;
-    let csv = csvRow(['Technique ID', 'Name', 'Tactics', 'Actors', 'Residual success %', 'Detection coverage %', 'Activity share %', 'Mitigations in place', 'Assumed blocked', 'Detection strategy']);
+    let csv = csvRow(['Technique ID', 'Name', 'Tactics', 'Actors', 'Residual success %', 'Detection coverage %', 'Activity share %', 'Preventions in place', 'Assumed blocked', 'Detection strategy']);
     dataset.techniques.forEach(t => {
       const i = model.techIndex.get(t.id)!;
-      const det = 1 - (1 - state.telemetry[i]) * (1 - model.toolDetect[i]);
+      const det = 1 - (1 - state.ruleCoverage[i]) * (1 - model.toolDetect[i]);
       csv += csvRow([t.id, t.name, t.tactics.map(tacticName).join('; '), model.techActors[i].length,
         +(state.p[i] * 100).toFixed(1), +(det * 100).toFixed(1), +(activity[i] / totalAct * 100).toFixed(2),
-        state.mitCount[i], state.blocked[i] ? 'Y' : 'N', dataset.detections[t.id]?.id ?? '']);
+        state.preventCount[i], state.blocked[i] ? 'Y' : 'N', dataset.detections[t.id]?.id ?? '']);
     });
     csv += '\n' + csvRow(['Actor ID', 'Name', 'Kind', 'Viability %', 'Weight', 'Sectors', 'Techniques']);
     model.actors.forEach((act, i) => {
@@ -67,7 +70,7 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
     if (!dataset || !model || !state) return;
     const techniques = dataset.techniques.map(t => {
       const i = model.techIndex.get(t.id)!;
-      const det = 1 - (1 - state.telemetry[i]) * (1 - model.toolDetect[i]);
+      const det = 1 - (1 - state.ruleCoverage[i]) * (1 - model.toolDetect[i]);
       return {
         techniqueID: t.id,
         tactic: cfg.tacticToPhase[t.tactic] || "",
@@ -76,7 +79,7 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
           state.blocked[i] ? 'Assumed blocked' : 'Residual success ' + Math.round(state.p[i] * 100) + '%',
           'Detection coverage ' + Math.round(det * 100) + '%',
           'Actors ' + model.techActors[i].length,
-          'Mitigations in place ' + state.mitCount[i],
+          'Preventions in place ' + state.preventCount[i],
         ].join(' | '),
         enabled: !state.blocked[i],
       };
@@ -105,7 +108,7 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
   }, [dataset, assessment]);
 
   const exportBoardReport = useCallback(() => {
-    if (!dataset || !model || !plan || !frontier) return;
+    if (!dataset || !vocabulary || !model || !plan || !frontier) return;
     const w = model.totalWeight || 1;
     const afterPlan = evaluateModel(model, params, withItems(posture, plan.steps.map(s => s.item)));
     const frontierPts = [{ cost: 0, residual: frontier.baselineRisk / w }, ...frontier.steps.map(s => ({ cost: s.cumulativeCost, residual: s.risk / w }))];
@@ -119,12 +122,12 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
         sector: sector === 'all' ? 'all' : (SECTORS.find(s => s.id === sector)?.label ?? sector),
         gates: gates.map(g => g.label), includeSoftware, includeCampaigns,
       },
-      posture: { mitigations: posture.mitigations.size, dataComponents: posture.dataComponents.size, totalDataComponents: dataset.dataComponents.length },
+      posture: { vocabulary: vocabulary.label, prevent: posture.prevent.size, totalPrevent: vocabulary.preventions.filter(m => m.actionable).length, detect: posture.detect.size, totalDetect: vocabulary.components.length },
       currentResidual: plan.baselineRisk / w,
       planResidual: plan.finalRisk / w,
       budget, spend: plan.totalCost,
       sensitivity: sensitivity ?? { low: 0, high: 0 },
-      plan: plan.steps.map(s => ({ id: s.item.id, name: s.item.name, kind: s.item.kind, cost: s.item.cost, removed: s.delta / w, residualAfter: s.risk / w })),
+      plan: plan.steps.map(s => ({ id: s.item.id, name: s.item.name, kind: s.item.kind, cost: s.item.cost, removed: s.delta / w, residualAfter: s.risk / w, implementedBy: implementedBy(s.item.id) })),
       frontier: frontierPts,
       topActors: model.actors
         .map((act, i) => ({ name: act.chain.name, kind: act.chain.kind, viability: afterPlan.viability[i], sectors: act.chain.sectors }))
@@ -133,7 +136,7 @@ export function useExportHandlers(a: UseExportHandlersArgs) {
       params,
     });
     downloadFile(html, 'attackbreaker-board-report-' + today() + '.html', 'text/html');
-  }, [cfg, dataset, model, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, params]);
+  }, [cfg, dataset, vocabulary, implementedBy, model, plan, frontier, sensitivity, posture, budget, sector, gates, includeSoftware, includeCampaigns, params]);
 
   return { exportCSV, exportPlanCSV, exportNavigatorLayer, exportCoverageCSV, exportBoardReport };
 }

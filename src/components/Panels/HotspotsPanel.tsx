@@ -53,7 +53,7 @@ export function HotspotsPanel({ cfg, rm, displayTechniques, defenses, posture, s
           {rows.map(({ t, m }, i) => {
             const tac = cfg.tactics.find(x => x.id === t.tactic);
             const d = defenses[t.id];
-            const mitIn = d?.mitigations.filter(x => posture.mitigations.has(x)).length ?? 0;
+            const mitIn = d?.preventions.filter(x => posture.prevent.has(x)).length ?? 0;
             return (
               <tr key={t.id} onClick={() => onSelectTech(t.id)} style={{ cursor: "pointer", borderTop: "1px solid " + theme.colors.borderSubtle, background: selectedTech === t.id ? theme.colors.bgSurface : "transparent" }}>
                 <td style={{ ...td, color: theme.colors.textFaint, ...mono }}>{i + 1}</td>
@@ -74,7 +74,7 @@ export function HotspotsPanel({ cfg, rm, displayTechniques, defenses, posture, s
                 <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtPct(m.detection)}</td>
                 <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{m.actors}</td>
                 <td style={{ ...td, fontSize: theme.fontSizes.tiny, color: theme.colors.textSecondary }}>
-                  {mitIn}/{d?.mitigations.length ?? 0} mitigations · {d?.analytics ?? 0} analytics
+                  {mitIn}/{d?.preventions.length ?? 0} preventions · {d?.rules ?? 0} detection rules
                 </td>
                 <td style={{ ...td, textAlign: "right" }} onClick={e => e.stopPropagation()}>
                   <SmallButton onClick={() => toggleBlocked(t.id)} color={m.blocked ? ENCODING.cut : theme.colors.textSecondary}

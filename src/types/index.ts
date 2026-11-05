@@ -32,6 +32,11 @@ export type {
 export type {
   ModelParams,
   DefensePosture,
+  VocabularyId,
+  PreventionDef,
+  DetectionRule,
+  DetectionBundle,
+  DefenseVocabulary,
   ToolCoverage,
   GateResult,
   GateOption,

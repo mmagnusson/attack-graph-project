@@ -1,6 +1,6 @@
 // ─── AttackBreaker — Risk Model & Optimizer Types ───────────────────
 
-import type { DefenseKind } from "./graph";
+import type { CostTier, DefenseKind } from "./graph";
 
 /** Tunable assumptions of the probabilistic AND/OR model (all 0..1) */
 export interface ModelParams {
@@ -16,14 +16,59 @@ export interface ModelParams {
   adversaryAdaptiveness: number;
 }
 
-/** What the organization already has (or is previewing) */
+/** What the organization already has (or is previewing), in one defense vocabulary */
 export interface DefensePosture {
-  /** Implemented MITRE mitigation IDs (M####) */
-  mitigations: ReadonlySet<string>;
-  /** Collected MITRE data component IDs (DC####) */
-  dataComponents: ReadonlySet<string>;
+  /** Implemented prevention defenses: MITRE mitigations (M####) or D3FEND prevention base techniques */
+  prevent: ReadonlySet<string>;
+  /** Deployed detection components: MITRE data components (DC####) or D3FEND detection countermeasures */
+  detect: ReadonlySet<string>;
   /** Techniques the user asserts are fully blocked (what-if override) */
   blocked: ReadonlySet<string>;
+}
+
+// ─── Defense vocabularies ───────────────────────────────────────────────────
+
+export type VocabularyId = "attack" | "d3fend";
+
+/** A defense that lowers success of the techniques it applies to */
+export interface PreventionDef {
+  id: string;
+  name: string;
+  description: string;
+  techniques: string[];
+  actionable: boolean;
+  /** Grouping label (D3FEND tactic) */
+  group?: string;
+}
+
+/** One detection rule for a technique: satisfied to the extent its components are deployed */
+export interface DetectionRule {
+  id: string;
+  platforms: string[];
+  components: string[];
+}
+
+/** A purchasable bundle of detection components */
+export interface DetectionBundle {
+  id: string;
+  name: string;
+  description: string;
+  components: string[];
+  tier: CostTier;
+  group?: string;
+}
+
+/** The catalog the model and optimizer work in (see engine/defenseVocabulary.ts) */
+export interface DefenseVocabulary {
+  id: VocabularyId;
+  label: string;
+  preventions: PreventionDef[];
+  components: { id: string; name: string }[];
+  /** ATT&CK technique ID → detection rules */
+  rules: Record<string, DetectionRule[]>;
+  bundles: DetectionBundle[];
+  /** Prevention id → cost tier (bundles carry their own) */
+  tiers: Record<string, CostTier>;
 }
 
 /** Estimated tool coverage from the environment profile */
@@ -61,8 +106,10 @@ export interface CatalogItem {
   name: string;
   /** Annual cost estimate in USD (after overrides and partial-deployment discount) */
   cost: number;
-  mitigationIds: string[];
-  dataComponentIds: string[];
+  preventIds: string[];
+  detectIds: string[];
+  /** Grouping label (D3FEND tactic) */
+  group?: string;
 }
 
 export interface PlanStep {

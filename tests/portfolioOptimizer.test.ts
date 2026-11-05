@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { compileModel, evaluateModel } from '../src/engine/riskModel';
 import { buildCatalog, defaultCost, optimizePortfolio, marginalValues, withItems, evaluateItems, type CostModel } from '../src/engine/portfolioOptimizer';
 import { getFrameworkConfig } from '../src/data/frameworkConfig';
+import { attackVocabulary } from '../src/engine/defenseVocabulary';
 import type { AttackChain, AttackDataset, CatalogItem, DefensePosture, ModelParams } from '../src/types';
 
 const params: ModelParams = { mitigationEffectiveness: 0.5, detectionEffectiveness: 0.5, responseEffectiveness: 1, substitutionRate: 0.1, adversaryAdaptiveness: 0 };
-const none: DefensePosture = { mitigations: new Set(), dataComponents: new Set(), blocked: new Set() };
+const none: DefensePosture = { prevent: new Set(), detect: new Set(), blocked: new Set() };
 const actor = (id: string, path: string[]): AttackChain =>
   ({ id, name: id, kind: 'group', description: '', path, viaSoftware: [], sectors: [], aliases: [] });
 const tech = (id: string) => ({ id, name: id, tactic: 'TA0001', tactics: ['TA0001'], platforms: [] });
@@ -23,10 +24,10 @@ const dataset: AttackDataset = {
   mitigationNotes: {}, detections: {}, dataComponents: [], usageNotes: {},
 };
 const model = compileModel({
-  dataset, chains: [actor('A1', ['T000A']), actor('A2', ['T00B1', 'T00B2'])],
+  dataset, vocabulary: attackVocabulary(dataset, getFrameworkConfig('enterprise')), chains: [actor('A1', ['T000A']), actor('A2', ['T00B1', 'T00B2'])],
   gates: [{ id: 'ia', label: 'IA', tactics: ['TA0001'] }], includeSoftware: true, platforms: null,
 });
-const item = (id: string, cost: number): CatalogItem => ({ id, kind: 'mitigation', name: id, cost, mitigationIds: [id], dataComponentIds: [] });
+const item = (id: string, cost: number): CatalogItem => ({ id, kind: 'prevent', name: id, cost, preventIds: [id], detectIds: [] });
 const catalog = [item('MX', 100), item('MY', 1), item('MZ', 1)];
 
 describe('optimizePortfolio', () => {
@@ -71,6 +72,7 @@ describe('optimizePortfolio', () => {
 describe('buildCatalog', () => {
   const cfg = getFrameworkConfig('enterprise');
   const costs: CostModel = { orgSize: 'medium', overrides: {} };
+  const vocabOf = (ds: AttackDataset) => attackVocabulary(ds, cfg);
   const ds: AttackDataset = {
     ...dataset,
     mitigations: [
@@ -82,27 +84,27 @@ describe('buildCatalog', () => {
   };
 
   it('offers actionable, not-yet-implemented mitigations at tier cost', () => {
-    const cat = buildCatalog(cfg, ds, { ...none, mitigations: new Set(['M1017']) }, costs);
-    expect(cat.filter(c => c.kind === 'mitigation').map(c => c.id)).toEqual(['M1031']);
+    const cat = buildCatalog(vocabOf(ds), { ...none, prevent: new Set(['M1017']) }, costs);
+    expect(cat.filter(c => c.kind === 'prevent').map(c => c.id)).toEqual(['M1031']);
     expect(cat.find(c => c.id === 'M1031')!.cost).toBe(150_000);
   });
 
   it('prices partly collected telemetry for its missing data components only', () => {
-    const cat = buildCatalog(cfg, ds, { ...none, dataComponents: new Set(['DC0078']) }, costs);
+    const cat = buildCatalog(vocabOf(ds), { ...none, detect: new Set(['DC0078']) }, costs);
     const flow = cat.find(c => c.id === 'ts-netflow')!;
-    expect(flow.dataComponentIds).toEqual(['DC0082', 'DC0102']);
-    expect(flow.cost).toBe(Math.round(defaultCost(cfg, 'ts-netflow', 'medium') * 2 / 3));
+    expect(flow.detectIds).toEqual(['DC0082', 'DC0102']);
+    expect(flow.cost).toBe(Math.round(defaultCost(vocabOf(ds), 'ts-netflow', 'medium') * 2 / 3));
   });
 
   it('honors cost overrides and org size', () => {
-    const cat = buildCatalog(cfg, ds, none, { orgSize: 'small', overrides: { M1017: 1234 } });
+    const cat = buildCatalog(vocabOf(ds), none, { orgSize: 'small', overrides: { M1017: 1234 } });
     expect(cat.find(c => c.id === 'M1017')!.cost).toBe(1234);
     expect(cat.find(c => c.id === 'M1031')!.cost).toBe(60_000);
   });
 
   it('merges items into a posture without mutating it', () => {
     const merged = withItems(none, [item('MX', 1)]);
-    expect([...merged.mitigations]).toEqual(['MX']);
-    expect(none.mitigations.size).toBe(0);
+    expect([...merged.prevent]).toEqual(['MX']);
+    expect(none.prevent.size).toBe(0);
   });
 });

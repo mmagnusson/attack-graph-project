@@ -12,7 +12,7 @@ export interface BoardReportInput {
   attackVersion: string;
   dataLabel: string;
   scope: { actors: number; sector: string; gates: string[]; includeSoftware: boolean; includeCampaigns: boolean };
-  posture: { mitigations: number; dataComponents: number; totalDataComponents: number };
+  posture: { vocabulary: string; prevent: number; totalPrevent: number; detect: number; totalDetect: number };
   /** Residual risk as a share of total actor weight (0..1) */
   currentResidual: number;
   planResidual: number;
@@ -20,7 +20,7 @@ export interface BoardReportInput {
   spend: number;
   /** Plan's relative risk reduction under pessimistic / optimistic assumptions */
   sensitivity: { low: number; high: number };
-  plan: { id: string; name: string; kind: 'mitigation' | 'telemetry'; cost: number; removed: number; residualAfter: number }[];
+  plan: { id: string; name: string; kind: 'prevent' | 'detect'; cost: number; removed: number; residualAfter: number; implementedBy?: string[] }[];
   frontier: { cost: number; residual: number }[];
   topActors: { name: string; kind: string; viability: number; sectors: string[] }[];
   params: ModelParams;
@@ -62,8 +62,8 @@ function frontierSvg(points: { cost: number; residual: number }[], budget: numbe
 export function buildBoardReport(r: BoardReportInput): string {
   const reduction = r.currentResidual > 0 ? 1 - r.planResidual / r.currentResidual : 0;
   const rows = r.plan.map((s, i) => `<tr>
-    <td class="num">${i + 1}</td><td>${esc(s.name)} <span class="id">${esc(s.id)}</span></td>
-    <td>${s.kind === 'mitigation' ? 'Mitigation' : 'Telemetry + analytics'}</td>
+    <td class="num">${i + 1}</td><td>${esc(s.name)} <span class="id">${esc(s.id)}</span>${s.implementedBy?.length ? `<div class="id">D3FEND: ${esc(s.implementedBy.join(', '))}</div>` : ''}</td>
+    <td>${s.kind === 'prevent' ? 'Prevention' : 'Detection'}</td>
     <td class="num">${esc(fmtUsd(s.cost))}</td><td class="num">${esc((s.removed * 100).toFixed(1))}</td><td class="num">${esc(fmtPct(s.residualAfter, 1))}</td></tr>`).join('');
   const actors = r.topActors.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(a.kind)}</td><td class="num">${esc(fmtPct(a.viability, 1))}</td><td>${esc(a.sectors.join(', ') || '—')}</td></tr>`).join('');
   return `<!doctype html>
@@ -106,7 +106,7 @@ ${r.frontier.length > 1 ? frontierSvg(r.frontier, r.budget, r.spend) : '<p class
 <table><thead><tr><th>Actor</th><th>Kind</th><th class="num">Viability</th><th>Sectors (from MITRE description)</th></tr></thead><tbody>${actors}</tbody></table>
 <h2>Assumptions</h2>
 <ul class="note">
-  <li>Current posture: ${esc(r.posture.mitigations)} MITRE mitigations, ${esc(r.posture.dataComponents)} of ${esc(r.posture.totalDataComponents)} data components collected.</li>
+  <li>Defense catalog: ${esc(r.posture.vocabulary)}. Current posture: ${esc(r.posture.prevent)} of ${esc(r.posture.totalPrevent)} prevention items in place, ${esc(r.posture.detect)} of ${esc(r.posture.totalDetect)} detection components deployed.</li>
   <li>One implemented mitigation cuts a technique's success by ${esc(fmtPct(r.params.mitigationEffectiveness))}; full detection coverage raises an alert on ${esc(fmtPct(r.params.detectionEffectiveness))} of attempts; ${esc(fmtPct(r.params.responseEffectiveness))} of alerted intrusions are contained in time; actors substitute an unrecorded technique ${esc(fmtPct(r.params.substitutionRate))} of the time; adversary adaptiveness ${esc(fmtPct(r.params.adversaryAdaptiveness))}.</li>
   <li>Techniques used through an actor's malware and tools ${r.scope.includeSoftware ? 'are' : 'are not'} counted; campaigns ${r.scope.includeCampaigns ? 'are' : 'are not'} modeled alongside groups.</li>
   <li>Costs are placeholder estimates unless edited; replace them with quotes before committing budget.</li>

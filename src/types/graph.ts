@@ -163,7 +163,8 @@ export interface D3fendDataset {
 /** Rough cost class used to derive default dollar estimates */
 export type CostTier = 1 | 2 | 3 | 4;
 
-export type DefenseKind = "mitigation" | "telemetry";
+/** How a purchasable defense acts in the model: lowers technique success, or raises alerts */
+export type DefenseKind = "prevent" | "detect";
 
 /** A purchasable bundle of data components (e.g. endpoint process telemetry) */
 export interface TelemetrySource {

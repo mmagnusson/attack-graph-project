@@ -5,30 +5,14 @@
 
 import type { FrameworkId, ModelParams } from '../types';
 import { decodeHashToState, encodeStateToHash, type ShareableState } from './useUrlState';
-import { readStored, writeStored, STORAGE_PREFIX } from './usePersistentState';
+import { readStored, writeStored } from './usePersistentState';
 import { DEFAULT_MODEL_PARAMS } from '../engine/riskModel';
 import { getFrameworkConfig } from '../data/frameworkConfig';
-import type { StoredPosture } from './useDefenses';
+import { postureKey, type StoredPosture } from './useDefenses';
+import { KEYS } from './storageKeys';
 
-export const KEYS = {
-  framework: STORAGE_PREFIX + 'framework',
-  budget: STORAGE_PREFIX + 'budget',
-  orgSize: STORAGE_PREFIX + 'orgSize',
-  costs: STORAGE_PREFIX + 'costs',
-  params: STORAGE_PREFIX + 'params',
-  gates: STORAGE_PREFIX + 'gates',
-  software: STORAGE_PREFIX + 'software',
-  campaigns: STORAGE_PREFIX + 'campaigns',
-  sector: STORAGE_PREFIX + 'sector',
-  envPreset: STORAGE_PREFIX + 'envPreset',
-  exposure: STORAGE_PREFIX + 'exposure',
-  platforms: STORAGE_PREFIX + 'platforms',
-  highlighted: STORAGE_PREFIX + 'highlighted',
-  sidebar: STORAGE_PREFIX + 'sidebar',
-  bottomTab: STORAGE_PREFIX + 'bottomTab',
-  headerCollapsed: STORAGE_PREFIX + 'headerCollapsed',
-  postures: STORAGE_PREFIX + 'postures',
-} as const;
+export { KEYS };
+
 
 export const DEFAULT_BUDGET = 500_000;
 
@@ -53,8 +37,12 @@ export function applySharedLinkToStorage(): boolean {
   const gates = readStored<Partial<Record<FrameworkId, string[]>>>(KEYS.gates, {});
   const validGates = (s.gates ?? []).filter(g => cfg.gateOptions.some(o => o.id === g));
   writeStored(KEYS.gates, { ...gates, [fw]: validGates.length > 0 ? validGates : cfg.defaultGates });
-  const postures = readStored<Partial<Record<FrameworkId, StoredPosture>>>(KEYS.postures, {});
-  writeStored(KEYS.postures, { ...postures, [fw]: { mitigations: s.mitigations ?? [], dataComponents: s.dataComponents ?? [], blocked: s.blocked ?? [] } });
+  const vocab = s.vocabulary ?? 'attack';
+  writeStored(KEYS.vocabulary, vocab);
+  const postures = readStored<Record<string, StoredPosture>>(KEYS.defenses, {});
+  writeStored(KEYS.defenses, { ...postures, [postureKey(fw, vocab)]: { prevent: s.prevent ?? [], detect: s.detect ?? [] } });
+  const blocked = readStored<Partial<Record<FrameworkId, string[]>>>(KEYS.blocked, {});
+  writeStored(KEYS.blocked, { ...blocked, [fw]: s.blocked ?? [] });
   window.history.replaceState(null, '', window.location.pathname + window.location.search);
   return true;
 }

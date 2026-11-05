@@ -1,7 +1,7 @@
 // ─── ExecutiveSummary — leadership view of residual risk and the plan ───────
 
 import { useMemo } from 'react';
-import type { AttackDataset, DefensePosture } from '../../types';
+import type { DefensePosture, DefenseVocabulary } from '../../types';
 import type { RiskModelView } from '../../hooks/useRiskModel';
 import { actorBreakdown } from '../../engine/riskModel';
 import { fmtPct, fmtUsd } from '../../engine/displayMetrics';
@@ -12,7 +12,7 @@ import { theme } from '../../theme';
 
 interface ExecutiveSummaryProps {
   rm: RiskModelView;
-  dataset: AttackDataset;
+  vocabulary: DefenseVocabulary;
   posture: DefensePosture;
   budget: number;
   onExportBoard: () => void;
@@ -20,7 +20,7 @@ interface ExecutiveSummaryProps {
   onPopout?: () => void;
 }
 
-export function ExecutiveSummary({ rm, dataset, posture, budget, onExportBoard, popout, onPopout }: ExecutiveSummaryProps) {
+export function ExecutiveSummary({ rm, vocabulary, posture, budget, onExportBoard, popout, onPopout }: ExecutiveSummaryProps) {
   const { model, baseState, plan } = rm;
 
   // Average chance actors get through each required stage (weighted by actor weight)
@@ -48,7 +48,7 @@ export function ExecutiveSummary({ rm, dataset, posture, budget, onExportBoard, 
   const reduction = plan.baselineRisk > 0 ? 1 - plan.finalRisk / plan.baselineRisk : 0;
   const section = { background: theme.colors.bgCard, border: "1px solid " + theme.colors.borderSubtle, borderRadius: 8, padding: "16px 20px", marginBottom: 14 };
   const label = { ...theme.sectionLabel, marginBottom: 10 };
-  const actionable = dataset.mitigations.filter(m => m.actionable).length;
+  const actionable = vocabulary.preventions.filter(m => m.actionable).length;
 
   return (
     <>
@@ -122,7 +122,7 @@ export function ExecutiveSummary({ rm, dataset, posture, budget, onExportBoard, 
 
       <div style={{ ...section, fontSize: theme.fontSizes.small, color: theme.colors.textSecondary }}>
         <div style={label}>Current posture</div>
-        {posture.mitigations.size} of {actionable} MITRE mitigations in place · {posture.dataComponents.size} of {dataset.dataComponents.length} data components collected
+        {vocabulary.label}: {posture.prevent.size} of {actionable} prevention items in place · {posture.detect.size} of {vocabulary.components.length} detection components deployed
         {posture.blocked.size > 0 && <> · {posture.blocked.size} techniques assumed blocked</>}
       </div>
     </>

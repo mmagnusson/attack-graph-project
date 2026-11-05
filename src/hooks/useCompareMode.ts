@@ -47,7 +47,7 @@ export function useCompareMode({ framework, activeTechniques }: UseCompareModeAr
     const metrics: Record<string, NodeMetrics> = {};
     for (const t of techs) {
       const n = counts[t.id]?.size ?? 0;
-      metrics[t.id] = { success: 1, detection: 0, activity: n / maxCount, actors: n, mitigations: 0, blocked: false };
+      metrics[t.id] = { success: 1, detection: 0, activity: n / maxCount, actors: n, preventions: 0, blocked: false };
     }
     return {
       techniques: techs, edges: buildCooccurrenceEdges(groups, display, otherFwConfig.tacticPhase, 200),

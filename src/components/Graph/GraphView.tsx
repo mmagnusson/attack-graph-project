@@ -681,7 +681,7 @@ export function GraphView({ techniques, edges, positions, metrics, selectedTech,
                     />
                   ));
                 })()}
-                {m && m.mitigations > 0 && (
+                {m && m.preventions > 0 && (
                   <circle cx={pos.x + r1 * Math.SQRT1_2} cy={pos.y - r1 * Math.SQRT1_2} r={3} fill={ENCODING.prevention} stroke={theme.colors.bg} strokeWidth={1.5} />
                 )}
                 {m?.blocked ? (
@@ -748,8 +748,8 @@ export function GraphView({ techniques, edges, positions, metrics, selectedTech,
                 <span>{fmtPct(m.activity / totalActivity, 1)}</span>
                 <span style={{ color: theme.colors.textMuted }}>Modeled actors using it</span>
                 <span>{m.actors}</span>
-                <span style={{ color: theme.colors.textMuted }}><span style={{ color: ENCODING.prevention }}>{"●"}</span> Mitigations in place</span>
-                <span>{m.mitigations}</span>
+                <span style={{ color: theme.colors.textMuted }}><span style={{ color: ENCODING.prevention }}>{"●"}</span> Preventions in place</span>
+                <span>{m.preventions}</span>
               </div>
             )}
           </div>

@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { theme } from './theme';
 
-import type { AttackChain, CatalogItem, FrameworkId, ModelParams } from './types';
+import type { AttackChain, CatalogItem, FrameworkId, ModelParams, VocabularyId } from './types';
 import { ENCODING, MAX_HIGHLIGHTED_CHAINS } from './data/constants';
 import { getFrameworkConfig } from './data/frameworkConfig';
 
@@ -19,6 +19,8 @@ import { usePersistentState, STORAGE_PREFIX } from './hooks/usePersistentState';
 import { KEYS, DEFAULT_BUDGET, isParams, shareUrl, type Highlight } from './hooks/sharedLink';
 import { useAttackData } from './hooks/useAttackData';
 import { useDefenses } from './hooks/useDefenses';
+import { useD3fendData } from './hooks/useD3fendData';
+import { attackVocabulary, d3fendVocabulary } from './engine/defenseVocabulary';
 import { useEnvironmentProfile } from './hooks/useEnvironmentProfile';
 import { useRiskModel } from './hooks/useRiskModel';
 import { useExportHandlers } from './hooks/useExportHandlers';
@@ -50,6 +52,7 @@ const isHighlights = (v: unknown) => Array.isArray(v) && v.every(h => !!h && typ
 const isSidebar = (v: unknown) => v === null || SIDEBAR_TABS.some(t => t.id === v);
 type BottomTab = "chains" | "hotspots" | "detail";
 const isBottomTab = (v: unknown) => v === 'chains' || v === 'hotspots' || v === 'detail';
+const isVocab = (v: unknown) => v === 'attack' || v === 'd3fend';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -61,6 +64,8 @@ export default function AttackBreaker() {
   const data = useAttackData(cfg, setFramework);
   const dataset = data.dataset;
 
+  const [vocab, setVocab] = usePersistentState<VocabularyId>(KEYS.vocabulary, 'attack', isVocab);
+  const { d3fend } = useD3fendData();
   const [budget, setBudget] = usePersistentState<number>(KEYS.budget, DEFAULT_BUDGET, isNum);
   const [orgSize, setOrgSize] = usePersistentState<OrgSize>(KEYS.orgSize, 'medium', isOrg);
   const [costOverrides, setCostOverrides] = usePersistentState<Record<string, number>>(KEYS.costs, {}, isObj);
@@ -103,7 +108,7 @@ export default function AttackBreaker() {
     setPlatformList(null);
   }, [setFramework, setHighlighted, setPlatformList]);
 
-  const defenses = useDefenses(cfg);
+  const defenses = useDefenses(cfg, vocab, d3fend);
   const chainBuilder = useChainBuilder();
   const { customChains, removeChain } = chainBuilder;
 
@@ -113,7 +118,15 @@ export default function AttackBreaker() {
 
   const techniques = useMemo(() => dataset?.techniques ?? [], [dataset]);
   const techById = useMemo(() => new Map(techniques.map(t => [t.id, t])), [techniques]);
-  const dcNames = useMemo(() => new Map((dataset?.dataComponents ?? []).map(d => [d.id, d.name])), [dataset]);
+  const vocabulary = useMemo(() => {
+    if (!dataset) return null;
+    if (vocab === 'd3fend') return d3fend ? d3fendVocabulary(dataset, d3fend) : null;
+    return attackVocabulary(dataset, cfg);
+  }, [dataset, vocab, d3fend, cfg]);
+  /** D3FEND countermeasures that implement an ATT&CK mitigation (crosswalk) */
+  const implementedBy = useCallback((itemId: string) => (vocab === 'attack' && d3fend
+    ? (d3fend.mitigations[itemId] ?? []).map(id => d3fend.techniques[id]?.name ?? id)
+    : []), [vocab, d3fend]);
   const platforms = useMemo(() => (platformList ? new Set(platformList) : null), [platformList]);
   const setSelectedPlatforms = useCallback((fn: (prev: Set<string> | null) => Set<string> | null) => {
     setPlatformList(prev => {
@@ -166,7 +179,7 @@ export default function AttackBreaker() {
   const costModel = useMemo(() => ({ orgSize, overrides: costOverrides }), [orgSize, costOverrides]);
 
   const rm = useRiskModel({
-    cfg, dataset, chains: modeledChains, gates, includeSoftware, platforms, exposure,
+    dataset, vocabulary, chains: modeledChains, gates, includeSoftware, platforms, exposure,
     toolCoverage: env.modelInputs.toolCoverage, actorWeights: env.actorWeights,
     params, posture: defenses.posture, costModel, budget, previewPlan, displaySet,
   });
@@ -213,12 +226,12 @@ export default function AttackBreaker() {
   const focus = useMemo(() => {
     if (!rm.model || !hoverDefense) return null;
     return {
-      set: defenseFootprint(rm.model, displaySet, hoverDefense.mitigationIds, hoverDefense.dataComponentIds),
-      color: hoverDefense.mitigationIds.length > 0 ? ENCODING.prevention : ENCODING.detection,
+      set: defenseFootprint(rm.model, displaySet, hoverDefense.preventIds, hoverDefense.detectIds),
+      color: hoverDefense.preventIds.length > 0 ? ENCODING.prevention : ENCODING.detection,
     };
   }, [rm.model, hoverDefense, displaySet]);
   const hoverItem = useCallback((item: CatalogItem | null) => {
-    setHoverDefense(item ? { mitigationIds: item.mitigationIds, dataComponentIds: item.dataComponentIds, label: item.name } : null);
+    setHoverDefense(item ? { preventIds: item.preventIds, detectIds: item.detectIds, label: item.name } : null);
   }, []);
 
   const blindSpotSet = useMemo(() => (sidebarPanel === 'gaps' ? new Set(blindSpots.map(b => b.techniqueId)) : null), [sidebarPanel, blindSpots]);
@@ -246,7 +259,7 @@ export default function AttackBreaker() {
     setBottomTab("chains");
   }, [setHighlighted, setBottomTab]);
 
-  const fullCostOf = useCallback((id: string) => fullCost(cfg, id, costModel), [cfg, costModel]);
+  const fullCostOf = useCallback((id: string) => (vocabulary ? fullCost(vocabulary, id, costModel) : 0), [vocabulary, costModel]);
   const setCost = useCallback((id: string, v: number) => setCostOverrides(prev => ({ ...prev, [id]: Math.round(v) })), [setCostOverrides]);
 
   const setExposure = useCallback((id: string, v: number | undefined) => {
@@ -258,10 +271,10 @@ export default function AttackBreaker() {
   }, [framework, setExposureOverrides]);
 
   const bestDefensesFor = useCallback((chainId: string) => {
-    if (!dataset) return [];
+    if (!dataset || !vocabulary) return [];
     const chain = modeledChains.find(c => c.id === chainId);
     if (!chain) return [];
-    const m = compileModel({ dataset, chains: [chain], gates, includeSoftware, platforms, exposure, toolCoverage: env.modelInputs.toolCoverage });
+    const m = compileModel({ dataset, vocabulary, chains: [chain], gates, includeSoftware, platforms, exposure, toolCoverage: env.modelInputs.toolCoverage });
     const st = evaluateModel(m, rm.params, defenses.posture);
     const byId = new Map(rm.catalog.map(c => [c.id, c]));
     return [...marginalValues(m, rm.params, st, rm.catalog)]
@@ -269,7 +282,7 @@ export default function AttackBreaker() {
       .sort((a, b) => b[1] - a[1] || (byId.get(a[0])!.cost - byId.get(b[0])!.cost))
       .slice(0, 3)
       .map(([id, delta]) => ({ item: byId.get(id)!, delta }));
-  }, [dataset, modeledChains, gates, includeSoftware, platforms, exposure, env.modelInputs.toolCoverage, rm.params, rm.catalog, defenses.posture]);
+  }, [dataset, vocabulary, modeledChains, gates, includeSoftware, platforms, exposure, env.modelInputs.toolCoverage, rm.params, rm.catalog, defenses.posture]);
 
   const handleNodeDrag = useCallback((nodeId: string, dx: number, dy: number) => {
     setCustomPositions(prev => {
@@ -296,7 +309,7 @@ export default function AttackBreaker() {
           if (t.enabled === false) blocked.push(t.techniqueID);
         }
         setExposureOverrides(prev => ({ ...prev, [framework]: { ...(prev[framework] ?? {}), ...scores } }));
-        defenses.replace({ ...defenses.stored, blocked: [...new Set([...defenses.stored.blocked, ...blocked])] });
+        defenses.addBlocked(blocked);
         data.setUploadError(null);
       } catch (err: unknown) {
         data.setUploadError("Failed to parse Navigator layer: " + (err instanceof Error ? err.message : "invalid JSON"));
@@ -310,7 +323,7 @@ export default function AttackBreaker() {
   const handleShare = useCallback(() => {
     const url = shareUrl({
       framework, sector: effectiveSector, budget, orgSize, envPreset: effectiveEnvPreset,
-      mitigations: defenses.stored.mitigations, dataComponents: defenses.stored.dataComponents, blocked: defenses.stored.blocked,
+      vocabulary: vocab, prevent: defenses.stored.prevent, detect: defenses.stored.detect, blocked: defenses.blocked,
       chains: highlighted.map(h => h.id), platforms: platformList ?? undefined,
       params: (Object.keys(DEFAULT_MODEL_PARAMS) as (keyof ModelParams)[]).some(k => params[k] !== DEFAULT_MODEL_PARAMS[k]) ? params : undefined,
       gates: gateIds.join() !== cfg.defaultGates.join() ? gateIds : undefined,
@@ -318,7 +331,7 @@ export default function AttackBreaker() {
     });
     const done = () => { setShareConfirm(true); setTimeout(() => setShareConfirm(false), 2000); };
     navigator.clipboard?.writeText(url).then(done, done);
-  }, [framework, effectiveSector, budget, orgSize, effectiveEnvPreset, defenses.stored, highlighted, platformList, params, gateIds, cfg, includeSoftware, includeCampaigns]);
+  }, [framework, effectiveSector, budget, orgSize, effectiveEnvPreset, vocab, defenses.stored, defenses.blocked, highlighted, platformList, params, gateIds, cfg, includeSoftware, includeCampaigns]);
 
   const resetAll = useCallback(() => {
     if (!window.confirm("Reset everything — defenses, costs, budget, model settings and layout?")) return;
@@ -336,7 +349,7 @@ export default function AttackBreaker() {
   }, [chainBuilder]);
 
   const exports = useExportHandlers({
-    cfg, dataset, model: rm.model, state: rm.state, activity: rm.activity, params: rm.params,
+    cfg, dataset, vocabulary, implementedBy, model: rm.model, state: rm.state, activity: rm.activity, params: rm.params,
     plan: rm.plan, frontier: rm.frontier, sensitivity: rm.sensitivity,
     posture: defenses.posture, budget, sector: effectiveSector, gates, includeSoftware, includeCampaigns,
     assessment: env.assessment,
@@ -395,13 +408,13 @@ export default function AttackBreaker() {
     <DetailPanel cfg={cfg} dataset={dataset} rm={rm} posture={defenses.posture} tech={selectedTechData} platforms={platforms}
       exposure={selectedTech ? (exposure?.[selectedTech] ?? (selectedTechData?.parentId ? exposure?.[selectedTechData.parentId] : undefined) ?? 1) : 1}
       exposureOverridden={!!selectedTech && fwExposureOverrides?.[selectedTech] !== undefined} setExposure={setExposure}
-      toggleMitigation={defenses.toggleMitigation} setDataComponents={defenses.setDataComponents} toggleBlocked={defenses.toggleBlocked}
+      vocabulary={vocab} d3fend={d3fend} togglePrevent={defenses.togglePrevent} setDetect={defenses.setDetect} toggleBlocked={defenses.toggleBlocked}
       assessment={env.assessment} chains={modeledChains} colorOf={colorOf} toggleHighlighted={toggleHighlighted}
       onSelectTech={setSelectedTech} showSubTechniques={showSubTechniques}
       popout={!!popout.detail} onPopout={() => setPopout(p => ({ ...p, detail: true }))} />
   );
-  const executive = (isPopout: boolean) => dataset && (
-    <ExecutiveSummary rm={rm} dataset={dataset} posture={defenses.posture} budget={budget} onExportBoard={exports.exportBoardReport}
+  const executive = (isPopout: boolean) => vocabulary && (
+    <ExecutiveSummary rm={rm} vocabulary={vocabulary} posture={defenses.posture} budget={budget} onExportBoard={exports.exportBoardReport}
       popout={isPopout} onPopout={() => setPopout(p => ({ ...p, executive: true }))} />
   );
 
@@ -680,11 +693,12 @@ export default function AttackBreaker() {
               }}>{"✕"}</button>
             </div>
             <div style={{ flex: 1, overflow: "auto", padding: "16px 18px" }} onMouseLeave={() => setHoverDefense(null)}>
-              {!dataset ? <div style={{ color: theme.colors.textMuted }}>Loading…</div> : (
+              {!dataset || !vocabulary ? <div style={{ color: theme.colors.textMuted }}>Loading…</div> : (
                 <>
                   {sidebarPanel === "plan" && (
                     <PlanPanel rm={rm} budget={budget} setBudget={setBudget} orgSize={orgSize} setOrgSize={setOrgSize}
-                      postureEmpty={defenses.posture.mitigations.size === 0 && defenses.posture.dataComponents.size === 0 && !env.environmentProfile}
+                      postureEmpty={defenses.posture.prevent.size === 0 && defenses.posture.detect.size === 0 && !env.environmentProfile}
+                      vocabulary={vocab} setVocabulary={setVocab} implementedBy={implementedBy}
                       onOpenDefenses={() => setSidebarPanel("defenses")}
                       fullCostOf={fullCostOf} onSetCost={setCost} hasCostOverrides={Object.keys(costOverrides).length > 0} onResetCosts={() => setCostOverrides({})}
                       previewPlan={previewPlan} setPreviewPlan={setPreviewPlan}
@@ -692,9 +706,10 @@ export default function AttackBreaker() {
                       onExportPlan={exports.exportPlanCSV} onExportBoard={exports.exportBoardReport} onOpenModel={() => setSidebarPanel("model")} />
                   )}
                   {sidebarPanel === "defenses" && (
-                    <DefensesPanel cfg={cfg} dataset={dataset} rm={rm} posture={defenses.posture}
-                      toggleMitigation={defenses.toggleMitigation} setDataComponents={defenses.setDataComponents} toggleBlocked={defenses.toggleBlocked}
-                      applyPreset={defenses.applyPreset} clearPosture={() => defenses.replace({ mitigations: [], dataComponents: [], blocked: [] })}
+                    <DefensesPanel cfg={cfg} vocabulary={vocabulary!} setVocabulary={setVocab} d3fend={d3fend} rm={rm} posture={defenses.posture}
+                      togglePrevent={defenses.togglePrevent} setDetect={defenses.setDetect} toggleBlocked={defenses.toggleBlocked}
+                      applyPreset={defenses.applyPreset} importFromAttack={defenses.importFromAttack} attackPostureSize={defenses.attackPostureSize}
+                      clearPosture={defenses.clear} techName={id => techById.get(id)?.name ?? id}
                       fullCostOf={fullCostOf} onSetCost={setCost} onHoverDefense={setHoverDefense} onSelectTech={setSelectedTech} />
                   )}
                   {sidebarPanel === "model" && (
@@ -705,7 +720,7 @@ export default function AttackBreaker() {
                       compareAnalysis={compareAnalysis} otherFramework={otherFramework} />
                   )}
                   {sidebarPanel === "gaps" && (
-                    <BlindSpotsPanel cfg={cfg} rm={rm} blindSpots={blindSpots} techById={techById} dcNames={dcNames} onSelectTech={setSelectedTech} />
+                    <BlindSpotsPanel cfg={cfg} rm={rm} blindSpots={blindSpots} techById={techById} vocabulary={vocabulary!} onSelectTech={setSelectedTech} />
                   )}
                   {sidebarPanel === "executive" && executive(false)}
                 </>

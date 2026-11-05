@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { theme } from '../theme';
 import { ENCODING } from '../data/constants';
 import { fmtUsd } from '../engine/displayMetrics';
-import type { DefenseKind } from '../types';
+import type { DefenseKind, VocabularyId } from '../types';
 import { linkButton } from './styles';
 
 /** Thin horizontal meter: the fill carries the value, the track is a faint step of the same hue */
@@ -20,9 +20,9 @@ export function Meter({ value, color, width = 80, height = 6, label }: { value: 
 
 /** Marks a defense as a mitigation (prevention) or telemetry (detection) — icon + word, never color alone */
 export function KindBadge({ kind }: { kind: DefenseKind }) {
-  const isMit = kind === 'mitigation';
+  const isMit = kind === 'prevent';
   return (
-    <span title={isMit ? "MITRE mitigation (prevention)" : "Telemetry source + MITRE analytics (detection)"} style={{
+    <span title={isMit ? "Prevention: lowers the success of the techniques it applies to" : "Detection: lets analytics or countermeasures raise alerts"} style={{
       display: "inline-flex", alignItems: "center", gap: 4, fontSize: theme.fontSizes.micro, fontWeight: 700,
       padding: "2px 6px", borderRadius: theme.radii.sm, whiteSpace: "nowrap",
       background: (isMit ? ENCODING.prevention : ENCODING.detection) + "22", color: theme.colors.textBody,
@@ -89,5 +89,23 @@ export function GateStatus({ value }: { value: number }) {
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: theme.fontSizes.micro, fontWeight: 700, color: theme.colors.textBody }}>
       <span aria-hidden style={{ color: s.color, fontSize: theme.fontSizes.small }}>{s.icon}</span>{s.label}
     </span>
+  );
+}
+
+/** Segmented control choosing the defense vocabulary the posture and plan are expressed in */
+export function VocabularySwitch({ value, onChange }: { value: VocabularyId; onChange: (v: VocabularyId) => void }) {
+  const opts: { id: VocabularyId; label: string; hint: string }[] = [
+    { id: 'attack', label: 'ATT&CK mitigations + telemetry', hint: 'MITRE mitigations and the data components MITRE detection analytics need' },
+    { id: 'd3fend', label: 'D3FEND countermeasures', hint: 'MITRE D3FEND Harden / Isolate / Detect / Deceive techniques' },
+  ];
+  return (
+    <div role="radiogroup" aria-label="Defense catalog" style={{ display: "inline-flex", border: "1px solid " + theme.colors.border, borderRadius: theme.radii.md, overflow: "hidden" }}>
+      {opts.map(o => (
+        <button key={o.id} role="radio" aria-checked={value === o.id} title={o.hint} onClick={() => onChange(o.id)} style={{
+          background: value === o.id ? theme.colors.bgSurface : "transparent", color: value === o.id ? theme.colors.textPrimary : theme.colors.textMuted,
+          border: "none", padding: "5px 10px", fontSize: theme.fontSizes.tiny, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+        }}>{value === o.id ? "\u25C9 " : "\u25CB "}{o.label}</button>
+      ))}
+    </div>
   );
 }

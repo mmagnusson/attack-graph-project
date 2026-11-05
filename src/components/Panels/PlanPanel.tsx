@@ -1,13 +1,13 @@
 // ─── PlanPanel — budgeted investment plan + efficiency frontier ─────────────
 
 import { useState } from 'react';
-import type { CatalogItem } from '../../types';
+import type { CatalogItem, VocabularyId } from '../../types';
 import type { RiskModelView } from '../../hooks/useRiskModel';
 import { ORG_SIZES, type OrgSize } from '../../engine/portfolioOptimizer';
 import { fmtPct, fmtUsd } from '../../engine/displayMetrics';
 import { ENCODING } from '../../data/constants';
 import { FrontierChart } from '../Charts';
-import { EditableCost, KindBadge, PanelTitle, SmallButton } from '../ui';
+import { EditableCost, KindBadge, PanelTitle, SmallButton, VocabularySwitch } from '../ui';
 import { linkButton } from '../styles';
 import { theme } from '../../theme';
 
@@ -30,6 +30,10 @@ interface PlanPanelProps {
   onOpenModel: () => void;
   postureEmpty: boolean;
   onOpenDefenses: () => void;
+  vocabulary: VocabularyId;
+  setVocabulary: (v: VocabularyId) => void;
+  /** Names of D3FEND countermeasures that implement an ATT&CK mitigation (empty otherwise) */
+  implementedBy: (itemId: string) => string[];
 }
 
 const BUDGET_PRESETS = [100_000, 250_000, 500_000, 1_000_000, 2_000_000];
@@ -60,6 +64,8 @@ export function PlanPanel(p: PlanPanelProps) {
       </>}>
         INVESTMENT PLAN
       </PanelTitle>
+
+      <div style={{ marginBottom: theme.spacing.lg }}><VocabularySwitch value={p.vocabulary} onChange={p.setVocabulary} /></div>
 
       {/* Budget & org size */}
       <div style={{ display: "flex", gap: theme.spacing.lg, flexWrap: "wrap", alignItems: "flex-end", marginBottom: theme.spacing.xl }}>
@@ -148,12 +154,18 @@ export function PlanPanel(p: PlanPanelProps) {
                   <span style={{ color: theme.colors.textPrimary, fontWeight: 600 }}>{s.item.name}</span>
                 </div>
                 <div style={{ color: theme.colors.textFaint, fontSize: theme.fontSizes.micro, marginTop: 2 }}>
-                  {s.item.id}{s.item.kind === 'telemetry' ? ' · ' + s.item.dataComponentIds.length + ' data components to add' : ''}
+                  {s.item.id}{s.item.group ? ' · D3FEND ' + s.item.group : ''}
+                  {s.item.kind === 'detect' ? ' · ' + s.item.detectIds.length + (p.vocabulary === 'd3fend' ? ' countermeasures' : ' data components') + ' to add' : ''}
                 </div>
+                {p.implementedBy(s.item.id).length > 0 && (
+                  <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.micro, marginTop: 2 }}>
+                    D3FEND: {p.implementedBy(s.item.id).join(', ')}
+                  </div>
+                )}
               </td>
               <td style={{ ...td, textAlign: "right" }}>
                 <EditableCost value={s.item.cost} onChange={v => p.onSetCost(s.item.id, v)}
-                  title={s.item.kind === 'telemetry' ? 'Edit full-deployment cost (' + fmtUsd(p.fullCostOf(s.item.id)) + ')' : undefined} />
+                  title={s.item.kind === 'detect' ? 'Edit full-deployment cost (' + fmtUsd(p.fullCostOf(s.item.id)) + ')' : undefined} />
               </td>
               <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>−{(s.delta / w * 100).toFixed(1)}</td>
               <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtPct(s.risk / w, 1)}</td>
@@ -186,7 +198,9 @@ export function PlanPanel(p: PlanPanelProps) {
         Costs are <strong>placeholder estimates</strong> by cost tier — click any cost to enter a real quote.
         {p.hasCostOverrides && <> <button onClick={p.onResetCosts} style={{ ...linkButton, color: theme.colors.blue }}>Reset edited costs</button>.</>}
         {" "}Each step adds the defense with the most risk removed per dollar at that point (a greedy heuristic, not a proven optimum).
-        {" "}Telemetry assumes you also run MITRE's analytics on it and respond to alerts.
+        {p.vocabulary === 'd3fend'
+          ? " D3FEND coverage follows D3FEND's inferred countermeasure links; costs are per base technique."
+          : " Telemetry assumes you also run MITRE's analytics on it and respond to alerts."}
         {" "}<button onClick={p.onOpenModel} style={{ ...linkButton, color: theme.colors.blue }}>Model assumptions →</button>
       </div>
     </>
