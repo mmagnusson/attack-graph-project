@@ -89,7 +89,10 @@ export const STIX_TACTIC_MAP: Record<string, string> = {
   "impact": "TA0040",
 };
 
-/** Enterprise platforms exactly as ATT&CK v19 publishes them (techniques and analytics share these names) */
+/** Enterprise platforms exactly as ATT&CK publishes them (techniques and analytics share these names) */
 export const ALL_PLATFORMS: string[] = [
   "Windows", "Linux", "macOS", "ESXi", "IaaS", "SaaS", "Office Suite", "Identity Provider", "Containers", "Network Devices", "PRE",
 ];
+
+/** ICS platforms as ATT&CK publishes them (v20 added them; earlier ICS techniques had none) */
+export const ICS_PLATFORMS: string[] = ["Embedded", "Windows", "Linux", "Network Devices"];

@@ -57,6 +57,15 @@ describe.each(['enterprise', 'ics'] as FrameworkId[])('%s bundled dataset', fw =
     for (const [id, p] of Object.entries(cfg.envPresets)) Object.keys(p.overrides ?? {}).forEach(t => expect(ids.has(t), id + ': ' + t).toBe(true));
   });
 
+  it('lists every platform the techniques and analytics use', () => {
+    const used = new Set([...ds.techniques.flatMap(t => t.platforms), ...Object.values(ds.detections).flatMap(d => d.analytics.flatMap(a => a.platforms))]);
+    expect([...used].sort()).toEqual([...cfg.allPlatforms].sort());
+  });
+
+  it('shows sub-techniques when the dataset has them', () => {
+    expect(cfg.hasSubTechniques).toBe(ds.techniques.some(t => t.parentId));
+  });
+
   it('produces a monotone frontier and a plan that fits the budget', () => {
     const gates = cfg.gateOptions.filter(g => cfg.defaultGates.includes(g.id));
     const vocabulary = attackVocabulary(ds, cfg);

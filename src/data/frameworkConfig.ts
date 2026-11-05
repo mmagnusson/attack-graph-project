@@ -4,7 +4,7 @@
 // KB metadata. After bumping it, run `npm run data` to regenerate public/data.
 
 import type { FrameworkConfig, FrameworkId, Tactic } from '../types';
-import { TACTICS, ICS_TACTICS, STIX_TACTIC_MAP, ICS_STIX_TACTIC_MAP, ALL_PLATFORMS } from './constants';
+import { TACTICS, ICS_TACTICS, STIX_TACTIC_MAP, ICS_STIX_TACTIC_MAP, ALL_PLATFORMS, ICS_PLATFORMS } from './constants';
 import {
   ENTERPRISE_TELEMETRY, ENTERPRISE_MITIGATION_TIERS, ENTERPRISE_NON_ACTIONABLE, ENTERPRISE_GATES, ENTERPRISE_DEFAULT_GATES, ENTERPRISE_POSTURES,
   ICS_TELEMETRY, ICS_MITIGATION_TIERS, ICS_NON_ACTIONABLE, ICS_GATES, ICS_DEFAULT_GATES, ICS_POSTURES,
@@ -39,8 +39,7 @@ export function getFrameworkConfig(fw: FrameworkId | string): FrameworkConfig {
       stixTacticMap: ICS_STIX_TACTIC_MAP,
       tacticPhase: buildTacticPhase(ICS_TACTICS),
       tacticToPhase: buildTacticToPhase(ICS_STIX_TACTIC_MAP),
-      // v19 ICS techniques carry no platform data, so there is nothing to filter on
-      allPlatforms: [],
+      allPlatforms: ICS_PLATFORMS,
       killChainName: "mitre-ics-attack",
       stixSourceName: "mitre-attack",
       navigatorDomain: "ics-attack",
@@ -48,7 +47,7 @@ export function getFrameworkConfig(fw: FrameworkId | string): FrameworkConfig {
       stixUrl: stixUrl("ics-attack"),
       dataUrl: "/data/ics-attack-" + ATTACK_VERSION + ".json",
       dataCacheKey: "ics-attack-" + ATTACK_VERSION + "-p" + PARSER_VERSION,
-      hasSubTechniques: false,
+      hasSubTechniques: true,
       gateOptions: ICS_GATES,
       defaultGates: ICS_DEFAULT_GATES,
       telemetrySources: ICS_TELEMETRY,
